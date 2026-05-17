@@ -733,11 +733,11 @@ class HudRuntime {
   private async appendVoiceDraft(text: string, reason: string): Promise<void> {
     const piece = cleanText(text, 240);
     if (!piece || piece === this.lastVoiceDraftPiece) return;
-    this.voiceDraft = cleanText([this.voiceDraft, piece].filter(Boolean).join(" "), 900);
+    this.voiceDraft = mergeVoiceDraft(this.voiceDraft, piece, this.lastVoiceDraftPiece);
     this.lastVoiceDraftPiece = piece;
     this.setVoiceDraftLine();
     await this.log({ event: "asr.voice_draft.update", text: this.voiceDraft, piece });
-    await this.renderTerminal(reason);
+    this.scheduleTerminalRender(reason);
   }
 
   private async submitVoiceDraft(): Promise<void> {
@@ -785,9 +785,9 @@ class HudRuntime {
     if (!session) return;
     await this.log({ event: "hermes_cli.input", mode: session.mode, text });
     this.pushTerminalLine("> " + text);
-    await this.renderTerminal("hermes_cli.input");
 
     if (session.mode === "mock") {
+      await this.renderTerminal("hermes_cli.input");
       await delay(Math.min(this.cadenceMs, 900));
       if (!this.hermesCli) return;
       this.pushTerminalLine("Hermes(mock): received " + cleanText(text, 64));
@@ -804,6 +804,7 @@ class HudRuntime {
       return;
     }
     child.stdin.write(text + "\n", "utf8");
+    this.scheduleTerminalRender("hermes_cli.input");
   }
 
   private appendTerminalChunk(stream: "stdout" | "stderr", chunk: string): void {
@@ -897,7 +898,11 @@ class HudRuntime {
     if (!this.hermesCli || this.terminalRenderTimer) return;
     this.terminalRenderTimer = setTimeout(() => {
       this.terminalRenderTimer = null;
-      if (!this.hermesCli || this.terminalRenderInFlight) return;
+      if (!this.hermesCli) return;
+      if (this.terminalRenderInFlight) {
+        this.scheduleTerminalRender(reason);
+        return;
+      }
       this.terminalRenderInFlight = this.renderTerminal(reason).finally(() => {
         this.terminalRenderInFlight = null;
       });
@@ -1667,6 +1672,19 @@ function splitTrailingVoiceSend(value: string): { shouldSend: boolean; text: str
   if (!match) return { shouldSend: false, text: clean };
   const text = cleanText(match[1] || "", 240);
   return { shouldSend: Boolean(text), text };
+}
+
+export function mergeVoiceDraft(current: string, piece: string, previousPiece = ""): string {
+  const draft = cleanText(current, 900);
+  const next = cleanText(piece, 240);
+  const previous = cleanText(previousPiece, 240);
+  if (!next) return draft;
+  if (!draft) return next;
+  if (previous && next.toLowerCase().startsWith(previous.toLowerCase())) {
+    const prefix = draft.slice(0, Math.max(0, draft.length - previous.length)).trim();
+    return cleanText([prefix, next].filter(Boolean).join(" "), 900);
+  }
+  return cleanText([draft, next].join(" "), 900);
 }
 
 function normalizeAgentName(name: string): string {

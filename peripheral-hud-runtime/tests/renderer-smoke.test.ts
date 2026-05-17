@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { assertWidget } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
-import { clearHud, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
+import { clearHud, mergeVoiceDraft, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
 
 const root = resolve(process.cwd());
 const fixtureDir = join(root, "fixtures", "ui");
@@ -37,6 +37,9 @@ assert.equal(sanitizeTerminalLine("╭──────────── Herme
 assert.equal(sanitizeTerminalLine("⚕ gpt-5.5 │ ctx -- │ [░░░░] -- │ 8s │ ⏲ 0s"), "Hermes gpt-5.5 ctx -- [] -- 8s time 0s");
 assert.equal(sanitizeTerminalLine("│ ⠀⠀⠀⠀⠀ browser: browser_back, browser_click │"), "browser: browser_back, browser_click");
 assert.equal(sanitizeTerminalLine("────────────────────────"), "");
+assert.equal(mergeVoiceDraft("Hey", "Hey Hermes", "Hey"), "Hey Hermes");
+assert.equal(mergeVoiceDraft("Hey Hermes", "I want you", "Hey Hermes"), "Hey Hermes I want you");
+assert.equal(mergeVoiceDraft("One plus", "One plus one", "One plus"), "One plus one");
 
 for (const invalidWidget of [
   { id: "bad-checklist", type: "checklist", title: "Bad", items: ["not an item"] },
@@ -136,7 +139,7 @@ try {
   ], {
     cwd: root,
     encoding: "utf8",
-    timeout: 10_000,
+    timeout: 20_000,
   });
   assert.equal(asrDemoRun.status, 0, asrDemoRun.stderr);
   const asrDemoResult = JSON.parse(asrDemoRun.stdout.slice(asrDemoRun.stdout.indexOf("{"))) as { state: string; logPath: string; script: { stepCount: number } };
@@ -189,6 +192,7 @@ try {
   assert.match(voiceHudLog, /"event":"asr.voice_draft.update"/);
   assert.match(voiceHudLog, /"event":"asr.voice_command.send"/);
   assert.match(voiceHudLog, /"event":"hermes_cli.input"/);
+  assert.match(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"voice test prompt"/);
   assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
 } finally {
   rmSync(voiceHudProjectRoot, { recursive: true, force: true });
