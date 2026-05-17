@@ -32,7 +32,8 @@ const FIRST_CHUNK_BYTES = 497;
 const CHUNK_BYTES = 501;
 const MAC_RAW_WRITE = "__PERIPHERAL_RAW_WRITE__:";
 const MAC_RAW_WRITE_NR = "__PERIPHERAL_RAW_WRITE_NR__:";
-let fullPanelPrimed = false;
+const MAC_WAIT_APP_STATUS = "__PERIPHERAL_WAIT_APP_STATUS__:";
+const FULL_PANEL_SURFACE = 0xfe;
 
 export function defaultLogPath(projectRoot: string, name = "peripheralctl"): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -225,25 +226,29 @@ function imagePayloadFrames(payload: Buffer): Buffer[] {
 async function pushFramesToMac(frames: Buffer[], options: DriverOptions): Promise<Record<string, unknown>> {
   const start = performance.now();
   const writePrefix = options.writeWithoutResponse ? MAC_RAW_WRITE_NR : MAC_RAW_WRITE;
-  const needsSetup = !fullPanelPrimed;
+  const setupEnabled = process.env.PERIPHERAL_HUD_SKIP_SURFACE_SETUP !== "1";
   const result = await withMacBridge(options, { includeInit: false }, async (bridge) => {
-    if (needsSetup) {
-      await bridge.writeLine(MAC_RAW_WRITE + commandFrame(0x07, 0x01, [0xfe, 0x00]).toString("hex"));
+    if (setupEnabled) {
+      await bridge.writeLine(MAC_RAW_WRITE + commandFrame(0x07, 0x01, [FULL_PANEL_SURFACE, 0x00]).toString("hex"));
+      await bridge.writeLine(MAC_WAIT_APP_STATUS + "fe:01:8");
     }
     for (const frame of frames) {
       await bridge.writeLine(writePrefix + frame.toString("hex"));
     }
+    if (setupEnabled) {
+      await bridge.writeLine(MAC_RAW_WRITE + commandFrame(0x07, 0x07, [FULL_PANEL_SURFACE]).toString("hex"));
+    }
     return {
       queued: true,
-      setupFrames: needsSetup ? 1 : 0,
-      setupWaits: 0,
-      setupStrategy: needsSetup ? "display_mode_ack_only" : "already_primed",
-      fullPanelPrimedBeforePush: !needsSetup,
+      setupFrames: setupEnabled ? 1 : 0,
+      setupWaits: setupEnabled ? 1 : 0,
+      refreshFrames: setupEnabled ? 1 : 0,
+      setupStrategy: setupEnabled ? "factory_hidden_wait_fe01" : "skipped_by_env",
+      fullPanelPrimedBeforePush: false,
       imageFrames: frames.length,
       writeWithoutResponse: Boolean(options.writeWithoutResponse),
     };
   });
-  fullPanelPrimed = true;
   return { ...result, elapsedMs: Math.round(performance.now() - start) };
 }
 
