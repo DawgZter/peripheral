@@ -1,4 +1,4 @@
-export const GLASS_DISPLAY = {
+export const PERIPHERAL_DISPLAY = {
   width: 540,
   height: 280,
   bitsPerPixel: 2,

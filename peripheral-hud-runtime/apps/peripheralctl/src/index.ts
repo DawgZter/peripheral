@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
-import { GLASS_DISPLAY, MAP_WIDGET_DISPLAY, WIDGET_TYPES, assertWidget, type GlassWidget } from "../../../packages/peripheral-protocol/src/index.js";
+import { MAP_WIDGET_DISPLAY, PERIPHERAL_DISPLAY, WIDGET_TYPES, assertWidget, type GlassWidget } from "../../../packages/peripheral-protocol/src/index.js";
 import { defaultFramePath, previewName, renderWidget, renderWidgetFile, renderWidgetToFile } from "../../../packages/peripheral-renderer/src/index.js";
 import {
   appendJsonl,
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     verbose: Boolean(cli.options.verbose),
     json: Boolean(cli.options.json),
     logPath,
-    imagePrefixHex: String(cli.options["image-prefix-hex"] || GLASS_DISPLAY.imagePrefixHex),
+    imagePrefixHex: String(cli.options["image-prefix-hex"] || PERIPHERAL_DISPLAY.imagePrefixHex),
     timeoutSeconds: Number(cli.options["timeout-seconds"] || 120),
   };
   const realHardwareOk = Boolean(cli.options["real-hardware-ok"]);
@@ -345,9 +345,9 @@ async function commandMeasureLatency(projectRoot: string, driverOptions: DriverO
     const renderMs = roundMs(performance.now() - renderStart);
     const encodeStart = performance.now();
     const built = buildDisplayImageFrames(Buffer.from(artifact.pixelsBase64, "base64"), {
-      width: GLASS_DISPLAY.width,
-      height: GLASS_DISPLAY.height,
-      imagePrefixHex: GLASS_DISPLAY.imagePrefixHex,
+      width: PERIPHERAL_DISPLAY.width,
+      height: PERIPHERAL_DISPLAY.height,
+      imagePrefixHex: PERIPHERAL_DISPLAY.imagePrefixHex,
     });
     const encodeMs = roundMs(performance.now() - encodeStart);
     const pushStart = performance.now();
@@ -403,7 +403,7 @@ async function commandDiagnostics(projectRoot: string, repoRoot: string, driverO
     helper,
     helperExists: existsSync(helper),
     mock: Boolean(driverOptions.mock),
-    display: GLASS_DISPLAY,
+    display: PERIPHERAL_DISPLAY,
     mapWidgetDisplay: MAP_WIDGET_DISPLAY,
     widgetTypes: WIDGET_TYPES,
     fixtures,
@@ -728,7 +728,7 @@ function capabilities(): unknown {
       "demo agent",
       "diagnostics",
     ],
-    display: GLASS_DISPLAY,
+    display: PERIPHERAL_DISPLAY,
     realPush: "HUD runtime uses the existing macos_corebluetooth/peripheral-mac-pusher stdin raw-write bridge when --real is explicit. Legacy image commands still require --real-hardware-ok.",
   };
 }

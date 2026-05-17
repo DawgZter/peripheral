@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import { GLASS_DISPLAY, assertWidget, cleanText, type GlassWidget } from "../../peripheral-protocol/src/index.js";
+import { PERIPHERAL_DISPLAY, assertWidget, cleanText, type GlassWidget } from "../../peripheral-protocol/src/index.js";
 import { FONT_5X7, UNKNOWN_GLYPH } from "./bitmap-font.js";
 import { encodeGrayscalePng } from "./png.js";
 
@@ -37,7 +37,7 @@ export class Raster {
   readonly height: number;
   readonly pixels: Uint8Array;
 
-  constructor(width: number = GLASS_DISPLAY.width, height: number = GLASS_DISPLAY.height, fill = BLACK) {
+  constructor(width: number = PERIPHERAL_DISPLAY.width, height: number = PERIPHERAL_DISPLAY.height, fill = BLACK) {
     this.width = width;
     this.height = height;
     this.pixels = new Uint8Array(width * height);
@@ -87,7 +87,7 @@ export class Raster {
 
 export function renderWidget(input: unknown, options: RenderOptions = {}): { widget: GlassWidget; raster: Raster; pixels2bpp: Buffer } {
   const widget = assertWidget(input);
-  const raster = new Raster(options.width ?? GLASS_DISPLAY.width, options.height ?? GLASS_DISPLAY.height);
+  const raster = new Raster(options.width ?? PERIPHERAL_DISPLAY.width, options.height ?? PERIPHERAL_DISPLAY.height);
   drawWidget(raster, widget, options);
   return { widget, raster, pixels2bpp: pack2bpp(raster.pixels) };
 }
@@ -112,7 +112,7 @@ export function renderWidgetToFile(input: unknown, outPath: string, options: Ren
     sidecarPath,
     width: raster.width,
     height: raster.height,
-    bitsPerPixel: GLASS_DISPLAY.bitsPerPixel,
+    bitsPerPixel: PERIPHERAL_DISPLAY.bitsPerPixel,
     pixelsBase64: pixels2bpp.toString("base64"),
     stats: {
       litPixels: raster.pixels.reduce((sum, value) => sum + (value > 0 ? 1 : 0), 0),

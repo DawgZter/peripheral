@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { appendFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { deflateSync } from "node:zlib";
-import { GLASS_DISPLAY } from "../../peripheral-protocol/src/index.js";
+import { PERIPHERAL_DISPLAY } from "../../peripheral-protocol/src/index.js";
 import type { RenderArtifact } from "../../peripheral-renderer/src/index.js";
 
 export type DriverOptions = {
@@ -82,7 +82,7 @@ export async function pushArtifact(artifact: RenderArtifact, options: DriverOpti
   const built = buildDisplayImageFrames(devicePixels, {
     width: artifact.width,
     height: artifact.height,
-    imagePrefixHex: options.imagePrefixHex || GLASS_DISPLAY.imagePrefixHex,
+    imagePrefixHex: options.imagePrefixHex || PERIPHERAL_DISPLAY.imagePrefixHex,
     compressionMode: "auto",
   });
   const summary = {
@@ -114,12 +114,12 @@ export async function clearDisplay(options: DriverOptions): Promise<Record<strin
     await appendJsonl(logPath, { event: "clear.mock" });
     return { ok: true, mock: true, logPath };
   }
-  const blankPixels = Buffer.alloc(GLASS_DISPLAY.rawBytes, 0);
+  const blankPixels = Buffer.alloc(PERIPHERAL_DISPLAY.rawBytes, 0);
   const devicePixels = invertPacked2Bpp(blankPixels);
   const built = buildDisplayImageFrames(devicePixels, {
-    width: GLASS_DISPLAY.width,
-    height: GLASS_DISPLAY.height,
-    imagePrefixHex: options.imagePrefixHex || GLASS_DISPLAY.imagePrefixHex,
+    width: PERIPHERAL_DISPLAY.width,
+    height: PERIPHERAL_DISPLAY.height,
+    imagePrefixHex: options.imagePrefixHex || PERIPHERAL_DISPLAY.imagePrefixHex,
     compressionMode: "auto",
   });
   const result = await pushFramesToMac(built.frames, options);
@@ -144,7 +144,7 @@ export async function status(options: DriverOptions): Promise<Record<string, unk
     mock: Boolean(options.mock),
     helperPath,
     helperExists: existsSync(helperPath),
-    display: GLASS_DISPLAY,
+    display: PERIPHERAL_DISPLAY,
     note: options.mock
       ? "Mock status does not inspect the live display transport."
       : "Real connection status is intentionally left to system tools before live pushes.",
@@ -160,15 +160,15 @@ export function buildDisplayImageFrames(pixels: Buffer, options: {
   imagePrefixHex?: string;
   compressionMode?: "auto" | "store";
 } = {}): ImageFrameBuild {
-  const width = options.width || GLASS_DISPLAY.width;
-  const height = options.height || GLASS_DISPLAY.height;
-  const expected = Math.ceil((width * height * GLASS_DISPLAY.bitsPerPixel) / 8);
+  const width = options.width || PERIPHERAL_DISPLAY.width;
+  const height = options.height || PERIPHERAL_DISPLAY.height;
+  const expected = Math.ceil((width * height * PERIPHERAL_DISPLAY.bitsPerPixel) / 8);
   if (pixels.length !== expected) {
     throw new Error(`invalid packed image length: expected ${expected}, got ${pixels.length}`);
   }
   const compressionMode = options.compressionMode || "auto";
   const compressed = deflateSync(pixels, compressionMode === "store" ? { level: 0 } : undefined);
-  const prefix = Buffer.from((options.imagePrefixHex || GLASS_DISPLAY.imagePrefixHex).replace(/[^0-9a-f]/gi, ""), "hex");
+  const prefix = Buffer.from((options.imagePrefixHex || PERIPHERAL_DISPLAY.imagePrefixHex).replace(/[^0-9a-f]/gi, ""), "hex");
   if (prefix.length !== 4) {
     throw new Error("imagePrefixHex must be exactly four bytes / eight hex chars");
   }
@@ -177,7 +177,7 @@ export function buildDisplayImageFrames(pixels: Buffer, options: {
   header[4] = 0x16;
   header.writeUInt16LE(width, 5);
   header.writeUInt16LE(height, 7);
-  header[9] = GLASS_DISPLAY.bitsPerPixel;
+  header[9] = PERIPHERAL_DISPLAY.bitsPerPixel;
   header[10] = 0x07;
   header.writeUInt32LE(expected, 11);
   header.writeUInt32LE(compressed.length, 15);
