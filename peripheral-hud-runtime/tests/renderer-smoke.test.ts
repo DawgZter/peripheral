@@ -73,97 +73,120 @@ const hudArgs = [
   "--cadence-ms",
   "700",
 ];
-const hudRun = await runHudWithTimedInput(hudArgs, [
-  { input: "look_up\n", waitMs: 250 },
-  { input: "Hermes test task\n", waitMs: 900 },
-  { input: "status\n", waitMs: 1300 },
-  { input: "make it shorter\n", waitMs: 350 },
-  { input: "exit\n", waitMs: 0 },
-]);
-assert.equal(hudRun.status, 0, hudRun.stderr);
-const hudResult = JSON.parse(hudRun.stdout.slice(hudRun.stdout.indexOf("{"))) as { state: string; logPath: string; paths: { currentWidgetPath: string } };
-assert.equal(hudResult.state, "blank");
-const hudLog = readFileSync(hudResult.logPath, "utf8");
-assert.match(hudLog, /"event":"display.clear","reason":"runtime.start"/);
-assert.match(hudLog, /"event":"agents.reset"/);
-assert.match(hudLog, /"state":"agent_hud"/);
-assert.match(hudLog, /"state":"active_agent"/);
-assert.match(hudLog, /"state":"dynamic_result"/);
-assert.match(hudLog, /"text":"status"/);
-assert.match(hudLog, /"reason":"make_it_shorter"/);
-assert.match(hudLog, /"event":"runtime.exit","reason":"exit"/);
-assert.ok(!existsSync(hudResult.paths.currentWidgetPath), "runtime exit should clear current-widget.json after a result");
 
-const hermesCliRun = await runHudWithTimedInput(hudArgs, [
-  { input: "Hermes CLI\n", waitMs: 350 },
-  { input: "summarize this mock session\n", waitMs: 950 },
-  { input: "exit cli\n", waitMs: 250 },
-  { input: "exit\n", waitMs: 0 },
-]);
-assert.equal(hermesCliRun.status, 0, hermesCliRun.stderr);
-const hermesCliResult = JSON.parse(hermesCliRun.stdout.slice(hermesCliRun.stdout.indexOf("{"))) as { state: string; logPath: string };
-assert.equal(hermesCliResult.state, "blank");
-const hermesCliLog = readFileSync(hermesCliResult.logPath, "utf8");
-assert.match(hermesCliLog, /"state":"terminal"/);
-assert.match(hermesCliLog, /"widgetId":"hermes-cli"/);
-assert.match(hermesCliLog, /"event":"hermes_cli.input"/);
-assert.match(hermesCliLog, /interactive CLI display path is wired/);
+const hudProjectRoot = makeTempProjectRoot("hud");
+try {
+  const hudRun = await runHudWithTimedInput([...hudArgs, ...projectRootArgs(hudProjectRoot)], [
+    { input: "look_up\n", waitMs: 250 },
+    { input: "Hermes test task\n", waitMs: 900 },
+    { input: "status\n", waitMs: 1300 },
+    { input: "make it shorter\n", waitMs: 350 },
+    { input: "exit\n", waitMs: 0 },
+  ]);
+  assert.equal(hudRun.status, 0, hudRun.stderr);
+  const hudResult = JSON.parse(hudRun.stdout.slice(hudRun.stdout.indexOf("{"))) as { state: string; logPath: string; paths: { currentWidgetPath: string } };
+  assert.equal(hudResult.state, "blank");
+  const hudLog = readFileSync(hudResult.logPath, "utf8");
+  assert.match(hudLog, /"event":"display.clear","reason":"runtime.start"/);
+  assert.match(hudLog, /"event":"agents.reset"/);
+  assert.match(hudLog, /"state":"agent_hud"/);
+  assert.match(hudLog, /"state":"active_agent"/);
+  assert.match(hudLog, /"state":"dynamic_result"/);
+  assert.match(hudLog, /"text":"status"/);
+  assert.match(hudLog, /"reason":"make_it_shorter"/);
+  assert.match(hudLog, /"event":"runtime.exit","reason":"exit"/);
+  assert.ok(!existsSync(hudResult.paths.currentWidgetPath), "runtime exit should clear current-widget.json after a result");
+} finally {
+  rmSync(hudProjectRoot, { recursive: true, force: true });
+}
 
-const asrDemoRun = spawnSync(process.execPath, [
-  "dist/apps/peripheralctl/src/index.js",
-  "asr-demo",
-  "--mock-display",
-  "--mock-hermes",
-  "--script",
-  "fixtures/mock_asr_demo.txt",
-  "--json",
-  "--cadence-ms",
-  "700",
-], {
-  cwd: root,
-  encoding: "utf8",
-  timeout: 10_000,
-});
-assert.equal(asrDemoRun.status, 0, asrDemoRun.stderr);
-const asrDemoResult = JSON.parse(asrDemoRun.stdout.slice(asrDemoRun.stdout.indexOf("{"))) as { state: string; logPath: string; script: { stepCount: number } };
-assert.equal(asrDemoResult.state, "terminal");
-assert.equal(asrDemoResult.script.stepCount, 3);
-const asrDemoLog = readFileSync(asrDemoResult.logPath, "utf8");
-assert.match(asrDemoLog, /"inputMode":"mock_asr"/);
-assert.match(asrDemoLog, /"event":"asr.mock.transcript"/);
-assert.match(asrDemoLog, /"event":"hermes_cli.input"/);
-assert.match(asrDemoLog, /"event":"hermes_cli.mock_response"/);
-assert.match(asrDemoLog, /asr_demo.awaiting_transcript/);
-assert.match(asrDemoLog, /"event":"asr_demo.complete"/);
+const hermesCliProjectRoot = makeTempProjectRoot("hermes-cli");
+try {
+  const hermesCliRun = await runHudWithTimedInput([...hudArgs, ...projectRootArgs(hermesCliProjectRoot)], [
+    { input: "Hermes CLI\n", waitMs: 350 },
+    { input: "summarize this mock session\n", waitMs: 950 },
+    { input: "exit cli\n", waitMs: 250 },
+    { input: "exit\n", waitMs: 0 },
+  ]);
+  assert.equal(hermesCliRun.status, 0, hermesCliRun.stderr);
+  const hermesCliResult = JSON.parse(hermesCliRun.stdout.slice(hermesCliRun.stdout.indexOf("{"))) as { state: string; logPath: string };
+  assert.equal(hermesCliResult.state, "blank");
+  const hermesCliLog = readFileSync(hermesCliResult.logPath, "utf8");
+  assert.match(hermesCliLog, /"state":"terminal"/);
+  assert.match(hermesCliLog, /"widgetId":"hermes-cli"/);
+  assert.match(hermesCliLog, /"event":"hermes_cli.input"/);
+  assert.match(hermesCliLog, /interactive CLI display path is wired/);
+} finally {
+  rmSync(hermesCliProjectRoot, { recursive: true, force: true });
+}
+
+const asrDemoProjectRoot = makeTempProjectRoot("asr-demo");
+try {
+  const asrDemoRun = spawnSync(process.execPath, [
+    "dist/apps/peripheralctl/src/index.js",
+    "asr-demo",
+    "--mock-display",
+    "--mock-hermes",
+    "--script",
+    join(root, "fixtures", "mock_asr_demo.txt"),
+    "--json",
+    "--cadence-ms",
+    "700",
+    ...projectRootArgs(asrDemoProjectRoot),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  assert.equal(asrDemoRun.status, 0, asrDemoRun.stderr);
+  const asrDemoResult = JSON.parse(asrDemoRun.stdout.slice(asrDemoRun.stdout.indexOf("{"))) as { state: string; logPath: string; script: { stepCount: number } };
+  assert.equal(asrDemoResult.state, "terminal");
+  assert.equal(asrDemoResult.script.stepCount, 3);
+  const asrDemoLog = readFileSync(asrDemoResult.logPath, "utf8");
+  assert.match(asrDemoLog, /"inputMode":"mock_asr"/);
+  assert.match(asrDemoLog, /"event":"asr.mock.transcript"/);
+  assert.match(asrDemoLog, /"event":"hermes_cli.input"/);
+  assert.match(asrDemoLog, /"event":"hermes_cli.mock_response"/);
+  assert.match(asrDemoLog, /asr_demo.awaiting_transcript/);
+  assert.match(asrDemoLog, /"event":"asr_demo.complete"/);
+} finally {
+  rmSync(asrDemoProjectRoot, { recursive: true, force: true });
+}
 
 const fakeSttScript = "setTimeout(() => console.log('voice test prompt'), 10)";
 const fakeSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeSttScript);
-const voiceHudRun = spawnSync(process.execPath, [
-  "dist/apps/peripheralctl/src/index.js",
-  "hud",
-  "--mock-display",
-  "--mic",
-  "mac",
-  "--hermes-cli",
-  "--mock-hermes",
-  "--stt-cmd",
-  fakeSttCommand,
-  "--json",
-  "--cadence-ms",
-  "700",
-], {
-  cwd: root,
-  encoding: "utf8",
-  timeout: 10_000,
-});
-assert.equal(voiceHudRun.status, 0, voiceHudRun.stderr);
-const voiceHudResult = JSON.parse(voiceHudRun.stdout.slice(voiceHudRun.stdout.indexOf("{"))) as { state: string; logPath: string };
-assert.equal(voiceHudResult.state, "terminal");
-const voiceHudLog = readFileSync(voiceHudResult.logPath, "utf8");
-assert.match(voiceHudLog, /"event":"input.mic.start"/);
-assert.match(voiceHudLog, /"event":"input.mic.transcript"/);
-assert.match(voiceHudLog, /voice test prompt/);
-assert.match(voiceHudLog, /"event":"hermes_cli.input"/);
+const voiceHudProjectRoot = makeTempProjectRoot("voice-hud");
+try {
+  const voiceHudRun = spawnSync(process.execPath, [
+    "dist/apps/peripheralctl/src/index.js",
+    "hud",
+    "--mock-display",
+    "--mic",
+    "mac",
+    "--hermes-cli",
+    "--mock-hermes",
+    "--stt-cmd",
+    fakeSttCommand,
+    "--json",
+    "--cadence-ms",
+    "700",
+    ...projectRootArgs(voiceHudProjectRoot),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  assert.equal(voiceHudRun.status, 0, voiceHudRun.stderr);
+  const voiceHudResult = JSON.parse(voiceHudRun.stdout.slice(voiceHudRun.stdout.indexOf("{"))) as { state: string; logPath: string };
+  assert.equal(voiceHudResult.state, "terminal");
+  const voiceHudLog = readFileSync(voiceHudResult.logPath, "utf8");
+  assert.match(voiceHudLog, /"event":"input.mic.start"/);
+  assert.match(voiceHudLog, /"event":"input.mic.transcript"/);
+  assert.match(voiceHudLog, /voice test prompt/);
+  assert.match(voiceHudLog, /"event":"hermes_cli.input"/);
+} finally {
+  rmSync(voiceHudProjectRoot, { recursive: true, force: true });
+}
 
 const openAiAsrSelfTest = spawnSync(process.execPath, [
   "tools/openai-realtime-asr.mjs",
@@ -176,22 +199,28 @@ const openAiAsrSelfTest = spawnSync(process.execPath, [
 assert.equal(openAiAsrSelfTest.status, 0, openAiAsrSelfTest.stderr);
 assert.match(openAiAsrSelfTest.stdout, /openai realtime asr self-test ok/);
 
-const exitRun = spawnSync(process.execPath, [
-  "dist/apps/peripheralctl/src/index.js",
-  "hud",
-  "--mock-display",
-  "--text",
-  "--json",
-], {
-  cwd: root,
-  input: "exit\n",
-  encoding: "utf8",
-  timeout: 5_000,
-});
-assert.equal(exitRun.status, 0, exitRun.stderr);
-const exitResult = JSON.parse(exitRun.stdout.slice(exitRun.stdout.indexOf("{"))) as { state: string; logPath: string };
-assert.equal(exitResult.state, "blank");
-assert.match(readFileSync(exitResult.logPath, "utf8"), /"event":"runtime.exit","reason":"exit"/);
+const exitProjectRoot = makeTempProjectRoot("exit");
+try {
+  const exitRun = spawnSync(process.execPath, [
+    "dist/apps/peripheralctl/src/index.js",
+    "hud",
+    "--mock-display",
+    "--text",
+    "--json",
+    ...projectRootArgs(exitProjectRoot),
+  ], {
+    cwd: root,
+    input: "exit\n",
+    encoding: "utf8",
+    timeout: 5_000,
+  });
+  assert.equal(exitRun.status, 0, exitRun.stderr);
+  const exitResult = JSON.parse(exitRun.stdout.slice(exitRun.stdout.indexOf("{"))) as { state: string; logPath: string };
+  assert.equal(exitResult.state, "blank");
+  assert.match(readFileSync(exitResult.logPath, "utf8"), /"event":"runtime.exit","reason":"exit"/);
+} finally {
+  rmSync(exitProjectRoot, { recursive: true, force: true });
+}
 
 console.log("renderer-smoke ok");
 
@@ -231,6 +260,14 @@ function runHudWithTimedInput(args: string[], script: { input: string; waitMs: n
       rejectRun(error instanceof Error ? error : new Error(String(error)));
     });
   });
+}
+
+function makeTempProjectRoot(label: string): string {
+  return mkdtempSync(join(tmpdir(), "peripheral-hud-" + label + "-"));
+}
+
+function projectRootArgs(projectRoot: string): string[] {
+  return ["--project-root", projectRoot, "--repo-root", resolve(root, "..")];
 }
 
 function delay(ms: number): Promise<void> {
