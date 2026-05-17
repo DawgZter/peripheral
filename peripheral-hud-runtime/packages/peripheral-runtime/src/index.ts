@@ -1749,6 +1749,8 @@ function normalizeHermesVoiceCommandAlias(command: string): string {
   const mapped = new Map<string, string>([
     ["pinot noir", "open hermes"],
     ["pino noir", "open hermes"],
+    ["finn hermes", "open hermes"],
+    ["fin hermes", "open hermes"],
     ["open her mes", "open hermes"],
     ["open hermez", "open hermes"],
     ["open hermings", "open hermes"],
@@ -1804,7 +1806,7 @@ function isHermesCliCloseCommand(lower: string): boolean {
 }
 
 function isHermesOpenPrefix(value: string): boolean {
-  return ["open", "start", "show"].includes(value);
+  return ["open", "start", "show", "finn", "fin"].includes(value);
 }
 
 function isHermesClosePrefix(value: string): boolean {
