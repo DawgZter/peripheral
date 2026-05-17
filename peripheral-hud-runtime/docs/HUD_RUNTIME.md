@@ -88,20 +88,20 @@ While the Hermes CLI view is open, normal text is forwarded to Hermes. Use `exit
 
 ## Scripted ASR Demo
 
-`asr-demo` is the text-first path for the future voice experience. It treats each scripted line as if it came from ASR, feeds those lines through the same transcript handler as `--mic mac`, and renders the resulting HUD states through the selected display driver. Include `Hermes CLI` in the script when the proof should exercise the terminal view; include `Hermes <task>` when it should exercise the one-shot semantic result path. When the script ends while the terminal is open, it renders an explicit `ASR: awaiting next transcript` prompt so the glasses stay on the Hermes CLI surface.
+`asr-demo` is the text-first path for the future voice experience. It treats each scripted line as if it came from ASR, feeds those lines through the same transcript handler as `--mic mac`, and renders the resulting HUD states through the selected display driver. Include `Hermes CLI` in the script to exercise the terminal view; include `Hermes <task>` to exercise the one-shot semantic result path. When the script ends while the terminal is open, it renders an explicit `ASR: awaiting next transcript` prompt so the glasses stay on the Hermes CLI surface.
 
 ```sh
 npm run peripheralctl -- asr-demo --mock-display --mock-hermes --script fixtures/mock_asr_demo.txt --json
 npm run peripheralctl -- asr-demo --mock-display --mock-hermes --asr-text "Hermes CLI|what is the HUD doing?|give me the next step" --json
 ```
 
-For live glasses proof after the display is paired and ready:
+For authorized live display checks after the display is paired and ready:
 
 ```sh
 npm run peripheralctl -- asr-demo --real --mock-hermes --framebuffer-check --json
 ```
 
-`--framebuffer-check` asks the local sidecar for read-only framebuffer captures before and after the scripted transcript. It reports text-only hashes and byte counts; if the sidecar is not ready, the demo still runs and the proof section is marked skipped. Script files can be newline text with optional `@wait 900` directives after transcript lines, or a JSON array of strings / `{ "text": "...", "waitMs": 900 }` objects.
+`--framebuffer-check` asks the local sidecar for read-only framebuffer captures before and after the scripted transcript. It reports text-only hashes and byte counts; if the sidecar is not ready, the demo still runs and the validation section is marked skipped. Script files can be newline text with optional `@wait 900` directives after transcript lines, or a JSON array of strings / `{ "text": "...", "waitMs": 900 }` objects.
 
 ## Mac Mic Input
 

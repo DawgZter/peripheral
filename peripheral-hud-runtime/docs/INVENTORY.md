@@ -4,7 +4,7 @@ This inventory is scoped to the v0 Peripheral HUD runtime and live display files
 
 ## Included Transport Pieces
 
-| Area | Current artifact | What it contributes |
+| Area | Current files | What they contribute |
 | --- | --- | --- |
 | Mac display helper | `macos_corebluetooth/peripheral-mac-pusher/` | macOS scan/connect/write path, notification handling, stdin control tokens, and ACK timing logs. |
 | Frame wrapper | `macos_corebluetooth/peripheral-mac-pusher/Sources/PeripheralFrame/PeripheralFrame.swift` | `bf02` frame shape, command body layout, and CRC16-CCITT. |

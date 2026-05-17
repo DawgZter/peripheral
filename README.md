@@ -2,7 +2,7 @@
 
 Mac-connected Agent HUD runtime and display tooling for Peripheral glasses.
 
-This repository contains the public Peripheral runtime slice. It excludes local environment files, generated artifacts, and machine-specific notes.
+This repository contains the public Peripheral runtime slice. It excludes local environment files, generated output, and machine-specific notes.
 
 ## Repo Layout
 
@@ -20,7 +20,7 @@ This repository contains the public Peripheral runtime slice. It excludes local 
 
 ## Local Usage
 
-Run this next to the existing sidecar server from the full workspace. The page expects API endpoints like:
+Run this with a compatible local sidecar server. The page expects API endpoints like:
 
 - GET /api/config
 - GET /api/framebuffer/dirty-stream
