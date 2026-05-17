@@ -1,6 +1,6 @@
 # Peripheral
 
-[![Check](https://github.com/DawgZter/peripheral/actions/workflows/check.yml/badge.svg?branch=public/peripheral-clean)](https://github.com/DawgZter/peripheral/actions/workflows/check.yml?query=branch%3Apublic%2Fperipheral-clean)
+[![Check](https://github.com/DawgZter/peripheral/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/DawgZter/peripheral/actions/workflows/check.yml?query=branch%3Amain)
 
 Mac-connected Agent HUD runtime and display tooling for Peripheral glasses.
 
@@ -41,7 +41,7 @@ npm --prefix peripheral-hud-runtime ci
 npm run check
 ```
 
-The CI workflow runs the same source checks on `public/peripheral-clean`. The macOS helper can be built separately with `npm run pusher:build`.
+The CI workflow runs the same source checks on `main`. The macOS helper can be built separately with `npm run pusher:build`.
 
 For HUD runtime commands and live display safety notes, see `peripheral-hud-runtime/docs/HUD_RUNTIME.md`.
 
