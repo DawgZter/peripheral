@@ -105,7 +105,7 @@ npm run peripheralctl -- asr-demo --real --mock-hermes --framebuffer-check --jso
 
 ## Mac Mic Input
 
-Mac mic mode starts a transcript source from, in order, --stt-cmd, PERIPHERAL_HUD_STT_CMD, OpenAI Realtime ASR when an OpenAI key is configured, then the bundled macOS Speech helper at tools/bin/PeripheralMacASR.app/Contents/MacOS/peripheral-mac-asr or tools/macos-speech-asr/MacSpeechAsr.swift. That command must emit completed transcript lines on stdout, one command per line. The runtime queues those lines into the visible terminal draft; saying `send` submits the accumulated draft to Hermes.
+Mac mic mode starts a transcript source from, in order, --stt-cmd, PERIPHERAL_HUD_STT_CMD, OpenAI Realtime ASR when an OpenAI key is configured, then the bundled macOS Speech helper at tools/bin/PeripheralMacASR.app/Contents/MacOS/peripheral-mac-asr or tools/macos-speech-asr/MacSpeechAsr.swift. That command must emit completed transcript lines on stdout, one command per line. Leave off `--hermes-cli` for the always-listening wake flow: saying `open Hermes` opens the CLI view, saying `close Hermes` blanks it, and saying `send` submits the accumulated draft to Hermes while the CLI is open.
 
 Example shape:
 
@@ -117,13 +117,13 @@ npm run peripheralctl -- hud --mock-display --mic mac --hermes-cli --mock-hermes
 For the preferred live voice-to-Hermes path, use OpenAI Realtime ASR. The helper streams PCM16 Mac mic audio over the Realtime transcription WebSocket, defaults to `gpt-realtime-whisper`, uses the legacy session payload for `gpt-realtime-*` models, and emits only completed transcript lines to stdout:
 
 ```sh
-npm run peripheralctl -- hud --real --mic mac --asr-provider openai-realtime --hermes-cli --real-hermes --asr-locale en-US
+npm run peripheralctl -- hud --real --mic mac --asr-provider openai-realtime --real-hermes --asr-locale en
 npm run peripheralctl -- hud --real --mic mac --asr-provider openai-realtime --hermes-cli --real-hermes --asr-duration-seconds 30
 node tools/openai-realtime-asr.mjs --self-test
 node tools/openai-realtime-asr.mjs --list-devices
 ```
 
-The helper reads `OPENAI_API_KEY` from the environment, `OPENAI_ENV_FILE`, `.env` in this package, or the repository root `.env`. Override the default model with `OPENAI_PERIPHERAL_ASR_MODEL`, `--openai-asr-model gpt-4o-transcribe`, or force the current docs payload with `--openai-asr-protocol current`. The Mac mic input defaults to auto-detection, preferring the MacBook microphone over aggregate/virtual devices.
+The helper reads `OPENAI_API_KEY` from the environment, `OPENAI_ENV_FILE`, `.env` in this package, or the repository root `.env`. Override the default model with `OPENAI_PERIPHERAL_ASR_MODEL`, `--openai-asr-model gpt-4o-transcribe`, or force the current docs payload with `--openai-asr-protocol current`. OpenAI Realtime ASR now passes an English language hint by default; override it with `--asr-locale <code>` or `OPENAI_REALTIME_ASR_LANGUAGE`. The Mac mic input defaults to auto-detection, preferring the MacBook microphone over aggregate/virtual devices.
 
 If OpenAI Realtime is not desired, force the local Apple Speech helper:
 
@@ -133,7 +133,7 @@ npm run peripheralctl -- hud --real --mic mac --asr-provider macos-speech --herm
 npm run peripheralctl -- hud --real --mic mac --hermes-cli --real-hermes --asr-http-port 8792
 ```
 
-When the glasses are paired, that opens the Hermes CLI terminal on the display. Speaking into the Mac mic emits transcript lines into an `ASR draft` line on the glasses. Say `send` to write the draft into `hermes chat --source peripheral-hud`; the word `send` is not included in the prompt. Use --asr-silence-ms 900 to make stable partials emit faster, --asr-partials to log partial recognition to stderr/JSONL, or --asr-duration-seconds 30 for bounded tests.
+When the glasses are paired, the wake flow keeps the display blank until `open Hermes` is heard. Speaking into the Mac mic then emits transcript lines into an `ASR draft` line on the glasses. Say `send` to write the draft into `hermes chat --source peripheral-hud`; the word `send` is not included in the prompt. Say `close Hermes` to close the CLI and blank the display. Use --asr-silence-ms 900 to make stable partials emit faster, --asr-partials to log partial recognition to stderr/JSONL, or --asr-duration-seconds 30 for bounded tests.
 
 If local mic permission is awkward from the Codex-launched helper, use the browser fallback only as a transport bridge: start with --asr-http-port 8792, open http://127.0.0.1:8792/, click Start, and allow microphone permission in the browser. Final browser speech transcripts update the same queued Hermes/glasses draft, and `send` submits it, but this is not the preferred GPT Realtime ASR path.
 
@@ -166,7 +166,7 @@ npm run peripheralctl -- hud --mock-display --text --hermes-cli
 npm run peripheralctl -- hud --real --text --real-hermes --hermes-cli
 ```
 
-`--hermes-cli` opens the `terminal` widget immediately. The same view can be opened later by typing `Hermes CLI`, `hermes terminal`, `terminal`, or `cli` in the runtime. In mock Hermes mode the runtime renders deterministic fake CLI replies. In real Hermes mode it spawns `hermes chat --source peripheral-hud`, mirrors stdout/stderr into the `terminal` widget, and writes typed lines to the child process stdin. ASR lines stay in a draft buffer until the user says `send`.
+`--hermes-cli` opens the `terminal` widget immediately. The same view can be opened later by typing or saying `open Hermes`, `Hermes CLI`, `hermes terminal`, `terminal`, or `cli` in the runtime. In mock Hermes mode the runtime renders deterministic fake CLI replies. In real Hermes mode it spawns `hermes chat --source peripheral-hud`, mirrors stdout/stderr into the `terminal` widget, and writes typed lines to the child process stdin. ASR lines stay in a draft buffer until the user says `send`; `close Hermes` closes the CLI view and blanks the display.
 
 In mock-display mode the adapter defaults to mock Hermes, even if Hermes is installed. This keeps local acceptance deterministic and safe while the glasses are in live use. Use `--real-hermes` only when you intentionally want the local Hermes process to run.
 

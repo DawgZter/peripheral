@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { assertWidget } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
-import { clearHud, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
+import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
 
 const root = resolve(process.cwd());
 const fixtureDir = join(root, "fixtures", "ui");
@@ -37,6 +37,39 @@ assert.equal(sanitizeTerminalLine("╭──────────── Herme
 assert.equal(sanitizeTerminalLine("⚕ gpt-5.5 │ ctx -- │ [░░░░] -- │ 8s │ ⏲ 0s"), "Hermes gpt-5.5 ctx -- [] -- 8s time 0s");
 assert.equal(sanitizeTerminalLine("│ ⠀⠀⠀⠀⠀ browser: browser_back, browser_click │"), "browser: browser_back, browser_click");
 assert.equal(sanitizeTerminalLine("────────────────────────"), "");
+assert.deepEqual(
+  compactHermesTerminalLines([
+    "╭──────────── Hermes Agent v0.12.0 · upstream ────────────╮",
+    "│ Available Tools │",
+    "│ ⠀⠀⠀⠀⠀ browser: browser_back, browser_click │",
+    "│ code_execution: python, shell │",
+    "│ MCP Servers │",
+    "│ moss (stdio) — 10 tool(s) │",
+    "│ agentmail — failed │",
+    "gpt-5.5 - Nous Research sponge (http) - failed",
+    "Session: 20260517_155650_397b3d Available Skills",
+    "│ Available Skills │",
+    "│ apple: app_control, shortcuts │",
+    "data-science: jupyter-live-kernel",
+    "software-development: code-review, debugging-hermes-tui-commands",
+    "│ /Users/karimyahia/Documents/peripheral-framebuffer-mirror │",
+    "77 tools · 138 skills · 3 MCP servers · /help for commands",
+    "Welcome to Hermes Agent! Type your message or /help for commands.",
+    "Tip: Type /help for commands.",
+    "⚙️  /reasoning low",
+    "  ✓ Reasoning effort set to 'low' (saved to config)",
+    "⚙️  /fast fast",
+    "  ✓ Priority Processing set to FAST (saved to config)",
+    "🔄 MCP server config changed — reloading connections...",
+    "🔄 Reloading MCP servers...",
+    "  ♻️  Reconnected: agentphone, crustdata, moss",
+    "  🔧 46 tool(s) available from 3 server(s)",
+    "  ✅ Agent updated — 0 tool(s) available",
+    "⚕ gpt-5.5 │ ctx -- │ [░░░░] -- │ 8s │ ⏲ 0s",
+    "❯",
+  ]),
+  ["Hermes Agent v0.12.0 - upstream"],
+);
 assert.equal(mergeVoiceDraft("Hey", "Hey Hermes", "Hey"), "Hey Hermes");
 assert.equal(mergeVoiceDraft("Hey Hermes", "I want you", "Hey Hermes"), "Hey Hermes I want you");
 assert.equal(mergeVoiceDraft("One plus", "One plus one", "One plus"), "One plus one");
@@ -110,9 +143,9 @@ try {
 const hermesCliProjectRoot = makeTempProjectRoot("hermes-cli");
 try {
   const hermesCliRun = await runHudWithTimedInput([...hudArgs, ...projectRootArgs(hermesCliProjectRoot)], [
-    { input: "Hermes CLI\n", waitMs: 350 },
+    { input: "open Hermes\n", waitMs: 350 },
     { input: "summarize this mock session\n", waitMs: 950 },
-    { input: "exit cli\n", waitMs: 250 },
+    { input: "close Hermes\n", waitMs: 250 },
     { input: "exit\n", waitMs: 0 },
   ]);
   assert.equal(hermesCliRun.status, 0, hermesCliRun.stderr);
@@ -163,7 +196,14 @@ try {
   rmSync(asrDemoProjectRoot, { recursive: true, force: true });
 }
 
-const fakeSttScript = "setTimeout(() => console.log('voice test prompt'), 10); setTimeout(() => console.log('send'), 30)";
+const fakeSttScript = [
+  "setTimeout(() => console.log('Open'), 10)",
+  "setTimeout(() => console.log('Hermes'), 90)",
+  "setTimeout(() => console.log('voice test prompt'), 220)",
+  "setTimeout(() => console.log('send'), 330)",
+  "setTimeout(() => console.log('close'), 1200)",
+  "setTimeout(() => console.log('termites'), 1290)",
+].join(";");
 const fakeSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeSttScript);
 const voiceHudProjectRoot = makeTempProjectRoot("voice-hud");
 try {
@@ -173,7 +213,6 @@ try {
     "--mock-display",
     "--mic",
     "mac",
-    "--hermes-cli",
     "--mock-hermes",
     "--stt-cmd",
     fakeSttCommand,
@@ -188,18 +227,58 @@ try {
   });
   assert.equal(voiceHudRun.status, 0, voiceHudRun.stderr);
   const voiceHudResult = JSON.parse(voiceHudRun.stdout.slice(voiceHudRun.stdout.indexOf("{"))) as { state: string; logPath: string };
-  assert.equal(voiceHudResult.state, "terminal");
+  assert.equal(voiceHudResult.state, "blank");
   const voiceHudLog = readFileSync(voiceHudResult.logPath, "utf8");
   assert.match(voiceHudLog, /"event":"input.mic.start"/);
   assert.match(voiceHudLog, /"event":"input.mic.transcript"/);
+  assert.match(voiceHudLog, /"event":"input.voice_command.pending","command":"open"/);
+  assert.match(voiceHudLog, /"text":"Hermes"/);
   assert.match(voiceHudLog, /voice test prompt/);
   assert.match(voiceHudLog, /"event":"asr.voice_draft.update"/);
   assert.match(voiceHudLog, /"event":"asr.voice_command.send"/);
   assert.match(voiceHudLog, /"event":"hermes_cli.input"/);
   assert.match(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"voice test prompt"/);
   assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
+  assert.match(voiceHudLog, /"event":"input.voice_command.pending","command":"close"/);
+  assert.match(voiceHudLog, /"event":"hermes_cli.close","reason":"input.dismiss"/);
 } finally {
   rmSync(voiceHudProjectRoot, { recursive: true, force: true });
+}
+
+const fakeAliasSttScript = [
+  "setTimeout(() => console.log('Pinot noir'), 10)",
+  "setTimeout(() => console.log('close Hermes'), 140)",
+].join(";");
+const fakeAliasSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeAliasSttScript);
+const voiceAliasProjectRoot = makeTempProjectRoot("voice-alias");
+try {
+  const voiceAliasRun = spawnSync(process.execPath, [
+    "dist/apps/peripheralctl/src/index.js",
+    "hud",
+    "--mock-display",
+    "--mic",
+    "mac",
+    "--mock-hermes",
+    "--stt-cmd",
+    fakeAliasSttCommand,
+    "--json",
+    "--cadence-ms",
+    "700",
+    ...projectRootArgs(voiceAliasProjectRoot),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  assert.equal(voiceAliasRun.status, 0, voiceAliasRun.stderr);
+  const voiceAliasResult = JSON.parse(voiceAliasRun.stdout.slice(voiceAliasRun.stdout.indexOf("{"))) as { state: string; logPath: string };
+  assert.equal(voiceAliasResult.state, "blank");
+  const voiceAliasLog = readFileSync(voiceAliasResult.logPath, "utf8");
+  assert.match(voiceAliasLog, /"event":"input.voice_command.alias","text":"Pinot noir","command":"open hermes"/);
+  assert.match(voiceAliasLog, /"event":"hermes_cli.close","reason":"input.dismiss"/);
+  assert.doesNotMatch(voiceAliasLog, /Unknown HUD command/);
+} finally {
+  rmSync(voiceAliasProjectRoot, { recursive: true, force: true });
 }
 
 const openAiAsrSelfTest = spawnSync(process.execPath, [

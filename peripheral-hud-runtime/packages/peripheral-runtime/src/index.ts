@@ -58,6 +58,9 @@ export type HudRuntimeOptions = {
   openaiEnvFile?: string;
   openaiAsrFfmpegInput?: string;
   hermesTmuxSession?: string;
+  hermesModel?: string;
+  hermesReasoningEffort?: string;
+  hermesFastMode?: boolean;
   openHermesTerminal?: boolean;
   logPath?: string;
   json?: boolean;
@@ -157,7 +160,7 @@ export async function runHudRuntime(options: HudRuntimeOptions): Promise<Record<
     }
 
     if (process.stdin.isTTY) {
-      process.stdout.write("HUD runtime started blank. Type look_up, Hermes CLI, Hermes <task>, status, show agents, details, make it shorter, dismiss, clear, timeout, exit, or quit.\n");
+      process.stdout.write("HUD runtime started blank. Type look_up, open Hermes, Hermes <task>, status, show agents, details, make it shorter, dismiss, clear, timeout, exit, or quit.\n");
       process.stdout.write("hud> ");
     }
 
@@ -327,6 +330,7 @@ class HudRuntime {
   private voiceDraft = "";
   private voiceDraftLineIndex: number | null = null;
   private lastVoiceDraftPiece = "";
+  private pendingVoiceControlPrefix: string | null = null;
 
   constructor(
     private readonly options: HudRuntimeOptions,
@@ -362,44 +366,67 @@ class HudRuntime {
     const text = cleanText(input, 240);
     if (!text) return true;
     await this.log({ event: "input.command", mode: this.options.inputMode, source, text });
-    const lower = text.toLowerCase();
+    const lower = source === "voice" ? normalizeVoiceControlCommand(text) : text.toLowerCase();
+    const voiceCommand = source === "voice" ? normalizeHermesVoiceCommandAlias(lower) : lower;
 
     if (this.hermesCli) {
-      return this.handleHermesCliInput(text, lower, source);
+      return this.handleHermesCliInput(text, voiceCommand, source);
     }
 
-    if (["look_up", "lookup", "look up", "show agents"].includes(lower)) {
+    if (source === "voice") {
+      const pendingCommand = consumeSplitHermesControlCommand(this.pendingVoiceControlPrefix, voiceCommand);
+      if (pendingCommand === "open") {
+        this.pendingVoiceControlPrefix = null;
+        await this.log({ event: "input.voice_command.alias", text, command: voiceCommand });
+        await this.openHermesCli("input.voice_command");
+        return true;
+      }
+      if (isHermesOpenPrefix(voiceCommand)) {
+        this.pendingVoiceControlPrefix = voiceCommand;
+        await this.log({ event: "input.voice_command.pending", command: voiceCommand });
+        return true;
+      }
+      this.pendingVoiceControlPrefix = null;
+    }
+
+    if (["look_up", "lookup", "look up", "show agents"].includes(voiceCommand)) {
       await this.showAgentHud("look_up");
       return true;
     }
-    if (lower === "status") {
+    if (voiceCommand === "status") {
       await this.showAgentHud("status");
       return true;
     }
-    if (lower === "details") {
+    if (voiceCommand === "details") {
       await this.showDetails();
       return true;
     }
-    if (lower === "dismiss" || lower === "clear" || lower === "timeout") {
-      await this.clear(lower === "timeout" ? "input.timeout" : "input.dismiss");
+    if (voiceCommand === "dismiss" || voiceCommand === "clear" || voiceCommand === "timeout") {
+      await this.clear(voiceCommand === "timeout" ? "input.timeout" : "input.dismiss");
       return true;
     }
-    if (lower === "make it shorter") {
+    if (voiceCommand === "make it shorter") {
       await this.makeShorter();
       return true;
     }
-    if (lower === "exit" || lower === "quit") {
+    if (voiceCommand === "exit" || voiceCommand === "quit") {
       await this.clear("input.exit");
-      await this.log({ event: "runtime.exit", reason: lower });
+      await this.log({ event: "runtime.exit", reason: voiceCommand });
       return false;
     }
-    if (isHermesCliCommand(lower)) {
+    if (isHermesCliCommand(voiceCommand)) {
+      if (source === "voice" && voiceCommand !== lower) await this.log({ event: "input.voice_command.alias", text, command: voiceCommand });
       await this.openHermesCli("input.command");
       return true;
     }
-    if (lower.startsWith("hermes ")) {
+    if (voiceCommand.startsWith("hermes ")) {
       const task = text.slice(text.toLowerCase().indexOf("hermes ") + "hermes ".length).trim();
       await this.launchHermes(task || "Summarize current task for the HUD.");
+      return true;
+    }
+
+    if (source === "voice") {
+      await this.log({ event: "input.voice_ignored", text });
       return true;
     }
 
@@ -438,6 +465,7 @@ class HudRuntime {
     this.voiceDraft = "";
     this.voiceDraftLineIndex = null;
     this.lastVoiceDraftPiece = "";
+    this.pendingVoiceControlPrefix = null;
     this.pushTerminalLine("$ hermes chat");
     this.pushTerminalLine(mode === "real" ? "HUD: launching native Hermes CLI." : "HUD: mock Hermes CLI view.");
     this.pushTerminalLine(this.options.inputMode === "mac_mic" || this.options.inputMode === "mock_asr"
@@ -682,7 +710,7 @@ class HudRuntime {
       await this.log({ event: "runtime.exit", reason: lower });
       return false;
     }
-    if (["exit cli", "close cli", "dismiss", "clear", "timeout"].includes(lower)) {
+    if (isHermesCliCloseCommand(lower)) {
       await this.closeHermesCli(lower === "timeout" ? "input.timeout" : "input.dismiss", true);
       return true;
     }
@@ -696,13 +724,26 @@ class HudRuntime {
   }
 
   private async handleHermesCliVoiceInput(text: string, lower: string): Promise<boolean> {
-    const command = normalizeVoiceControlCommand(text);
+    const command = normalizeHermesVoiceCommandAlias(lower || normalizeVoiceControlCommand(text));
+    const pendingCommand = consumeSplitHermesControlCommand(this.pendingVoiceControlPrefix, command);
+    if (pendingCommand === "close") {
+      this.pendingVoiceControlPrefix = null;
+      await this.closeHermesCli("input.dismiss", true);
+      return true;
+    }
+    if (isHermesClosePrefix(command)) {
+      this.pendingVoiceControlPrefix = command;
+      await this.log({ event: "input.voice_command.pending", command });
+      return true;
+    }
+    this.pendingVoiceControlPrefix = null;
+
     if (command === "exit" || command === "quit") {
       await this.closeHermesCli("input.exit", true);
       await this.log({ event: "runtime.exit", reason: command });
       return false;
     }
-    if (["exit cli", "close cli", "dismiss", "clear", "timeout"].includes(command)) {
+    if (isHermesCliCloseCommand(command)) {
       await this.closeHermesCli(command === "timeout" ? "input.timeout" : "input.dismiss", true);
       return true;
     }
@@ -768,7 +809,8 @@ class HudRuntime {
       this.startTmuxHermesCli(hermesPath, tmuxSession);
       return;
     }
-    const child = spawn(hermesPath, ["chat", "--source", "peripheral-hud"], {
+    const args = hermesCliArgs(this.options);
+    const child = spawn(hermesPath, args, {
       cwd: this.options.projectRoot,
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, PERIPHERAL_HUD_WIDGET_PATH: this.paths.currentWidgetPath },
@@ -789,19 +831,16 @@ class HudRuntime {
     child.on("exit", (code) => {
       void this.handleHermesCliExit("exit", code === 0 ? "Hermes CLI exited." : "Hermes CLI exited " + code + ".");
     });
-    void this.log({ event: "hermes_cli.start", mode: "real", command: hermesPath + " chat --source peripheral-hud" });
+    this.primeChildHermesCli(child);
+    void this.log({ event: "hermes_cli.start", mode: "real", command: [hermesPath, ...args].join(" ") });
   }
 
   private startTmuxHermesCli(hermesPath: string, sessionName: string): void {
     if (!this.hermesCli) return;
     const tmuxPath = resolveExecutablePath("tmux") || "tmux";
     spawnSync(tmuxPath, ["kill-session", "-t", sessionName], { encoding: "utf8", timeout: 2_000 });
-    const command = [
-      shellQuote(hermesPath),
-      "chat",
-      "--source",
-      "peripheral-hud",
-    ].join(" ");
+    const args = hermesCliArgs(this.options);
+    const command = [shellQuote(hermesPath), ...args.map((arg) => shellQuote(arg))].join(" ");
     const started = spawnSync(tmuxPath, ["new-session", "-d", "-s", sessionName, "-c", this.options.projectRoot, command], {
       encoding: "utf8",
       env: { ...process.env, PERIPHERAL_HUD_WIDGET_PATH: this.paths.currentWidgetPath },
@@ -831,7 +870,33 @@ class HudRuntime {
     if (this.options.openHermesTerminal) {
       this.openTerminalForTmux(tmuxPath, sessionName);
     }
+    this.primeTmuxHermesCli(tmuxPath, sessionName);
     this.scheduleTmuxCapture(this.hermesCli, 200);
+  }
+
+  private primeTmuxHermesCli(tmuxPath: string, sessionName: string): void {
+    const commands = hermesStartupCommands(this.options);
+    if (!commands.length) return;
+    setTimeout(() => {
+      for (const command of commands) {
+        spawnSync(tmuxPath, ["send-keys", "-t", sessionName, "C-u"], { encoding: "utf8", timeout: 2_000 });
+        spawnSync(tmuxPath, ["send-keys", "-l", "-t", sessionName, command], { encoding: "utf8", timeout: 2_000 });
+        spawnSync(tmuxPath, ["send-keys", "-t", sessionName, "C-m"], { encoding: "utf8", timeout: 2_000 });
+      }
+      void this.log({ event: "hermes_cli.prime", transport: "tmux", session: sessionName, commands });
+      const session = this.hermesCli;
+      if (session) this.scheduleTmuxCapture(session, 300);
+    }, 7000);
+  }
+
+  private primeChildHermesCli(child: ChildProcessWithoutNullStreams): void {
+    const commands = hermesStartupCommands(this.options);
+    if (!commands.length) return;
+    setTimeout(() => {
+      if (!child.stdin.writable) return;
+      for (const command of commands) child.stdin.write(command + "\n", "utf8");
+      void this.log({ event: "hermes_cli.prime", transport: "stdio", commands });
+    }, 1200);
   }
 
   private openTerminalForTmux(tmuxPath: string, sessionName: string): void {
@@ -925,11 +990,7 @@ class HudRuntime {
     const snapshot = String(captured.stdout || "").replace(/\r/g, "\n");
     if (snapshot !== session.tmuxLastSnapshot) {
       session.tmuxLastSnapshot = snapshot;
-      const lines = snapshot
-        .split(/\n+/)
-        .map((line) => cleanTerminalLine(line))
-        .filter(Boolean)
-        .slice(-76);
+      const lines = compactHermesTerminalLines(snapshot.split(/\n+/)).slice(-76);
       this.terminalLines = lines.length > 0 ? lines : ["Hermes CLI"];
       this.voiceDraftLineIndex = null;
       if (this.voiceDraft) this.setVoiceDraftLine();
@@ -983,6 +1044,7 @@ class HudRuntime {
     this.voiceDraft = "";
     this.voiceDraftLineIndex = null;
     this.lastVoiceDraftPiece = "";
+    this.pendingVoiceControlPrefix = null;
     if (this.terminalRenderTimer) {
       clearTimeout(this.terminalRenderTimer);
       this.terminalRenderTimer = null;
@@ -1552,19 +1614,24 @@ function resolveMacMicSttCommand(options: HudRuntimeOptions): string | null {
 function resolveOpenAiRealtimeSttCommand(options: HudRuntimeOptions): string | null {
   const helperPath = join(options.projectRoot, "tools", "openai-realtime-asr.mjs");
   if (!existsSync(helperPath)) return null;
+  const model = options.openaiAsrModel || process.env.OPENAI_REALTIME_TRANSCRIBE_MODEL || process.env.OPENAI_PERIPHERAL_ASR_MODEL || "gpt-realtime-whisper";
+  const protocol = options.openaiAsrProtocol || process.env.OPENAI_REALTIME_ASR_PROTOCOL || "auto";
   const args = [
     shellQuote(helperPath),
     "--line-mode",
     "--model",
-    shellQuote(options.openaiAsrModel || process.env.OPENAI_REALTIME_TRANSCRIBE_MODEL || process.env.OPENAI_PERIPHERAL_ASR_MODEL || "gpt-realtime-whisper"),
+    shellQuote(model),
     "--protocol",
-    shellQuote(options.openaiAsrProtocol || process.env.OPENAI_REALTIME_ASR_PROTOCOL || "auto"),
+    shellQuote(protocol),
     "--commit-ms",
     String(Math.max(300, options.asrSilenceMs || 1200)),
   ];
   const envFile = resolveOpenAiEnvFile(options);
   if (envFile) args.push("--env-file", shellQuote(envFile));
-  if (options.asrLocale) args.push("--language", shellQuote(options.asrLocale));
+  const language = openAiAsrLanguage(options);
+  if (language) args.push("--language", shellQuote(language));
+  const prompt = openAiAsrPrompt(model, protocol);
+  if (prompt) args.push("--prompt", shellQuote(prompt));
   if (options.openaiAsrFfmpegInput) args.push("--ffmpeg-input", shellQuote(options.openaiAsrFfmpegInput));
   if (options.asrDurationSeconds !== undefined) {
     args.push("--duration-seconds", String(Math.max(0.1, options.asrDurationSeconds)));
@@ -1640,9 +1707,59 @@ function isHermesCliCommand(lower: string): boolean {
     "terminal",
     "hermes cli",
     "hermes terminal",
+    "open hermes",
     "open hermes cli",
+    "start hermes",
+    "show hermes",
     "show hermes cli",
   ].includes(lower);
+}
+
+function normalizeHermesVoiceCommandAlias(command: string): string {
+  return new Map<string, string>([
+    ["pinot noir", "open hermes"],
+    ["pino noir", "open hermes"],
+    ["open her mes", "open hermes"],
+    ["open hermez", "open hermes"],
+    ["open armies", "open hermes"],
+    ["open ermes", "open hermes"],
+    ["close her mes", "close hermes"],
+    ["close hermez", "close hermes"],
+    ["close armies", "close hermes"],
+    ["close ermes", "close hermes"],
+    ["close termites", "close hermes"],
+    ["termites", "hermes"],
+  ]).get(command) || command;
+}
+
+function isHermesCliCloseCommand(lower: string): boolean {
+  return [
+    "exit cli",
+    "close cli",
+    "close hermes",
+    "close hermes cli",
+    "dismiss",
+    "dismiss hermes",
+    "clear",
+    "clear hermes",
+    "hide hermes",
+    "timeout",
+  ].includes(lower);
+}
+
+function isHermesOpenPrefix(value: string): boolean {
+  return ["open", "start", "show"].includes(value);
+}
+
+function isHermesClosePrefix(value: string): boolean {
+  return ["close", "dismiss", "hide", "clear"].includes(value);
+}
+
+function consumeSplitHermesControlCommand(prefix: string | null, value: string): "open" | "close" | null {
+  if (value !== "hermes" || !prefix) return null;
+  if (isHermesOpenPrefix(prefix)) return "open";
+  if (isHermesClosePrefix(prefix)) return "close";
+  return null;
 }
 
 function agentHudWidget(agents: AgentRecord[]): PeripheralWidget {
@@ -1671,6 +1788,51 @@ function terminalWidget(mode: "mock" | "real", lines: string[]): PeripheralWidge
     prompt: "TYPE TO HERMES / EXIT CLI",
     created_at: new Date().toISOString(),
   };
+}
+
+function hermesCliArgs(options: HudRuntimeOptions): string[] {
+  const args = ["chat", "--source", "peripheral-hud"];
+  const model = hermesModel(options);
+  if (model) args.push("--model", model);
+  return args;
+}
+
+function hermesStartupCommands(options: HudRuntimeOptions): string[] {
+  const commands: string[] = [];
+  const reasoningEffort = hermesReasoningEffort(options);
+  if (reasoningEffort) commands.push("/reasoning " + reasoningEffort);
+  if (hermesFastMode(options)) commands.push("/fast fast");
+  return commands;
+}
+
+function hermesModel(options: HudRuntimeOptions): string {
+  return cleanText(options.hermesModel || process.env.PERIPHERAL_HUD_HERMES_MODEL || "gpt-5.5", 80);
+}
+
+function hermesReasoningEffort(options: HudRuntimeOptions): string {
+  const value = cleanText(options.hermesReasoningEffort || process.env.PERIPHERAL_HUD_HERMES_REASONING || "low", 24).toLowerCase();
+  return ["none", "minimal", "low", "medium", "high", "xhigh"].includes(value) ? value : "low";
+}
+
+function hermesFastMode(options: HudRuntimeOptions): boolean {
+  if (options.hermesFastMode !== undefined) return options.hermesFastMode;
+  const value = String(process.env.PERIPHERAL_HUD_HERMES_FAST || "1").trim().toLowerCase();
+  return !["0", "false", "no", "normal", "off"].includes(value);
+}
+
+function openAiAsrLanguage(options: HudRuntimeOptions): string {
+  const raw = cleanText(options.asrLocale || process.env.OPENAI_REALTIME_ASR_LANGUAGE || "en", 16);
+  if (!raw || ["none", "off", "false", "0"].includes(raw.toLowerCase())) return "";
+  return raw;
+}
+
+function openAiAsrPrompt(model: string, protocol: string): string {
+  if ((protocol === "auto" || protocol === "legacy") && model.startsWith("gpt-realtime-")) return "";
+  return cleanText(process.env.OPENAI_REALTIME_ASR_PROMPT || [
+    "Transcribe English speech for a glasses HUD.",
+    "Important voice commands are: open Hermes, close Hermes, send, clear draft, status, look up.",
+    "Prefer the spelling Hermes for the agent name.",
+  ].join(" "), 600);
 }
 
 function activeAgentWidget(agent: string, status: AgentStatus, chunks: string[]): PeripheralWidget {
@@ -1789,8 +1951,149 @@ export function sanitizeTerminalLine(value: string): string {
   return /^[\s|+\-_=.,:;[\]()]+$/.test(clean) ? "" : clean;
 }
 
+export function compactHermesTerminalLines(values: string[]): string[] {
+  const lines: string[] = [];
+  let skippedStartupNoise = false;
+
+  for (const value of values) {
+    const clean = sanitizeTerminalLine(value);
+    if (!clean) continue;
+    if (isHermesStartupNoise(clean)) {
+      skippedStartupNoise = true;
+      continue;
+    }
+
+    const normalized = normalizeHermesTerminalLine(clean);
+    if (!normalized) continue;
+    if (isAdjacentDuplicateTerminalLine(lines, normalized)) continue;
+    lines.push(normalized);
+  }
+
+  return skippedStartupNoise ? compactHermesStartupOnlyLines(lines) : lines;
+}
+
 function cleanTerminalLine(value: string): string {
   return sanitizeTerminalLine(value);
+}
+
+function normalizeHermesTerminalLine(value: string): string {
+  if (value === ">") return ">";
+  return value.replace(/^>\s+/, "> ");
+}
+
+function isAdjacentDuplicateTerminalLine(lines: string[], value: string): boolean {
+  const previous = lines[lines.length - 1];
+  if (previous !== value) return false;
+  return value === ">" || value.startsWith("Hermes ") || value.startsWith("ASR draft:");
+}
+
+function compactHermesStartupOnlyLines(lines: string[]): string[] {
+  const version = lines.find(isHermesVersionLine);
+  if (!version) return lines;
+  const extra = lines.filter((line) =>
+    line !== version &&
+    line !== ">" &&
+    !isHermesStatusLine(line)
+  );
+  return extra.length === 0 ? [version] : lines;
+}
+
+function isHermesVersionLine(value: string): boolean {
+  return /^Hermes Agent v\S+/.test(value);
+}
+
+function isHermesStatusLine(value: string): boolean {
+  return /^Hermes gpt-[A-Za-z0-9_.-]+\b/.test(value);
+}
+
+function isHermesStartupNoise(value: string): boolean {
+  if (/^Available (Tools|Skills)$/.test(value)) return true;
+  if (value === "MCP Servers") return true;
+  if (/^\(and \d+ more (toolsets?|skills?)\.\.\.\)$/.test(value)) return true;
+  if (/^\d+ tools - \d+ skills - \d+ MCP servers - \/help for commands$/.test(value)) return true;
+  if (/^Welcome to Hermes Agent! Type your message or \/help for commands\.?$/.test(value)) return true;
+  if (/^(\* )?Tip: /.test(value)) return true;
+  if (value === "Hermes Hermes") return true;
+  if (/^\/(reasoning|fast)\b/.test(value)) return true;
+  if (/^OK Reasoning effort set to /.test(value)) return true;
+  if (/^OK Priority Processing set to /.test(value)) return true;
+  if (/^MCP server config changed /.test(value)) return true;
+  if (/^Reloading MCP servers/.test(value)) return true;
+  if (/^Reconnected: /.test(value)) return true;
+  if (/^\d+ tool\(s\) available from \d+ server\(s\)/.test(value)) return true;
+  if (/^Agent updated - \d+ tool\(s\) available/.test(value)) return true;
+  if (/^Session: \d{8}_\d{6}(?:_[A-Za-z0-9]+)?(?: Available Skills)?$/.test(value)) return true;
+  if (/^gpt-[A-Za-z0-9_.-]+ - .*\((?:http|stdio)\) - failed$/.test(value)) return true;
+  if (/^\/Users\/karimyahia\/.*\b(peripheral|hermes)\b/.test(value)) return true;
+  if (isHermesToolCatalogLine(value)) return true;
+  if (isHermesMcpCatalogLine(value)) return true;
+  if (isHermesSkillCatalogLine(value)) return true;
+  return false;
+}
+
+function isHermesToolCatalogLine(value: string): boolean {
+  const prefix = value.split(":")[0] || "";
+  return [
+    "browser",
+    "browser-cdp",
+    "clarify",
+    "code_execution",
+    "cronjob",
+    "delegation",
+    "discord",
+    "discord_admin",
+    "filesystem",
+    "github",
+    "gmail",
+    "notion",
+    "slack",
+    "terminal",
+    "web_search",
+  ].includes(prefix);
+}
+
+function isHermesMcpCatalogLine(value: string): boolean {
+  return /^(moss|crustdata|agentmail|browser-use|agentphone|sponge)(\s|\()/.test(value) && (value.includes("tool(s)") || /\bfailed\b/.test(value));
+}
+
+function isHermesSkillCatalogLine(value: string): boolean {
+  const prefix = value.split(":")[0] || "";
+  return [
+    "apple",
+    "autonomous-ai-agents",
+    "business",
+    "creative",
+    "crypto",
+    "data",
+    "data-science",
+    "devops",
+    "dogfood",
+    "documents",
+    "email",
+    "engineering",
+    "finance",
+    "gaming",
+    "general",
+    "github",
+    "hardware",
+    "image",
+    "inference-sh",
+    "leisure",
+    "mcp",
+    "media",
+    "mlops",
+    "note-taking",
+    "productivity",
+    "red-teaming",
+    "research",
+    "sandbox",
+    "smart-home",
+    "social-media",
+    "software-development",
+    "software-engineering",
+    "web",
+    "writing",
+  ].includes(prefix);
 }
 
 export function normalizeTmuxSessionName(value: string): string | null {

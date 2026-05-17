@@ -67,6 +67,8 @@ const VALUE_FLAGS = new Set([
   "openai-env-file",
   "openai-asr-ffmpeg-input",
   "hermes-tmux-session",
+  "hermes-model",
+  "hermes-reasoning",
   "timeout-seconds",
 ]);
 
@@ -251,6 +253,9 @@ function runtimeOptions(cli: ParsedCli, projectRoot: string, repoRoot: string, l
     openaiEnvFile: typeof cli.options["openai-env-file"] === "string" ? cli.options["openai-env-file"] : undefined,
     openaiAsrFfmpegInput: typeof cli.options["openai-asr-ffmpeg-input"] === "string" ? cli.options["openai-asr-ffmpeg-input"] : undefined,
     hermesTmuxSession: typeof cli.options["hermes-tmux-session"] === "string" ? cli.options["hermes-tmux-session"] : undefined,
+    hermesModel: typeof cli.options["hermes-model"] === "string" ? cli.options["hermes-model"] : undefined,
+    hermesReasoningEffort: typeof cli.options["hermes-reasoning"] === "string" ? cli.options["hermes-reasoning"] : undefined,
+    hermesFastMode: cli.options["no-hermes-fast"] ? false : undefined,
     openHermesTerminal: Boolean(cli.options["open-hermes-terminal"]),
     logPath,
     json: Boolean(cli.options.json),
@@ -713,9 +718,9 @@ function capabilities(): unknown {
       "hud --mock-display --mic mac --asr-provider openai-realtime",
       "hud --real --text",
       "hud --real --mic mac",
-      "hud --real --mic mac --hermes-cli --real-hermes",
+      "hud --real --mic mac --real-hermes",
       "hud --real --mic mac --hermes-cli --real-hermes --hermes-tmux-session peripheral-hud-hermes --open-hermes-terminal",
-      "hud --real --mic mac --asr-provider openai-realtime --hermes-cli --real-hermes",
+      "hud --real --mic mac --asr-provider openai-realtime --real-hermes",
       "asr-demo --mock-display --mock-hermes",
       "asr-demo --real --mock-hermes --framebuffer-check",
       "agents --mock",
@@ -943,7 +948,7 @@ HUD runtime options:
   --mic mac               Start Mac mic transcript source. Uses --stt-cmd, PERIPHERAL_HUD_STT_CMD, OpenAI Realtime when configured, or the bundled macOS Speech helper.
   --asr-provider <mode>   auto, openai-realtime, or macos-speech. Default auto.
   --stt-cmd <cmd>         Override the line-based STT command for --mic mac.
-  --asr-locale <locale>   Locale for bundled macOS Speech helper; default en-US.
+  --asr-locale <locale>   Locale/language hint. Default en-US for macOS Speech, en for OpenAI Realtime.
   --asr-silence-ms <ms>   Stable partial silence before emitting a transcript; default 1100.
   --asr-duration-seconds <n>
                            Stop bundled/helper STT after n seconds; useful for tests.
@@ -961,6 +966,9 @@ HUD runtime options:
   --hermes-cli            Open the Hermes terminal view as the default HUD view.
   --hermes-tmux-session <name>
                            Run real Hermes CLI inside a tmux PTY so Terminal can show the normal interactive CLI.
+  --hermes-model <id>      Real Hermes model override; default gpt-5.5 for HUD sessions.
+  --hermes-reasoning <n>   Real Hermes reasoning effort; default low.
+  --no-hermes-fast         Disable automatic /fast fast priming.
   --open-hermes-terminal  Open macOS Terminal attached to --hermes-tmux-session.
   --framebuffer-check     For asr-demo: capture text-only framebuffer hashes before/after when the sidecar is ready.
   --cadence-ms <ms>       Minimum 700 ms; default 1400 ms.
