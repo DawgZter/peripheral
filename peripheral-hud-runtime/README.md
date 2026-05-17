@@ -20,7 +20,7 @@ npm run build
 npm test
 npm run peripheralctl -- hud --mock-display --text
 npm run peripheralctl -- hud --mock-display --text --hermes-cli
-npm run peripheralctl -- hud --mock-display --mic mac --hermes-cli --mock-hermes --stt-cmd "printf 'voice test prompt\n'"
+npm run peripheralctl -- hud --mock-display --mic mac --hermes-cli --mock-hermes --stt-cmd "printf 'Hermes voice test prompt\nsend\n'"
 npm run peripheralctl -- asr-demo --mock-display --mock-hermes --script fixtures/mock_asr_demo.txt --json
 npm run peripheralctl -- demo live-call --mock
 ```
@@ -60,7 +60,7 @@ Works now in mock mode:
 - all four canned demos generate frames and JSONL logs
 - peripheralctl hud --mock-display --text runs the blank -> look-up -> Hermes -> dynamic result -> blank loop
 - peripheralctl hud --mock-display --text --hermes-cli starts in the Hermes terminal view
-- peripheralctl hud --mock-display --mic mac --hermes-cli can feed line-based ASR into a Hermes terminal draft; saying `send` submits that draft without adding `send` to the prompt
+- peripheralctl hud --mock-display --mic mac --hermes-cli can feed line-based ASR into a Hermes terminal draft; saying `Hermes` opens the voice gate, and saying `send` submits that draft without adding `send` to the prompt
 - tools/openai-realtime-asr.mjs streams the Mac mic to OpenAI Realtime ASR and emits final transcripts as stdout lines for the HUD runtime
 - peripheralctl asr-demo --mock-display --mock-hermes replays scripted transcript lines through the same HUD handler and writes text-only JSON/JSONL proof
 - hudctl can show validated JSON/cards, clear mock display state, report status, and emit manual agent status

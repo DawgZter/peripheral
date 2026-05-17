@@ -84,15 +84,15 @@ Interactive commands:
 - `quit`
 - `timeout`
 
-While the Hermes CLI view is open, typed text is forwarded to Hermes immediately. Voice/ASR text is treated as a draft instead: speak the prompt, then say `send` to submit it. The `send` command is consumed by the HUD and is not included in the Hermes prompt. Use `exit cli`, `close cli`, `dismiss`, or `clear` to close just the CLI view; use `exit` or `quit` to close it and stop the HUD runtime. Use `hud` when you want to reveal the Agent HUD without killing the Hermes CLI process.
+While the Hermes CLI view is open, typed text is forwarded to Hermes immediately. Voice/ASR is gated: say `Hermes` before a prompt, then say `send` to submit the current draft. Ambient voice text is ignored until that `Hermes` gate opens, and `send` closes the gate again. The `send` command is consumed by the HUD and is not included in the Hermes prompt. Use `exit cli`, `close cli`, `dismiss`, or `clear` to close just the CLI view; use `exit` or `quit` to close it and stop the HUD runtime. Use `hud` when you want to reveal the Agent HUD without killing the Hermes CLI process.
 
 ## Scripted ASR Demo
 
-`asr-demo` is the text-first path for the future voice experience. It treats each scripted line as if it came from ASR, feeds those lines through the same transcript handler as `--mic mac`, and renders the resulting HUD states through the selected display driver. Include `Hermes CLI` in the script to exercise the terminal view; include `send` after one or more prompt lines to submit the current voice draft to Hermes; include `Hermes <task>` to exercise the one-shot semantic result path. When the script ends while the terminal is open, it renders an explicit `ASR: speak a prompt draft, then say send` prompt so the glasses stay on the Hermes CLI surface.
+`asr-demo` is the text-first path for the future voice experience. It treats each scripted line as if it came from ASR, feeds those lines through the same transcript handler as `--mic mac`, and renders the resulting HUD states through the selected display driver. Include `Hermes CLI` in the script to exercise the terminal view; prefix voice prompts with `Hermes`, then include `send` to submit the current voice draft to Hermes; include `Hermes <task>` outside the CLI view to exercise the one-shot semantic result path. When the script ends while the terminal is open, it renders an explicit `ASR: speak a prompt draft, then say send` prompt so the glasses stay on the Hermes CLI surface.
 
 ```sh
 npm run peripheralctl -- asr-demo --mock-display --mock-hermes --script fixtures/mock_asr_demo.txt --json
-npm run peripheralctl -- asr-demo --mock-display --mock-hermes --asr-text "Hermes CLI|what is the HUD doing?|send|give me the next step|send" --json
+npm run peripheralctl -- asr-demo --mock-display --mock-hermes --asr-text "Hermes CLI|Hermes what is the HUD doing?|send|Hermes give me the next step|send" --json
 ```
 
 For authorized live display checks after the display is paired and ready:
@@ -105,7 +105,7 @@ npm run peripheralctl -- asr-demo --real --mock-hermes --framebuffer-check --jso
 
 ## Mac Mic Input
 
-Mac mic mode starts a transcript source from, in order, --stt-cmd, PERIPHERAL_HUD_STT_CMD, OpenAI Realtime ASR when an OpenAI key is configured, then the bundled macOS Speech helper at tools/bin/PeripheralMacASR.app/Contents/MacOS/peripheral-mac-asr or tools/macos-speech-asr/MacSpeechAsr.swift. That command must emit completed transcript lines on stdout, one command per line. Leave off `--hermes-cli` for the always-listening wake flow: saying `open Hermes` opens the CLI view, saying `close Hermes` blanks it, and saying `send` submits the accumulated draft to Hermes while the CLI is open.
+Mac mic mode starts a transcript source from, in order, --stt-cmd, PERIPHERAL_HUD_STT_CMD, OpenAI Realtime ASR when an OpenAI key is configured, then the bundled macOS Speech helper at tools/bin/PeripheralMacASR.app/Contents/MacOS/peripheral-mac-asr or tools/macos-speech-asr/MacSpeechAsr.swift. That command must emit completed transcript lines on stdout, one command per line. Leave off `--hermes-cli` for the always-listening wake flow: saying `open Hermes` opens the CLI view, saying `close Hermes` blanks it, and saying `Hermes <prompt>` starts drafting while the CLI is open.
 
 Example shape:
 
@@ -133,7 +133,7 @@ npm run peripheralctl -- hud --real --mic mac --asr-provider macos-speech --herm
 npm run peripheralctl -- hud --real --mic mac --hermes-cli --real-hermes --asr-http-port 8792
 ```
 
-When the glasses are paired, the wake flow keeps the display blank until `open Hermes` is heard. Speaking into the Mac mic then emits transcript lines into an `ASR draft` line on the glasses. Say `send` to write the draft into `hermes chat --source peripheral-hud`; the word `send` is not included in the prompt. Say `close Hermes` to close the CLI and blank the display. Use --asr-silence-ms 900 to make stable partials emit faster, --asr-partials to log partial recognition to stderr/JSONL, or --asr-duration-seconds 30 for bounded tests.
+When the glasses are paired, the wake flow keeps the display blank until `open Hermes` is heard. Once the CLI is open, voice transcripts are ignored until a line begins with `Hermes`; that line opens an `ASR draft` on the glasses. Say `send` to write the draft into `hermes chat --source peripheral-hud`; the word `send` is not included in the prompt, and the gate resets after sending. Say `close Hermes` to close the CLI and blank the display. Use --asr-silence-ms 900 to make stable partials emit faster, --asr-partials to log partial recognition to stderr/JSONL, or --asr-duration-seconds 30 for bounded tests.
 
 If local mic permission is awkward from the Codex-launched helper, use the browser fallback only as a transport bridge: start with --asr-http-port 8792, open http://127.0.0.1:8792/, click Start, and allow microphone permission in the browser. Final browser speech transcripts update the same queued Hermes/glasses draft, and `send` submits it, but this is not the preferred GPT Realtime ASR path.
 
@@ -166,7 +166,7 @@ npm run peripheralctl -- hud --mock-display --text --hermes-cli
 npm run peripheralctl -- hud --real --text --real-hermes --hermes-cli
 ```
 
-`--hermes-cli` opens the `terminal` widget immediately. The same view can be opened later by typing or saying `open Hermes`, `Hermes CLI`, `hermes terminal`, `terminal`, or `cli` in the runtime. In mock Hermes mode the runtime renders deterministic fake CLI replies. In real Hermes mode it spawns `hermes chat --source peripheral-hud`, mirrors stdout/stderr into the `terminal` widget, and writes typed lines to the child process stdin. ASR lines stay in a draft buffer until the user says `send`; `close Hermes` closes the CLI view and blanks the display.
+`--hermes-cli` opens the `terminal` widget immediately. The same view can be opened later by typing or saying `open Hermes`, `Hermes CLI`, `hermes terminal`, `terminal`, or `cli` in the runtime. In mock Hermes mode the runtime renders deterministic fake CLI replies. In real Hermes mode it spawns `hermes chat --source peripheral-hud`, mirrors stdout/stderr into the `terminal` widget, and writes typed lines to the child process stdin. ASR lines are ignored until the user says `Hermes`, then they stay in a draft buffer until the user says `send`; `close Hermes` closes the CLI view and blanks the display.
 
 In mock-display mode the adapter defaults to mock Hermes, even if Hermes is installed. This keeps local acceptance deterministic and safe while the glasses are in live use. Use `--real-hermes` only when you intentionally want the local Hermes process to run.
 

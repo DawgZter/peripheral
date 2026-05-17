@@ -74,7 +74,7 @@ Each demo writes sequential frames to `out/frames/demo-<name>-<timestamp>/` and 
 Replay transcript lines through the HUD runtime without using a mic or live display:
 
 ```sh
-npm run peripheralctl -- asr-demo --mock-display --mock-hermes --asr-text "Hermes CLI|what is the HUD doing?|give me the next step" --json
+npm run peripheralctl -- asr-demo --mock-display --mock-hermes --asr-text "Hermes CLI|Hermes what is the HUD doing?|send|Hermes give me the next step|send" --json
 ```
 
 The command writes JSON plus JSONL events for transcript input, state changes, rendered frames, and the final demo summary. Add `--framebuffer-check` only with `--real` and explicit operator permission when you want before/after read-only framebuffer hashes from the local sidecar.

@@ -331,6 +331,7 @@ class HudRuntime {
   private voiceDraftLineIndex: number | null = null;
   private lastVoiceDraftPiece = "";
   private pendingVoiceControlPrefix: string | null = null;
+  private voicePromptArmed = false;
 
   constructor(
     private readonly options: HudRuntimeOptions,
@@ -466,6 +467,7 @@ class HudRuntime {
     this.voiceDraftLineIndex = null;
     this.lastVoiceDraftPiece = "";
     this.pendingVoiceControlPrefix = null;
+    this.voicePromptArmed = false;
     this.pushTerminalLine("$ hermes chat");
     this.pushTerminalLine(mode === "real" ? "HUD: launching native Hermes CLI." : "HUD: mock Hermes CLI view.");
     this.pushTerminalLine(this.options.inputMode === "mac_mic" || this.options.inputMode === "mock_asr"
@@ -750,6 +752,7 @@ class HudRuntime {
     if (["clear draft", "cancel draft", "reset draft", "discard draft"].includes(command)) {
       this.voiceDraft = "";
       this.lastVoiceDraftPiece = "";
+      this.voicePromptArmed = false;
       this.removeVoiceDraftLine();
       this.pushTerminalLine("ASR: draft cleared.");
       await this.log({ event: "asr.voice_draft.clear" });
@@ -765,12 +768,37 @@ class HudRuntime {
       return true;
     }
 
+    const wake = splitHermesPromptWake(command);
+    if (wake.wake) {
+      this.voicePromptArmed = true;
+      this.lastVoiceDraftPiece = "";
+      await this.log({ event: "asr.voice_gate.open", text, prompt: wake.prompt });
+      if (wake.prompt) {
+        const trailingWakeSend = splitTrailingVoiceSend(wake.prompt);
+        await this.appendVoiceDraft(trailingWakeSend.text || wake.prompt, "asr.voice_draft.update");
+        if (trailingWakeSend.shouldSend) await this.submitVoiceDraft();
+      } else {
+        this.pushTerminalLine("ASR: listening.");
+        await this.renderTerminal("asr.voice_gate.open");
+      }
+      return true;
+    }
+
     const trailingSend = splitTrailingVoiceSend(text);
     if (trailingSend.shouldSend) {
+      if (!this.voicePromptArmed && !this.voiceDraft) {
+        await this.log({ event: "asr.voice_gate.ignored", text, reason: "send_without_wake" });
+        return true;
+      }
       if (trailingSend.text) {
         await this.appendVoiceDraft(trailingSend.text, "asr.voice_draft.update");
       }
       await this.submitVoiceDraft();
+      return true;
+    }
+
+    if (!this.voicePromptArmed) {
+      await this.log({ event: "asr.voice_gate.ignored", text, reason: "waiting_for_hermes" });
       return true;
     }
 
@@ -798,6 +826,7 @@ class HudRuntime {
     }
     this.voiceDraft = "";
     this.lastVoiceDraftPiece = "";
+    this.voicePromptArmed = false;
     this.removeVoiceDraftLine();
     await this.log({ event: "asr.voice_command.send", text: prompt });
     await this.sendHermesCliLine(prompt);
@@ -1045,6 +1074,7 @@ class HudRuntime {
     this.voiceDraftLineIndex = null;
     this.lastVoiceDraftPiece = "";
     this.pendingVoiceControlPrefix = null;
+    this.voicePromptArmed = false;
     if (this.terminalRenderTimer) {
       clearTimeout(this.terminalRenderTimer);
       this.terminalRenderTimer = null;
@@ -2133,6 +2163,14 @@ function splitTrailingVoiceSend(value: string): { shouldSend: boolean; text: str
   if (!match) return { shouldSend: false, text: clean };
   const text = cleanText(match[1] || "", 240);
   return { shouldSend: Boolean(text), text };
+}
+
+function splitHermesPromptWake(command: string): { wake: boolean; prompt: string } {
+  const clean = normalizeVoiceControlCommand(command);
+  if (clean === "hermes") return { wake: true, prompt: "" };
+  const match = /^(?:hey\s+)?hermes(?:\s+agent)?\s+(.+)$/.exec(clean);
+  if (!match) return { wake: false, prompt: clean };
+  return { wake: true, prompt: cleanText(match[1] || "", 240) };
 }
 
 export function mergeVoiceDraft(current: string, piece: string, previousPiece = ""): string {
