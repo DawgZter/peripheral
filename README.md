@@ -1,24 +1,22 @@
 # Peripheral
 
-Mac-connected Agent HUD runtime and live display tooling for Peripheral glasses.
+Mac-connected Agent HUD runtime and display tooling for Peripheral glasses.
 
-This repository intentionally contains the pitchable Peripheral runtime slice, not the whole local device workspace. It excludes private local captures, environment files, and bulky generated artifacts.
+This repository contains the public Peripheral runtime slice. It excludes local environment files, generated artifacts, and machine-specific notes.
 
 ## Repo Layout
 
-- `web/` contains the live display observation clients.
+- `web/` contains display observation clients for a local sidecar.
 - `macos_corebluetooth/peripheral-mac-pusher/` contains the small macOS helper used for real display pushes.
-- `docs/`, `analysis/`, and `evidence/` contain the curated Peripheral proof notes and small verification artifacts.
-- `peripheral-hud-runtime/` contains the Mac-connected Agent HUD Runtime: semantic widgets, monochrome renderer, driver wrapper, CLI commands, mock demos, latency tooling, and Hermes adapter stub.
+- `docs/` contains public API, protocol, demo, and roadmap notes.
+- `peripheral-hud-runtime/` contains the Mac-connected Agent HUD Runtime: semantic widgets, monochrome renderer, driver wrapper, CLI commands, mock demos, and latency tooling.
 
 ## Current State
 
-- The glasses expose a real display-surface readback path over the local Mac sidecar.
-- The practical stream path uses compressed dirty-crop reads rather than full-surface pulls.
-- The one-click demo page is web/cast-mirror.html.
-- The advanced tuning page is web/real-mirror.html.
-- The current POV page starts with a wide text-band scan, focuses on the detected display content, periodically rescans, and renders a green optical HUD over the selected Mac camera.
-- The HUD runtime can run without hardware through `peripheralctl hud --mock-display --text`, then use the existing full-image path when live pushes are intentionally enabled.
+- The HUD runtime can run without hardware through `peripheralctl hud --mock-display --text`.
+- The renderer turns validated semantic widgets into deterministic monochrome frames.
+- The driver supports mock runs by default and requires explicit opt-in for live display pushes.
+- The web clients can connect to a compatible local sidecar when display observation is intentionally enabled.
 
 ## Local Usage
 
@@ -32,7 +30,7 @@ The local sidecar normally serves these at:
 
     http://127.0.0.1:8791/cast-mirror.html
 
-This repo is meant to show the Peripheral product/engineering progression cleanly. It contains only the curated runtime, viewing clients, helper source, and small verification artifacts needed for the demo.
+This repo is meant to show the Peripheral runtime cleanly. It contains the public runtime, viewing clients, helper source, and documentation needed to build and test the demo.
 
 ## Checks
 
