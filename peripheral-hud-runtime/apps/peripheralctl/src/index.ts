@@ -66,6 +66,7 @@ const VALUE_FLAGS = new Set([
   "openai-asr-protocol",
   "openai-env-file",
   "openai-asr-ffmpeg-input",
+  "hermes-tmux-session",
   "timeout-seconds",
 ]);
 
@@ -249,6 +250,8 @@ function runtimeOptions(cli: ParsedCli, projectRoot: string, repoRoot: string, l
     openaiAsrProtocol: typeof cli.options["openai-asr-protocol"] === "string" ? cli.options["openai-asr-protocol"] : undefined,
     openaiEnvFile: typeof cli.options["openai-env-file"] === "string" ? cli.options["openai-env-file"] : undefined,
     openaiAsrFfmpegInput: typeof cli.options["openai-asr-ffmpeg-input"] === "string" ? cli.options["openai-asr-ffmpeg-input"] : undefined,
+    hermesTmuxSession: typeof cli.options["hermes-tmux-session"] === "string" ? cli.options["hermes-tmux-session"] : undefined,
+    openHermesTerminal: Boolean(cli.options["open-hermes-terminal"]),
     logPath,
     json: Boolean(cli.options.json),
     cadenceMs: Math.max(700, Number(cli.options["cadence-ms"] || 1400)),
@@ -711,6 +714,7 @@ function capabilities(): unknown {
       "hud --real --text",
       "hud --real --mic mac",
       "hud --real --mic mac --hermes-cli --real-hermes",
+      "hud --real --mic mac --hermes-cli --real-hermes --hermes-tmux-session peripheral-hud-hermes --open-hermes-terminal",
       "hud --real --mic mac --asr-provider openai-realtime --hermes-cli --real-hermes",
       "asr-demo --mock-display --mock-hermes",
       "asr-demo --real --mock-hermes --framebuffer-check",
@@ -955,6 +959,9 @@ HUD runtime options:
   --mock-hermes           Force the mock Hermes adapter.
   --real-hermes           Force real Hermes when installed.
   --hermes-cli            Open the Hermes terminal view as the default HUD view.
+  --hermes-tmux-session <name>
+                           Run real Hermes CLI inside a tmux PTY so Terminal can show the normal interactive CLI.
+  --open-hermes-terminal  Open macOS Terminal attached to --hermes-tmux-session.
   --framebuffer-check     For asr-demo: capture text-only framebuffer hashes before/after when the sidecar is ready.
   --cadence-ms <ms>       Minimum 700 ms; default 1400 ms.
 `);

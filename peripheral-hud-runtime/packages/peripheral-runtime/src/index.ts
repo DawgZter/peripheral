@@ -57,6 +57,8 @@ export type HudRuntimeOptions = {
   openaiAsrProtocol?: string;
   openaiEnvFile?: string;
   openaiAsrFfmpegInput?: string;
+  hermesTmuxSession?: string;
+  openHermesTerminal?: boolean;
   logPath?: string;
   json?: boolean;
   cadenceMs?: number;
@@ -94,6 +96,11 @@ type HermesCliSession = {
   mode: "mock" | "real";
   child: ChildProcessWithoutNullStreams | null;
   startedAt: number;
+  tmuxSession?: string;
+  tmuxPath?: string;
+  tmuxCaptureTimer?: NodeJS.Timeout | null;
+  tmuxLastSnapshot?: string;
+  tmuxOwnsSession?: boolean;
 };
 
 export function runtimePaths(projectRoot: string): RuntimePaths {
@@ -756,6 +763,11 @@ class HudRuntime {
   }
 
   private startRealHermesCli(hermesPath: string): void {
+    const tmuxSession = normalizeTmuxSessionName(this.options.hermesTmuxSession || "");
+    if (tmuxSession) {
+      this.startTmuxHermesCli(hermesPath, tmuxSession);
+      return;
+    }
     const child = spawn(hermesPath, ["chat", "--source", "peripheral-hud"], {
       cwd: this.options.projectRoot,
       stdio: ["pipe", "pipe", "pipe"],
@@ -780,6 +792,69 @@ class HudRuntime {
     void this.log({ event: "hermes_cli.start", mode: "real", command: hermesPath + " chat --source peripheral-hud" });
   }
 
+  private startTmuxHermesCli(hermesPath: string, sessionName: string): void {
+    if (!this.hermesCli) return;
+    const tmuxPath = resolveExecutablePath("tmux") || "tmux";
+    spawnSync(tmuxPath, ["kill-session", "-t", sessionName], { encoding: "utf8", timeout: 2_000 });
+    const command = [
+      shellQuote(hermesPath),
+      "chat",
+      "--source",
+      "peripheral-hud",
+    ].join(" ");
+    const started = spawnSync(tmuxPath, ["new-session", "-d", "-s", sessionName, "-c", this.options.projectRoot, command], {
+      encoding: "utf8",
+      env: { ...process.env, PERIPHERAL_HUD_WIDGET_PATH: this.paths.currentWidgetPath },
+      timeout: 5_000,
+    });
+    if (started.status !== 0) {
+      const error = cleanText(started.stderr || started.stdout || "Unable to start tmux Hermes CLI.", 200);
+      this.pushTerminalLine("HUD: tmux Hermes CLI failed: " + error);
+      void this.log({ event: "hermes_cli.tmux_start_error", session: sessionName, message: error });
+      void this.renderTerminal("hermes_cli.tmux_start_error");
+      return;
+    }
+
+    this.hermesCli.tmuxSession = sessionName;
+    this.hermesCli.tmuxPath = tmuxPath;
+    this.hermesCli.tmuxCaptureTimer = null;
+    this.hermesCli.tmuxLastSnapshot = "";
+    this.hermesCli.tmuxOwnsSession = true;
+    this.pushTerminalLine("HUD: Terminal is attached to Hermes session " + sessionName + ".");
+    void this.log({
+      event: "hermes_cli.start",
+      mode: "real",
+      transport: "tmux",
+      session: sessionName,
+      command,
+    });
+    if (this.options.openHermesTerminal) {
+      this.openTerminalForTmux(tmuxPath, sessionName);
+    }
+    this.scheduleTmuxCapture(this.hermesCli, 200);
+  }
+
+  private openTerminalForTmux(tmuxPath: string, sessionName: string): void {
+    const attachCommand = shellQuote(tmuxPath) + " attach -t " + shellQuote(sessionName);
+    const script = [
+      "tell application \"Terminal\"",
+      "activate",
+      "do script " + JSON.stringify(attachCommand),
+      "set bounds of front window to {40, 60, 1240, 860}",
+      "end tell",
+    ];
+    const opened = spawnSync("osascript", script.flatMap((line) => ["-e", line]), {
+      encoding: "utf8",
+      timeout: 5_000,
+    });
+    void this.log({
+      event: "hermes_cli.terminal_open",
+      session: sessionName,
+      ok: opened.status === 0,
+      message: cleanText(opened.stderr || opened.stdout || "", 200),
+    });
+  }
+
   private async sendHermesCliLine(text: string): Promise<void> {
     const session = this.hermesCli;
     if (!session) return;
@@ -797,6 +872,25 @@ class HudRuntime {
       return;
     }
 
+    if (session.tmuxSession) {
+      const tmuxPath = session.tmuxPath || resolveExecutablePath("tmux") || "tmux";
+      const sentText = spawnSync(tmuxPath, ["send-keys", "-t", session.tmuxSession, "-l", text], { encoding: "utf8", timeout: 2_000 });
+      const sentEnter = sentText.status === 0
+        ? spawnSync(tmuxPath, ["send-keys", "-t", session.tmuxSession, "Enter"], { encoding: "utf8", timeout: 2_000 })
+        : sentText;
+      if (sentText.status !== 0 || sentEnter.status !== 0) {
+        const error = cleanText(sentText.stderr || sentEnter.stderr || "tmux send failed.", 160);
+        this.pushTerminalLine("HUD: Hermes tmux session is not writable: " + error);
+        await this.log({ event: "hermes_cli.tmux_input_error", session: session.tmuxSession, message: error });
+        await this.renderTerminal("hermes_cli.not_writable");
+        return;
+      }
+      await this.log({ event: "hermes_cli.tmux_input", session: session.tmuxSession, text });
+      this.scheduleTmuxCapture(session, 150);
+      this.scheduleTerminalRender("hermes_cli.input");
+      return;
+    }
+
     const child = session.child;
     if (!child || child.exitCode !== null || !child.stdin.writable) {
       this.pushTerminalLine("HUD: Hermes CLI is not writable.");
@@ -805,6 +899,44 @@ class HudRuntime {
     }
     child.stdin.write(text + "\n", "utf8");
     this.scheduleTerminalRender("hermes_cli.input");
+  }
+
+  private scheduleTmuxCapture(session: HermesCliSession, delayMs = Math.max(700, Math.min(this.cadenceMs, 1400))): void {
+    if (!session.tmuxSession || session.tmuxCaptureTimer) return;
+    session.tmuxCaptureTimer = setTimeout(() => {
+      session.tmuxCaptureTimer = null;
+      void this.captureTmuxHermesCli(session);
+    }, delayMs);
+  }
+
+  private async captureTmuxHermesCli(session: HermesCliSession): Promise<void> {
+    if (!this.hermesCli || this.hermesCli !== session || !session.tmuxSession) return;
+    const tmuxPath = session.tmuxPath || resolveExecutablePath("tmux") || "tmux";
+    const captured = spawnSync(tmuxPath, ["capture-pane", "-p", "-t", session.tmuxSession, "-S", "-80"], {
+      encoding: "utf8",
+      timeout: 2_000,
+    });
+    if (captured.status !== 0) {
+      const message = cleanText(captured.stderr || captured.stdout || "Hermes tmux session ended.", 180);
+      await this.handleHermesCliExit("exit", message || "Hermes tmux session ended.");
+      return;
+    }
+
+    const snapshot = String(captured.stdout || "").replace(/\r/g, "\n");
+    if (snapshot !== session.tmuxLastSnapshot) {
+      session.tmuxLastSnapshot = snapshot;
+      const lines = snapshot
+        .split(/\n+/)
+        .map((line) => cleanTerminalLine(line))
+        .filter(Boolean)
+        .slice(-76);
+      this.terminalLines = lines.length > 0 ? lines : ["Hermes CLI"];
+      this.voiceDraftLineIndex = null;
+      if (this.voiceDraft) this.setVoiceDraftLine();
+      await this.log({ event: "hermes_cli.tmux_capture", session: session.tmuxSession, lines: lines.length });
+      this.scheduleTerminalRender("hermes_cli.tmux_capture");
+    }
+    this.scheduleTmuxCapture(session);
   }
 
   private appendTerminalChunk(stream: "stdout" | "stderr", chunk: string): void {
@@ -855,10 +987,18 @@ class HudRuntime {
       clearTimeout(this.terminalRenderTimer);
       this.terminalRenderTimer = null;
     }
+    if (session.tmuxCaptureTimer) {
+      clearTimeout(session.tmuxCaptureTimer);
+      session.tmuxCaptureTimer = null;
+    }
     if (session.child && session.child.exitCode === null) {
       session.child.kill("SIGTERM");
     }
-    void this.log({ event: "hermes_cli.stop", reason, mode: session.mode });
+    if (session.tmuxSession && session.tmuxOwnsSession) {
+      const tmuxPath = session.tmuxPath || resolveExecutablePath("tmux") || "tmux";
+      spawnSync(tmuxPath, ["kill-session", "-t", session.tmuxSession], { encoding: "utf8", timeout: 2_000 });
+    }
+    void this.log({ event: "hermes_cli.stop", reason, mode: session.mode, session: session.tmuxSession });
   }
 
   private pushTerminalLine(line: string): void {
@@ -1651,6 +1791,24 @@ export function sanitizeTerminalLine(value: string): string {
 
 function cleanTerminalLine(value: string): string {
   return sanitizeTerminalLine(value);
+}
+
+function normalizeTmuxSessionName(value: string): string | null {
+  const clean = value.trim();
+  if (!clean) return null;
+  const safe = clean.replace(/[^A-Za-z0-9_.:-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
+  if (!safe) return null;
+  return /^[A-Za-z0-9]/.test(safe) ? safe : "peripheral_" + safe;
+}
+
+function resolveExecutablePath(name: string): string | null {
+  const result = spawnSync("sh", ["-lc", "command -v " + shellQuote(name)], {
+    encoding: "utf8",
+    timeout: 2_000,
+  });
+  if (result.status !== 0) return null;
+  const value = String(result.stdout || "").trim().split(/\r?\n/)[0] || "";
+  return value || null;
 }
 
 function normalizeVoiceControlCommand(value: string): string {
