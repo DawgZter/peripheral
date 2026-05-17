@@ -198,7 +198,7 @@ try {
 
 const fakeSttScript = [
   "setTimeout(() => console.log('Open'), 10)",
-  "setTimeout(() => console.log('Hermes'), 90)",
+  "setTimeout(() => console.log('Hear me'), 90)",
   "setTimeout(() => console.log('ambient should be ignored'), 220)",
   "setTimeout(() => console.log('Hermes voice test prompt'), 350)",
   "setTimeout(() => console.log('send'), 480)",
@@ -233,7 +233,7 @@ try {
   assert.match(voiceHudLog, /"event":"input.mic.start"/);
   assert.match(voiceHudLog, /"event":"input.mic.transcript"/);
   assert.match(voiceHudLog, /"event":"input.voice_command.pending","command":"open"/);
-  assert.match(voiceHudLog, /"text":"Hermes"/);
+  assert.match(voiceHudLog, /"event":"input.voice_command.alias","text":"Hear me","command":"hermes"/);
   assert.match(voiceHudLog, /"event":"asr.voice_gate.ignored","text":"ambient should be ignored","reason":"waiting_for_hermes"/);
   assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"ambient should be ignored"/);
   assert.match(voiceHudLog, /"event":"asr.voice_gate.open","text":"Hermes voice test prompt","prompt":"voice test prompt"/);

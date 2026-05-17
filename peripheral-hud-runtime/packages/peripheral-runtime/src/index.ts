@@ -1753,11 +1753,17 @@ function normalizeHermesVoiceCommandAlias(command: string): string {
     ["open hermez", "open hermes"],
     ["open armies", "open hermes"],
     ["open ermes", "open hermes"],
+    ["open hear me", "open hermes"],
+    ["open here me", "open hermes"],
     ["close her mes", "close hermes"],
     ["close hermez", "close hermes"],
     ["close armies", "close hermes"],
     ["close ermes", "close hermes"],
+    ["close hear me", "close hermes"],
+    ["close here me", "close hermes"],
     ["close termites", "close hermes"],
+    ["hear me", "hermes"],
+    ["here me", "hermes"],
     ["termites", "hermes"],
   ]).get(command) || command;
 }
