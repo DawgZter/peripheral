@@ -10,7 +10,7 @@ This repository contains the public Peripheral runtime slice. It excludes local 
 
 - `web/` contains display observation clients for a local sidecar.
 - `macos_corebluetooth/peripheral-mac-pusher/` contains the small macOS helper used for real display pushes.
-- `docs/` contains public API, protocol, demo, and roadmap notes.
+- `docs/` contains public API, protocol, development, demo, and roadmap notes.
 - `peripheral-hud-runtime/` contains the Mac-connected Agent HUD Runtime: semantic widgets, monochrome renderer, driver wrapper, CLI commands, mock demos, and latency tooling.
 
 ## Current State
@@ -44,3 +44,5 @@ npm run check
 The CI workflow runs the same source checks on `public/peripheral-clean`. The macOS helper can be built separately with `npm run pusher:build`.
 
 For HUD runtime commands and live display safety notes, see `peripheral-hud-runtime/docs/HUD_RUNTIME.md`.
+
+For local setup and checks, see `docs/DEVELOPMENT.md`.
