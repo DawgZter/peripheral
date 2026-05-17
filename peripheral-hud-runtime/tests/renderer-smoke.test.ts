@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { assertWidget } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
-import { clearHud, mergeVoiceDraft, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
+import { clearHud, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
 
 const root = resolve(process.cwd());
 const fixtureDir = join(root, "fixtures", "ui");
@@ -40,6 +40,10 @@ assert.equal(sanitizeTerminalLine("───────────────
 assert.equal(mergeVoiceDraft("Hey", "Hey Hermes", "Hey"), "Hey Hermes");
 assert.equal(mergeVoiceDraft("Hey Hermes", "I want you", "Hey Hermes"), "Hey Hermes I want you");
 assert.equal(mergeVoiceDraft("One plus", "One plus one", "One plus"), "One plus one");
+assert.equal(normalizeTmuxSessionName(" peripheral hud/hermes "), "peripheral_hud_hermes");
+assert.equal(normalizeTmuxSessionName(".hud"), "peripheral_.hud");
+assert.equal(normalizeTmuxSessionName("!!!"), null);
+assert.ok((normalizeTmuxSessionName("x".repeat(120)) || "").length <= 80);
 
 for (const invalidWidget of [
   { id: "bad-checklist", type: "checklist", title: "Bad", items: ["not an item"] },

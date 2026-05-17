@@ -1793,7 +1793,7 @@ function cleanTerminalLine(value: string): string {
   return sanitizeTerminalLine(value);
 }
 
-function normalizeTmuxSessionName(value: string): string | null {
+export function normalizeTmuxSessionName(value: string): string | null {
   const clean = value.trim();
   if (!clean) return null;
   const safe = clean.replace(/[^A-Za-z0-9_.:-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
