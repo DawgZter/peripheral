@@ -42,6 +42,7 @@ npm run check
 ```
 
 The CI workflow runs the same source checks on `main`. The macOS helper can be built separately with `npm run pusher:build`.
+The default check also runs the public-source guard across the checked-in tree and current branch history.
 
 For HUD runtime commands and live display safety notes, see `peripheral-hud-runtime/docs/HUD_RUNTIME.md`.
 

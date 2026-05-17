@@ -1,0 +1,105 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+
+function git(args, options = {}) {
+  return execFileSync("git", args, {
+    cwd: repoRoot,
+    encoding: options.encoding ?? "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function escapeRegex(value) {
+  return value.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+}
+
+const directSpecs = [
+  ["ni", "mo"],
+  ["aig", "lasses"],
+  ["ghi", "dra"],
+  ["dec", "ompil"],
+  ["source", "-", "like"],
+  ["source", " ", "like"],
+  ["source", " recovery"],
+  ["reverse", " engineering"],
+  ["bit", "fantasy"],
+  ["wq", "7033"],
+  ["zt", "210"],
+  ["firmware", " source"],
+  ["recovered", "_symbols"],
+  ["recovered", "_types"],
+  ["source", "_reference"],
+  ["source", "-", "reference"],
+];
+
+const wordSpecs = [["tu", "ring"]];
+
+const rules = [
+  ...directSpecs.map((parts, index) => ({
+    name: "direct-" + (index + 1),
+    regex: new RegExp(escapeRegex(parts.join("")), "i"),
+  })),
+  ...wordSpecs.map((parts, index) => ({
+    name: "word-" + (index + 1),
+    regex: new RegExp("\\b" + escapeRegex(parts.join("")) + "\\b", "i"),
+  })),
+];
+
+const violations = [];
+
+function scanText(scope, subject, text) {
+  for (const rule of rules) {
+    if (rule.regex.test(text)) {
+      violations.push({ scope, subject, rule: rule.name });
+    }
+  }
+}
+
+function scanBuffer(scope, subject, buffer) {
+  if (buffer.includes(0)) {
+    return;
+  }
+  scanText(scope, subject, buffer.toString("utf8"));
+}
+
+function splitZero(value) {
+  return value.split("\0").filter(Boolean);
+}
+
+const trackedFiles = splitZero(git(["ls-files", "-z"]));
+
+for (const file of trackedFiles) {
+  scanText("worktree path", file, file);
+  scanBuffer("worktree file", file, readFileSync(join(repoRoot, file)));
+}
+
+const commits = git(["rev-list", "HEAD"]).trim().split("\n").filter(Boolean);
+
+for (const commit of commits) {
+  scanText("commit message", commit, git(["log", "-1", "--format=%B", commit]));
+
+  const names = splitZero(git(["ls-tree", "-r", "--name-only", "-z", commit]));
+  for (const name of names) {
+    scanText("history path", commit + ":" + name, name);
+    const blob = git(["show", commit + ":" + name], { encoding: "buffer" });
+    scanBuffer("history file", commit + ":" + name, blob);
+  }
+}
+
+if (violations.length > 0) {
+  console.error("Public source check failed:");
+  for (const item of violations.slice(0, 40)) {
+    console.error("- " + item.scope + ": " + item.subject + " matched " + item.rule);
+  }
+  if (violations.length > 40) {
+    console.error("...and " + (violations.length - 40) + " more");
+  }
+  process.exit(1);
+}
+
+console.log("public-source ok (" + trackedFiles.length + " files, " + commits.length + " commits)");

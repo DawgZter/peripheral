@@ -20,7 +20,7 @@ npm --prefix peripheral-hud-runtime ci
 npm run check
 ```
 
-That command runs browser JavaScript syntax checks, compiles the HUD runtime, and runs the mock renderer/runtime smoke tests.
+That command runs the public-source guard, browser JavaScript syntax checks, compiles the HUD runtime, and runs the mock renderer/runtime smoke tests.
 
 ## Optional macOS Helper Build
 
