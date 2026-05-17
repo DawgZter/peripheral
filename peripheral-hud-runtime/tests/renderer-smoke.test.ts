@@ -141,11 +141,14 @@ try {
   assert.equal(asrDemoRun.status, 0, asrDemoRun.stderr);
   const asrDemoResult = JSON.parse(asrDemoRun.stdout.slice(asrDemoRun.stdout.indexOf("{"))) as { state: string; logPath: string; script: { stepCount: number } };
   assert.equal(asrDemoResult.state, "terminal");
-  assert.equal(asrDemoResult.script.stepCount, 3);
+  assert.equal(asrDemoResult.script.stepCount, 5);
   const asrDemoLog = readFileSync(asrDemoResult.logPath, "utf8");
   assert.match(asrDemoLog, /"inputMode":"mock_asr"/);
   assert.match(asrDemoLog, /"event":"asr.mock.transcript"/);
+  assert.match(asrDemoLog, /"event":"asr.voice_draft.update"/);
+  assert.match(asrDemoLog, /"event":"asr.voice_command.send"/);
   assert.match(asrDemoLog, /"event":"hermes_cli.input"/);
+  assert.doesNotMatch(asrDemoLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
   assert.match(asrDemoLog, /"event":"hermes_cli.mock_response"/);
   assert.match(asrDemoLog, /asr_demo.awaiting_transcript/);
   assert.match(asrDemoLog, /"event":"asr_demo.complete"/);
@@ -153,7 +156,7 @@ try {
   rmSync(asrDemoProjectRoot, { recursive: true, force: true });
 }
 
-const fakeSttScript = "setTimeout(() => console.log('voice test prompt'), 10)";
+const fakeSttScript = "setTimeout(() => console.log('voice test prompt'), 10); setTimeout(() => console.log('send'), 30)";
 const fakeSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeSttScript);
 const voiceHudProjectRoot = makeTempProjectRoot("voice-hud");
 try {
@@ -183,7 +186,10 @@ try {
   assert.match(voiceHudLog, /"event":"input.mic.start"/);
   assert.match(voiceHudLog, /"event":"input.mic.transcript"/);
   assert.match(voiceHudLog, /voice test prompt/);
+  assert.match(voiceHudLog, /"event":"asr.voice_draft.update"/);
+  assert.match(voiceHudLog, /"event":"asr.voice_command.send"/);
   assert.match(voiceHudLog, /"event":"hermes_cli.input"/);
+  assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
 } finally {
   rmSync(voiceHudProjectRoot, { recursive: true, force: true });
 }

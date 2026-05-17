@@ -88,6 +88,8 @@ type TranscriptSource = {
   close: () => void;
 };
 
+type TranscriptInputSource = "manual" | "voice";
+
 type HermesCliSession = {
   mode: "mock" | "real";
   child: ChildProcessWithoutNullStreams | null;
@@ -157,7 +159,7 @@ export async function runHudRuntime(options: HudRuntimeOptions): Promise<Record<
     } else {
       const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: process.stdin.isTTY });
       for await (const line of rl) {
-        const keepRunning = await runtime.handleTranscript(String(line));
+        const keepRunning = await runtime.handleTranscript(String(line), "manual");
         if (!keepRunning) break;
         if (process.stdin.isTTY) process.stdout.write("hud> ");
       }
@@ -196,7 +198,7 @@ export async function runTextAsrDemo(options: HudRuntimeOptions, demo: TextAsrDe
       if (!text) continue;
       const waitMs = Math.max(0, step.waitMs ?? demo.stepDelayMs ?? cadenceMs);
       await runtime.log({ event: "asr.mock.transcript", index, text, waitMs });
-      keepRunning = await runtime.handleTranscript(text);
+      keepRunning = await runtime.handleTranscript(text, "voice");
       appliedSteps.push({ index, text, keepRunning });
       if (keepRunning && waitMs > 0) {
         await delay(waitMs);
@@ -315,6 +317,9 @@ class HudRuntime {
   private terminalRenderTimer: NodeJS.Timeout | null = null;
   private terminalRenderInFlight: Promise<Record<string, unknown>> | null = null;
   private transcriptQueue: Promise<void> = Promise.resolve();
+  private voiceDraft = "";
+  private voiceDraftLineIndex: number | null = null;
+  private lastVoiceDraftPiece = "";
 
   constructor(
     private readonly options: HudRuntimeOptions,
@@ -346,14 +351,14 @@ class HudRuntime {
     await this.log({ event: "state.change", state, ...extra });
   }
 
-  async handleTranscript(input: string): Promise<boolean> {
+  async handleTranscript(input: string, source: TranscriptInputSource = "manual"): Promise<boolean> {
     const text = cleanText(input, 240);
     if (!text) return true;
-    await this.log({ event: "input.command", mode: this.options.inputMode, text });
+    await this.log({ event: "input.command", mode: this.options.inputMode, source, text });
     const lower = text.toLowerCase();
 
     if (this.hermesCli) {
-      return this.handleHermesCliInput(text, lower);
+      return this.handleHermesCliInput(text, lower, source);
     }
 
     if (["look_up", "lookup", "look up", "show agents"].includes(lower)) {
@@ -423,9 +428,14 @@ class HudRuntime {
     const detected = detectHermes();
     const mode = resolveHermesMode(this.options, detected.installed);
     this.terminalLines = [];
+    this.voiceDraft = "";
+    this.voiceDraftLineIndex = null;
+    this.lastVoiceDraftPiece = "";
     this.pushTerminalLine("$ hermes chat");
     this.pushTerminalLine(mode === "real" ? "HUD: launching native Hermes CLI." : "HUD: mock Hermes CLI view.");
-    this.pushTerminalLine("HUD: type prompts normally; use exit cli to close this view.");
+    this.pushTerminalLine(this.options.inputMode === "mac_mic" || this.options.inputMode === "mock_asr"
+      ? "HUD: speak a prompt draft, then say send. Use exit cli to close."
+      : "HUD: type prompts normally; use exit cli to close this view.");
     this.hermesCli = { mode, child: null, startedAt: performance.now() };
     await this.updateAgentStatus("Hermes", "running", mode === "real" ? "Native CLI view active." : "Mock CLI view active.");
     await this.setState("terminal", { agent: "Hermes", reason, mode });
@@ -501,8 +511,8 @@ class HudRuntime {
 
   async showAsrPrompt(reason: string): Promise<void> {
     if (this.currentState !== "terminal" || !this.hermesCli) return;
-    this.pushTerminalLine("ASR: awaiting next transcript.");
-    this.pushTerminalLine("> ");
+    this.pushTerminalLine("ASR: speak a prompt draft, then say send.");
+    this.setVoiceDraftLine();
     await this.renderTerminal(reason);
   }
 
@@ -615,7 +625,7 @@ class HudRuntime {
       }))
       .then(async () => {
         await this.log({ event: "input.mic.transcript", text: cleanText(text, 240) });
-        const keepRunning = await this.handleTranscript(text);
+        const keepRunning = await this.handleTranscript(text, "voice");
         if (!keepRunning) {
           await this.log({ event: "input.mic.runtime_exit_requested", text: cleanText(text, 80) });
         }
@@ -656,7 +666,10 @@ class HudRuntime {
     this.stopHermesCliProcess("runtime.shutdown");
   }
 
-  private async handleHermesCliInput(text: string, lower: string): Promise<boolean> {
+  private async handleHermesCliInput(text: string, lower: string, source: TranscriptInputSource): Promise<boolean> {
+    if (source === "voice") {
+      return this.handleHermesCliVoiceInput(text, lower);
+    }
     if (lower === "exit" || lower === "quit") {
       await this.closeHermesCli("input.exit", true);
       await this.log({ event: "runtime.exit", reason: lower });
@@ -673,6 +686,73 @@ class HudRuntime {
 
     await this.sendHermesCliLine(text);
     return true;
+  }
+
+  private async handleHermesCliVoiceInput(text: string, lower: string): Promise<boolean> {
+    const command = normalizeVoiceControlCommand(text);
+    if (command === "exit" || command === "quit") {
+      await this.closeHermesCli("input.exit", true);
+      await this.log({ event: "runtime.exit", reason: command });
+      return false;
+    }
+    if (["exit cli", "close cli", "dismiss", "clear", "timeout"].includes(command)) {
+      await this.closeHermesCli(command === "timeout" ? "input.timeout" : "input.dismiss", true);
+      return true;
+    }
+    if (["clear draft", "cancel draft", "reset draft", "discard draft"].includes(command)) {
+      this.voiceDraft = "";
+      this.lastVoiceDraftPiece = "";
+      this.removeVoiceDraftLine();
+      this.pushTerminalLine("ASR: draft cleared.");
+      await this.log({ event: "asr.voice_draft.clear" });
+      await this.renderTerminal("asr.voice_draft.clear");
+      return true;
+    }
+    if (isVoiceSendCommand(command)) {
+      await this.submitVoiceDraft();
+      return true;
+    }
+    if (["hud", "hud status", "look up", "lookup", "show agents"].includes(command)) {
+      await this.showAgentHud("hermes_cli.agent_hud");
+      return true;
+    }
+
+    const trailingSend = splitTrailingVoiceSend(text);
+    if (trailingSend.shouldSend) {
+      if (trailingSend.text) {
+        await this.appendVoiceDraft(trailingSend.text, "asr.voice_draft.update");
+      }
+      await this.submitVoiceDraft();
+      return true;
+    }
+
+    await this.appendVoiceDraft(text, "asr.voice_draft.update");
+    return true;
+  }
+
+  private async appendVoiceDraft(text: string, reason: string): Promise<void> {
+    const piece = cleanText(text, 240);
+    if (!piece || piece === this.lastVoiceDraftPiece) return;
+    this.voiceDraft = cleanText([this.voiceDraft, piece].filter(Boolean).join(" "), 900);
+    this.lastVoiceDraftPiece = piece;
+    this.setVoiceDraftLine();
+    await this.log({ event: "asr.voice_draft.update", text: this.voiceDraft, piece });
+    await this.renderTerminal(reason);
+  }
+
+  private async submitVoiceDraft(): Promise<void> {
+    const prompt = cleanText(this.voiceDraft, 900);
+    if (!prompt) {
+      this.pushTerminalLine("ASR: nothing to send yet.");
+      await this.log({ event: "asr.voice_command.send_ignored", reason: "empty_draft" });
+      await this.renderTerminal("asr.voice_command.empty_send");
+      return;
+    }
+    this.voiceDraft = "";
+    this.lastVoiceDraftPiece = "";
+    this.removeVoiceDraftLine();
+    await this.log({ event: "asr.voice_command.send", text: prompt });
+    await this.sendHermesCliLine(prompt);
   }
 
   private startRealHermesCli(hermesPath: string): void {
@@ -767,6 +847,9 @@ class HudRuntime {
     const session = this.hermesCli;
     if (!session) return;
     this.hermesCli = null;
+    this.voiceDraft = "";
+    this.voiceDraftLineIndex = null;
+    this.lastVoiceDraftPiece = "";
     if (this.terminalRenderTimer) {
       clearTimeout(this.terminalRenderTimer);
       this.terminalRenderTimer = null;
@@ -781,8 +864,32 @@ class HudRuntime {
     const clean = cleanTerminalLine(line);
     if (!clean) return;
     this.terminalLines.push(clean);
+    this.trimTerminalLines();
+  }
+
+  private setVoiceDraftLine(): void {
+    this.removeVoiceDraftLine();
+    const draft = this.voiceDraft ? this.voiceDraft : "(empty)";
+    this.terminalLines.push("ASR draft: " + draft);
+    this.voiceDraftLineIndex = this.terminalLines.length - 1;
+    this.trimTerminalLines();
+  }
+
+  private removeVoiceDraftLine(): void {
+    if (this.voiceDraftLineIndex === null) return;
+    if (this.terminalLines[this.voiceDraftLineIndex]?.startsWith("ASR draft:")) {
+      this.terminalLines.splice(this.voiceDraftLineIndex, 1);
+    }
+    this.voiceDraftLineIndex = null;
+  }
+
+  private trimTerminalLines(): void {
     if (this.terminalLines.length > 80) {
-      this.terminalLines.splice(0, this.terminalLines.length - 80);
+      const removed = this.terminalLines.length - 80;
+      this.terminalLines.splice(0, removed);
+      if (this.voiceDraftLineIndex !== null) {
+        this.voiceDraftLineIndex = this.voiceDraftLineIndex < removed ? null : this.voiceDraftLineIndex - removed;
+      }
     }
   }
 
@@ -1210,7 +1317,7 @@ function browserAsrHtml(): string {
     "<body>",
     "  <main>",
     "    <h1>Peripheral ASR</h1>",
-    "    <p>Speak into this Mac. Final transcripts are sent to the Hermes CLI HUD.</p>",
+    "    <p>Speak into this Mac. Final transcripts update the Hermes CLI draft; say send to submit.</p>",
     "    <div class=\"row\"><button id=\"start\">Start</button><button id=\"stop\" class=\"secondary\">Stop</button></div>",
     "    <div id=\"status\">idle</div>",
     "    <div id=\"log\"></div>",
@@ -1539,6 +1646,27 @@ export function sanitizeTerminalLine(value: string): string {
 
 function cleanTerminalLine(value: string): string {
   return sanitizeTerminalLine(value);
+}
+
+function normalizeVoiceControlCommand(value: string): string {
+  return cleanText(value, 120)
+    .toLowerCase()
+    .replace(/[.,!?;:"'\x60]+/g, " ")
+    .replace(/\bplease\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isVoiceSendCommand(command: string): boolean {
+  return ["send", "send it", "submit", "submit it"].includes(command);
+}
+
+function splitTrailingVoiceSend(value: string): { shouldSend: boolean; text: string } {
+  const clean = cleanText(value, 240);
+  const match = /^(.*?)[,;:]\s*(?:please\s+)?(?:send|submit)(?:\s+(?:please|it))?[.!?]*$/i.exec(clean);
+  if (!match) return { shouldSend: false, text: clean };
+  const text = cleanText(match[1] || "", 240);
+  return { shouldSend: Boolean(text), text };
 }
 
 function normalizeAgentName(name: string): string {

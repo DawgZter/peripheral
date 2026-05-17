@@ -3,5 +3,9 @@ Hermes CLI
 @wait 350
 what is the HUD doing?
 @wait 700
+send
+@wait 700
 give me the next step
+@wait 700
+send
 @wait 700
