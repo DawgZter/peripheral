@@ -1746,17 +1746,19 @@ function isHermesCliCommand(lower: string): boolean {
 }
 
 function normalizeHermesVoiceCommandAlias(command: string): string {
-  return new Map<string, string>([
+  const mapped = new Map<string, string>([
     ["pinot noir", "open hermes"],
     ["pino noir", "open hermes"],
     ["open her mes", "open hermes"],
     ["open hermez", "open hermes"],
+    ["open hermings", "open hermes"],
     ["open armies", "open hermes"],
     ["open ermes", "open hermes"],
     ["open hear me", "open hermes"],
     ["open here me", "open hermes"],
     ["close her mes", "close hermes"],
     ["close hermez", "close hermes"],
+    ["close hermings", "close hermes"],
     ["close armies", "close hermes"],
     ["close ermes", "close hermes"],
     ["close hear me", "close hermes"],
@@ -1765,7 +1767,25 @@ function normalizeHermesVoiceCommandAlias(command: string): string {
     ["hear me", "hermes"],
     ["here me", "hermes"],
     ["termites", "hermes"],
-  ]).get(command) || command;
+  ]).get(command);
+  if (mapped) return mapped;
+
+  const words = command.split(/\s+/).filter(Boolean);
+  if (words.length >= 2 && (isHermesOpenPrefix(words[0]!) || isHermesClosePrefix(words[0]!)) && isHermesNameLike(words.slice(1).join(" "))) {
+    return words[0] + " hermes";
+  }
+  if (isHermesNameLike(command)) return "hermes";
+  return command;
+}
+
+function isHermesNameLike(value: string): boolean {
+  const clean = normalizeVoiceControlCommand(value);
+  return clean === "hermes" ||
+    clean === "her mes" ||
+    clean === "hear me" ||
+    clean === "here me" ||
+    clean === "termites" ||
+    /^herm(?:es|ez|ing|ings|is)?$/.test(clean);
 }
 
 function isHermesCliCloseCommand(lower: string): boolean {

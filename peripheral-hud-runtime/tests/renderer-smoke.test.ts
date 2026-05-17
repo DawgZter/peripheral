@@ -202,8 +202,7 @@ const fakeSttScript = [
   "setTimeout(() => console.log('ambient should be ignored'), 220)",
   "setTimeout(() => console.log('Hermes voice test prompt'), 350)",
   "setTimeout(() => console.log('send'), 480)",
-  "setTimeout(() => console.log('close'), 1200)",
-  "setTimeout(() => console.log('termites'), 1290)",
+  "setTimeout(() => console.log('close hermings'), 1200)",
 ].join(";");
 const fakeSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeSttScript);
 const voiceHudProjectRoot = makeTempProjectRoot("voice-hud");
@@ -243,7 +242,7 @@ try {
   assert.match(voiceHudLog, /"event":"hermes_cli.input"/);
   assert.match(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"voice test prompt"/);
   assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
-  assert.match(voiceHudLog, /"event":"input.voice_command.pending","command":"close"/);
+  assert.match(voiceHudLog, /"text":"close hermings"/);
   assert.match(voiceHudLog, /"event":"hermes_cli.close","reason":"input.dismiss"/);
 } finally {
   rmSync(voiceHudProjectRoot, { recursive: true, force: true });
