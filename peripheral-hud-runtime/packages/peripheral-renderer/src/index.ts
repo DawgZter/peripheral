@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import { PERIPHERAL_DISPLAY, assertWidget, cleanText, type GlassWidget } from "../../peripheral-protocol/src/index.js";
+import { PERIPHERAL_DISPLAY, assertWidget, cleanText, type PeripheralWidget } from "../../peripheral-protocol/src/index.js";
 import { FONT_5X7, UNKNOWN_GLYPH } from "./bitmap-font.js";
 import { encodeGrayscalePng } from "./png.js";
 
@@ -85,7 +85,7 @@ export class Raster {
   }
 }
 
-export function renderWidget(input: unknown, options: RenderOptions = {}): { widget: GlassWidget; raster: Raster; pixels2bpp: Buffer } {
+export function renderWidget(input: unknown, options: RenderOptions = {}): { widget: PeripheralWidget; raster: Raster; pixels2bpp: Buffer } {
   const widget = assertWidget(input);
   const raster = new Raster(options.width ?? PERIPHERAL_DISPLAY.width, options.height ?? PERIPHERAL_DISPLAY.height);
   drawWidget(raster, widget, options);
@@ -132,7 +132,7 @@ export function pack2bpp(grayscale: Uint8Array): Buffer {
   return packed;
 }
 
-function drawWidget(r: Raster, widget: GlassWidget, options: RenderOptions): void {
+function drawWidget(r: Raster, widget: PeripheralWidget, options: RenderOptions): void {
   r.outline(4, 4, r.width - 8, r.height - 8, DIM, 2);
   r.rect(18, 18, 46, 4, WHITE);
   r.rect(r.width - 74, 18, 46, 4, WHITE);
@@ -170,7 +170,7 @@ function drawWidget(r: Raster, widget: GlassWidget, options: RenderOptions): voi
   }
 }
 
-function drawGenericCard(r: Raster, widget: GlassWidget): void {
+function drawGenericCard(r: Raster, widget: PeripheralWidget): void {
   drawIcon(r, widget.icon || "card", 28, 38, 38);
   drawText(r, widget.title, 82, 38, 4, WHITE, 420);
   if (widget.status) drawPill(r, widget.status, 82, 78, 2);
@@ -179,7 +179,7 @@ function drawGenericCard(r: Raster, widget: GlassWidget): void {
   drawFooter(r, widget.footer || widget.source);
 }
 
-function drawLiveCall(r: Raster, widget: GlassWidget): void {
+function drawLiveCall(r: Raster, widget: PeripheralWidget): void {
   drawIcon(r, "phone", 24, 34, 38);
   drawText(r, widget.title, 76, 36, 3, WHITE, 330);
   drawPill(r, widget.status || "CALLING", 390, 35, 2);
@@ -191,7 +191,7 @@ function drawLiveCall(r: Raster, widget: GlassWidget): void {
   drawChips(r, widget.facts || widget.bullets || [], 28, 228);
 }
 
-function drawStrategyCard(r: Raster, widget: GlassWidget): void {
+function drawStrategyCard(r: Raster, widget: PeripheralWidget): void {
   drawText(r, widget.title, 30, 32, 3, WHITE, 410);
   drawIcon(r, "cards", 456, 28, 44);
   drawText(r, "HAND", 38, 78, 2, MID, 110);
@@ -203,7 +203,7 @@ function drawStrategyCard(r: Raster, widget: GlassWidget): void {
   drawWrapped(r, widget.body || "", 38, 226, 450, 2, 2, MID);
 }
 
-function drawPeopleList(r: Raster, widget: GlassWidget): void {
+function drawPeopleList(r: Raster, widget: PeripheralWidget): void {
   drawText(r, widget.title, 30, 32, 3, WHITE, 420);
   (widget.people || []).slice(0, 3).forEach((person, index) => {
     const y = 76 + index * 62;
@@ -216,7 +216,7 @@ function drawPeopleList(r: Raster, widget: GlassWidget): void {
   drawFooter(r, widget.footer || "SELECT PERSON");
 }
 
-function drawPersonDetail(r: Raster, widget: GlassWidget, options: RenderOptions): void {
+function drawPersonDetail(r: Raster, widget: PeripheralWidget, options: RenderOptions): void {
   drawAvatar(r, widget, 28, 54, 148, 148, options.assetRoot);
   drawText(r, widget.name || widget.title, 196, 50, 3, WHITE, 300);
   drawText(r, [widget.role, widget.company].filter(Boolean).join(" / "), 198, 82, 1, MID, 300);
@@ -225,7 +225,7 @@ function drawPersonDetail(r: Raster, widget: GlassWidget, options: RenderOptions
   drawFooter(r, widget.footer || widget.source || "DETAIL");
 }
 
-function drawApprovalCard(r: Raster, widget: GlassWidget): void {
+function drawApprovalCard(r: Raster, widget: PeripheralWidget): void {
   drawIcon(r, widget.icon || "warning", 28, 34, 42);
   drawText(r, widget.title, 84, 36, 3, WHITE, 390);
   drawPill(r, widget.status || "NEEDS INPUT", 84, 70, 2);
@@ -243,13 +243,13 @@ function drawApprovalCard(r: Raster, widget: GlassWidget): void {
   });
 }
 
-function drawStatusIcon(r: Raster, widget: GlassWidget): void {
+function drawStatusIcon(r: Raster, widget: PeripheralWidget): void {
   drawIcon(r, widget.icon || "warning", 214, 56, 112);
   drawCentered(r, widget.status || widget.title, 34, 182, 472, 4, WHITE);
   drawWrapped(r, widget.body || "", 78, 222, 380, 2, 2, MID);
 }
 
-function drawTable(r: Raster, widget: GlassWidget): void {
+function drawTable(r: Raster, widget: PeripheralWidget): void {
   drawText(r, widget.title, 30, 32, 3, WHITE, 420);
   if (widget.status) drawPill(r, widget.status, 390, 31, 2);
   const columns = (widget.columns || []).slice(0, 4);
@@ -274,7 +274,7 @@ function drawTable(r: Raster, widget: GlassWidget): void {
   drawFooter(r, widget.footer || widget.source);
 }
 
-function drawChecklist(r: Raster, widget: GlassWidget): void {
+function drawChecklist(r: Raster, widget: PeripheralWidget): void {
   drawText(r, widget.title, 30, 32, 3, WHITE, 420);
   if (widget.status) drawPill(r, widget.status, 390, 31, 2);
   const items = (widget.items || []).slice(0, 6);
@@ -292,7 +292,7 @@ function drawChecklist(r: Raster, widget: GlassWidget): void {
   drawFooter(r, widget.footer || widget.source);
 }
 
-function drawTerminal(r: Raster, widget: GlassWidget): void {
+function drawTerminal(r: Raster, widget: PeripheralWidget): void {
   drawText(r, widget.title, 24, 18, 2, WHITE, 320);
   if (widget.status) drawPill(r, widget.status, 382, 15, 1);
   r.rect(22, 44, 496, 2, DIM);
@@ -370,7 +370,7 @@ function wrapTerminalLine(value: string, maxChars: number): string[] {
   return output;
 }
 
-function drawAvatar(r: Raster, widget: GlassWidget, x: number, y: number, w: number, h: number, assetRoot?: string): void {
+function drawAvatar(r: Raster, widget: PeripheralWidget, x: number, y: number, w: number, h: number, assetRoot?: string): void {
   r.outline(x, y, w, h, WHITE, 2);
   let initials = initialsFor(widget.name || widget.title);
   let pattern = "diagonal";
@@ -470,7 +470,7 @@ function initialsFor(text: string): string {
   return text.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
-export function defaultFramePath(outDir: string, widget: GlassWidget): string {
+export function defaultFramePath(outDir: string, widget: PeripheralWidget): string {
   const safeId = widget.id.replace(/[^a-z0-9_-]+/gi, "_").slice(0, 48) || "widget";
   return resolve(outDir, `${Date.now()}-${widget.type}-${safeId}.png`);
 }

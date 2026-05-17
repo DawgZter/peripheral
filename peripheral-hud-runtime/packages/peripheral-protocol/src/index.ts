@@ -84,7 +84,7 @@ export type ChecklistItem = {
   status?: AgentStatus | string;
 };
 
-export type GlassWidget = {
+export type PeripheralWidget = {
   id: string;
   type: WidgetType;
   title: string;
@@ -208,16 +208,16 @@ export function validateWidget(input: unknown): ValidationIssue[] {
   return issues;
 }
 
-export function assertWidget(input: unknown): GlassWidget {
+export function assertWidget(input: unknown): PeripheralWidget {
   const issues = validateWidget(input);
   if (issues.length > 0) {
     const message = issues.map((issue) => `${issue.path}: ${issue.message}`).join("\n");
     throw new Error(message);
   }
-  return normalizeWidget(input as GlassWidget);
+  return normalizeWidget(input as PeripheralWidget);
 }
 
-export function normalizeWidget(widget: GlassWidget): GlassWidget {
+export function normalizeWidget(widget: PeripheralWidget): PeripheralWidget {
   return {
     ...widget,
     id: cleanText(widget.id, 80),

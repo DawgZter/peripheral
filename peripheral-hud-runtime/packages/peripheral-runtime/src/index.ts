@@ -10,7 +10,7 @@ import {
   assertWidget,
   cleanText,
   type AgentStatus,
-  type GlassWidget,
+  type PeripheralWidget,
   type HudRuntimeState,
 } from "../../peripheral-protocol/src/index.js";
 import { renderWidgetToFile } from "../../peripheral-renderer/src/index.js";
@@ -238,7 +238,7 @@ export async function showHudJson(filePath: string, options: HudRuntimeOptions):
 }
 
 export async function showHudCard(title: string, body: string, options: HudRuntimeOptions): Promise<Record<string, unknown>> {
-  const widget: GlassWidget = {
+  const widget: PeripheralWidget = {
     id: "hudctl-card",
     type: "generic_card",
     title: cleanText(title, 80) || "HUD Card",
@@ -293,7 +293,7 @@ export async function emitAgentStatus(agent: string, status: AgentStatus, option
   return { ok: true, agents: next, ...result };
 }
 
-async function showInlineWidget(widget: GlassWidget, options: HudRuntimeOptions, reason: string): Promise<Record<string, unknown>> {
+async function showInlineWidget(widget: PeripheralWidget, options: HudRuntimeOptions, reason: string): Promise<Record<string, unknown>> {
   const paths = ensureRuntime(options.projectRoot);
   const logPath = options.logPath || defaultHudLogPath(options.projectRoot, "hudctl");
   const valid = assertWidget(widget);
@@ -307,7 +307,7 @@ class HudRuntime {
   currentState: HudRuntimeState = "blank";
   private agents: AgentRecord[] = [];
   private pendingAgent: Promise<void> | null = null;
-  private lastWidget: GlassWidget | null = null;
+  private lastWidget: PeripheralWidget | null = null;
   private lastWidgetJson = "";
   private lastWidgetMtime = 0;
   private activeAgentRunId = 0;
@@ -451,7 +451,7 @@ class HudRuntime {
 
   async showDetails(): Promise<void> {
     const hermes = this.agents.find((agent) => agent.name.toLowerCase() === "hermes");
-    const widget: GlassWidget = {
+    const widget: PeripheralWidget = {
       id: "agent-details",
       type: "generic_card",
       title: "Agent Details",
@@ -470,7 +470,7 @@ class HudRuntime {
   async makeShorter(): Promise<void> {
     const source = this.lastWidget;
     const body = source?.body || source?.bullets?.[0] || source?.title || "No active result.";
-    const widget: GlassWidget = {
+    const widget: PeripheralWidget = {
       id: "shorter-result",
       type: "generic_card",
       title: "Short Version",
@@ -1047,7 +1047,7 @@ class HudRuntime {
     }
   }
 
-  private readFreshCurrentWidget(sinceEpochMs: number): GlassWidget | null {
+  private readFreshCurrentWidget(sinceEpochMs: number): PeripheralWidget | null {
     try {
       if (!existsSync(this.paths.currentWidgetPath)) return null;
       const stat = statSync(this.paths.currentWidgetPath);
@@ -1063,13 +1063,13 @@ class HudRuntime {
     }
   }
 
-  private async renderPush(widget: GlassWidget, reason: string): Promise<Record<string, unknown>> {
+  private async renderPush(widget: PeripheralWidget, reason: string): Promise<Record<string, unknown>> {
     this.lastWidget = assertWidget(widget);
     this.lastWidgetJson = JSON.stringify(this.lastWidget);
     return renderPushAndLog(this.lastWidget, this.options, this.driverOptions, this.logPath, reason);
   }
 
-  private async writeOwnedCurrentWidget(widget: GlassWidget): Promise<void> {
+  private async writeOwnedCurrentWidget(widget: PeripheralWidget): Promise<void> {
     const valid = assertWidget(widget);
     this.lastWidget = valid;
     this.lastWidgetJson = JSON.stringify(valid);
@@ -1128,7 +1128,7 @@ function runtimeDriverOptions(options: HudRuntimeOptions, logPath: string): Driv
 }
 
 async function renderPushAndLog(
-  widget: GlassWidget,
+  widget: PeripheralWidget,
   options: HudRuntimeOptions,
   driverOptions: DriverOptions,
   logPath: string,
@@ -1505,7 +1505,7 @@ function isHermesCliCommand(lower: string): boolean {
   ].includes(lower);
 }
 
-function agentHudWidget(agents: AgentRecord[]): GlassWidget {
+function agentHudWidget(agents: AgentRecord[]): PeripheralWidget {
   return {
     id: "agent-hud",
     type: "checklist",
@@ -1521,7 +1521,7 @@ function agentHudWidget(agents: AgentRecord[]): GlassWidget {
   };
 }
 
-function terminalWidget(mode: "mock" | "real", lines: string[]): GlassWidget {
+function terminalWidget(mode: "mock" | "real", lines: string[]): PeripheralWidget {
   return {
     id: "hermes-cli",
     type: "terminal",
@@ -1533,7 +1533,7 @@ function terminalWidget(mode: "mock" | "real", lines: string[]): GlassWidget {
   };
 }
 
-function activeAgentWidget(agent: string, status: AgentStatus, chunks: string[]): GlassWidget {
+function activeAgentWidget(agent: string, status: AgentStatus, chunks: string[]): PeripheralWidget {
   return {
     id: safeName(agent) + "-active",
     type: "generic_card",
@@ -1546,7 +1546,7 @@ function activeAgentWidget(agent: string, status: AgentStatus, chunks: string[])
   };
 }
 
-function errorWidget(message: string): GlassWidget {
+function errorWidget(message: string): PeripheralWidget {
   return {
     id: "hud-error",
     type: "generic_card",
@@ -1558,7 +1558,7 @@ function errorWidget(message: string): GlassWidget {
   };
 }
 
-function mockHermesResultWidget(task: string, hermesInstalled: boolean): GlassWidget {
+function mockHermesResultWidget(task: string, hermesInstalled: boolean): PeripheralWidget {
   return {
     id: "hermes-result",
     type: "generic_card",
@@ -1575,7 +1575,7 @@ function mockHermesResultWidget(task: string, hermesInstalled: boolean): GlassWi
   };
 }
 
-function genericHermesOutputWidget(task: string, stdout: string, stderr: string, code: number | null): GlassWidget {
+function genericHermesOutputWidget(task: string, stdout: string, stderr: string, code: number | null): PeripheralWidget {
   const output = cleanText(stdout || stderr || "Hermes completed without visible output.", 240);
   return {
     id: code === 0 ? "hermes-real-result" : "hermes-real-error",
@@ -1589,7 +1589,7 @@ function genericHermesOutputWidget(task: string, stdout: string, stderr: string,
   };
 }
 
-function parseHermesWidget(stdout: string): GlassWidget | null {
+function parseHermesWidget(stdout: string): PeripheralWidget | null {
   const text = stdout.trim();
   const candidates = [text, text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)].filter((item) => item.trim().startsWith("{"));
   for (const candidate of candidates) {

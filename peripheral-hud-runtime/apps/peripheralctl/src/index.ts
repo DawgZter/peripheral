@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
-import { MAP_WIDGET_DISPLAY, PERIPHERAL_DISPLAY, WIDGET_TYPES, assertWidget, type GlassWidget } from "../../../packages/peripheral-protocol/src/index.js";
+import { MAP_WIDGET_DISPLAY, PERIPHERAL_DISPLAY, WIDGET_TYPES, assertWidget, type PeripheralWidget } from "../../../packages/peripheral-protocol/src/index.js";
 import { defaultFramePath, previewName, renderWidget, renderWidgetFile, renderWidgetToFile } from "../../../packages/peripheral-renderer/src/index.js";
 import {
   appendJsonl,
@@ -288,7 +288,7 @@ async function commandShowImage(cli: ParsedCli, driverOptions: DriverOptions): P
 }
 
 async function commandRenderCard(cli: ParsedCli, projectRoot: string): Promise<unknown> {
-  const widget: GlassWidget = {
+  const widget: PeripheralWidget = {
     id: "render-card",
     type: "generic_card",
     title: String(cli.options.title || "Agent Card"),
@@ -817,7 +817,7 @@ function normalizeAsrSteps(items: unknown[]): ScriptedTranscriptStep[] {
   return steps;
 }
 
-function demoFlow(name: string): GlassWidget[] {
+function demoFlow(name: string): PeripheralWidget[] {
   switch (name) {
     case "live-call":
       return [
@@ -862,7 +862,7 @@ function demoFlow(name: string): GlassWidget[] {
   }
 }
 
-function widget(id: string, type: GlassWidget["type"], title: string, rest: Partial<GlassWidget>): GlassWidget {
+function widget(id: string, type: PeripheralWidget["type"], title: string, rest: Partial<PeripheralWidget>): PeripheralWidget {
   return assertWidget({ id, type, title, created_at: new Date().toISOString(), ...rest });
 }
 
