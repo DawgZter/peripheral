@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Peripheral Agent HUD runtime and Mac-connected display tooling.",
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "peripheral-hud-runtime"
   ],
