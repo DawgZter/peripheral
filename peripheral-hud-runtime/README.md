@@ -79,7 +79,6 @@ Read next:
 
 - `docs/DEMO.md` for exact demo commands
 - `docs/HUD_RUNTIME.md` for the real Agent HUD Runtime
-- `docs/LIVE_VALIDATION.md` for the live display readiness gate
-- `docs/PROTOCOL.md` for the extracted image-push facts
+- `docs/PROTOCOL.md` for the documented image-push interface
 - `docs/LATENCY.md` for measured mock timing and live-test gates
 - `docs/ROADMAP.md` for how this grows into broker/MCP/native UI

@@ -207,7 +207,7 @@ Agents never generate transport packets or arbitrary screenshots. They may produ
 
 The runtime keeps using the proven full-frame image path first. Update cadence defaults to 1400 ms, matching `docs/LATENCY.md` conservative guidance until live transport measurements prove a lower cadence. Real runtime display commands are implemented behind the explicit `--real` switch; legacy image-push commands still require `--real-hardware-ok`.
 
-For the live display readiness gate and exact validation sequence, see `docs/LIVE_VALIDATION.md`.
+Run live display checks only when explicitly authorized; use the mock capture gate below for source-level verification.
 
 The fastest local gate is:
 
