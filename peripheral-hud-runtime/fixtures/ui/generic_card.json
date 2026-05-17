@@ -1,0 +1,15 @@
+{
+  "id": "generic-demo",
+  "type": "generic_card",
+  "title": "Agent HUD Ready",
+  "status": "MOCK MODE",
+  "body": "Semantic widget JSON renders into a deterministic monochrome full-frame image.",
+  "bullets": [
+    "No raw transport packets",
+    "Structured UI first",
+    "Full-panel route compatible"
+  ],
+  "footer": "peripheralctl push-json fixtures/ui/generic_card.json --mock",
+  "source": "peripheral-hud-runtime",
+  "created_at": "2026-05-16T12:00:00-07:00"
+}

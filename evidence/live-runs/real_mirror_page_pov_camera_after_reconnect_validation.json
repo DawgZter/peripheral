@@ -1,0 +1,160 @@
+{
+  "schema": "peripheral-real-mirror-page-validation-v1",
+  "ok": true,
+  "url": "http://127.0.0.1:8791/real-mirror.html?dirty=1&adaptive=1&baselineSource=live&decode=packed4bpp&autoTick=1&record=1&camera=1&effect=pov&adaptiveWideFrames=12&adaptiveRepairFrames=8&adaptiveFocusFrames=180",
+  "durationMs": 19040,
+  "minFrames": 60,
+  "requireGoal": false,
+  "waitError": "",
+  "consoleMessages": [],
+  "pageErrors": [],
+  "snapshot": {
+    "running": true,
+    "cameraOn": true,
+    "clipRecording": false,
+    "clipChunks": 0,
+    "clipUrlReady": false,
+    "frameIndex": 180,
+    "tickIndex": 0,
+    "lastHighHash": "655298b6ea16a110892314180d1e919a2d7692718c477f09ffc50d2147956a4e",
+    "status": "Focus p165 +23",
+    "fpsReadout": "20.24 FPS",
+    "fpsStat": "28.57",
+    "bytesStat": "920",
+    "bridgeStat": "running",
+    "effect": "pov",
+    "decode": "packed4bpp",
+    "preset": "fast4",
+    "pageStart": "183",
+    "pageCount": "4",
+    "pipelineWindow": "12",
+    "burstWindow": "2",
+    "autoTick": true,
+    "textTemplate": "",
+    "dirtyCropEnabled": true,
+    "adaptiveEnabled": true,
+    "adaptivePhase": "focus",
+    "adaptiveBbox": {
+      "x0": 158,
+      "y0": 169,
+      "x1": 222,
+      "y1": 182
+    },
+    "adaptiveRoi": {
+      "x0": 150,
+      "y0": 165,
+      "x1": 230,
+      "y1": 188
+    },
+    "adaptiveWideFrames": 12,
+    "syntheticDirty": false,
+    "dirtyFallbacks": 0,
+    "lastCrop": {
+      "synthetic": false,
+      "magic": "NZR1",
+      "protocol": "nonzero-span-rle",
+      "x0": 150,
+      "x1": 230,
+      "y0": 165,
+      "height": 23,
+      "widthBytes": 40,
+      "dataLength": 920,
+      "chunksReceived": 2,
+      "chunkCount": 2,
+      "status": "ok",
+      "label": ""
+    },
+    "streamMode": "adaptive-focus",
+    "cropEvents": 200,
+    "validCropFrames": 200,
+    "uniqueCropHashes": 73,
+    "lastDirtyStatus": "ok",
+    "lastFallbackReason": "",
+    "dirtyGoalPass": true,
+    "protocolStat": "nonzero-span-rle",
+    "validStat": "200/200",
+    "uniqueHashStat": "73",
+    "goalStat": "pass",
+    "baselineEnabled": true,
+    "baselineLoaded": true,
+    "baselineSha256": "966de1d27d406ab7f60f778efe5b33413490bfae3883ea20ddc8320bbbddf863",
+    "baselineBytes": 75600,
+    "baselineStat": "live",
+    "eventSourceReadyState": null,
+    "cameraReadyState": 0,
+    "cameraVideoWidth": 0,
+    "cameraVideoHeight": 0,
+    "rawHighNibble": {
+      "nonzero": 870,
+      "max": 15,
+      "avg": 13.737
+    },
+    "frameCanvas": {
+      "width": 540,
+      "height": 280,
+      "alphaPixels": 1793,
+      "maxAlpha": 232,
+      "avgLuma": 252.3,
+      "bbox": [
+        34,
+        146,
+        533,
+        213
+      ]
+    },
+    "glowCanvas": {
+      "width": 540,
+      "height": 280,
+      "alphaPixels": 1793,
+      "maxAlpha": 194,
+      "avgLuma": 244.34,
+      "bbox": [
+        34,
+        146,
+        533,
+        213
+      ]
+    },
+    "bloomCanvas": {
+      "width": 540,
+      "height": 280,
+      "alphaPixels": 2849,
+      "maxAlpha": 190,
+      "avgLuma": 225.33,
+      "bbox": [
+        32,
+        146,
+        535,
+        213
+      ]
+    },
+    "fringeCanvas": {
+      "width": 540,
+      "height": 280,
+      "alphaPixels": 2460,
+      "maxAlpha": 100,
+      "avgLuma": 208.19,
+      "bbox": [
+        32,
+        146,
+        535,
+        213
+      ]
+    },
+    "recordCanvas": {
+      "width": 1280,
+      "height": 720,
+      "alphaPixels": 921600,
+      "maxAlpha": 255,
+      "avgLuma": 21.3,
+      "bbox": [
+        0,
+        0,
+        1279,
+        719
+      ]
+    },
+    "clipDownloadVisible": false,
+    "clipDownloadHrefReady": false
+  }
+}

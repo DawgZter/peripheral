@@ -1,0 +1,31 @@
+{
+  "id": "conference-picks",
+  "type": "people_list",
+  "title": "Agent Picks",
+  "people": [
+    {
+      "name": "Nora Chen",
+      "role": "Optics lead",
+      "company": "WaveLab",
+      "reason": "Near-eye display",
+      "score": "92"
+    },
+    {
+      "name": "Ilya Ramos",
+      "role": "Display transport",
+      "company": "PacketWorks",
+      "reason": "Wearable transport",
+      "score": "88"
+    },
+    {
+      "name": "Maya Lee",
+      "role": "Spatial UX",
+      "company": "FieldKit",
+      "reason": "Glanceable agents",
+      "score": "95"
+    }
+  ],
+  "footer": "Opening #3",
+  "source": "fixture",
+  "created_at": "2026-05-16T12:03:00-07:00"
+}

@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Hermes",
+    "status": "idle",
+    "summary": "Primary real Mac agent when installed.",
+    "command": "hermes",
+    "real": true
+  },
+  {
+    "name": "Codex",
+    "status": "idle",
+    "summary": "Configured placeholder for future adapter.",
+    "real": false
+  },
+  {
+    "name": "Claude",
+    "status": "idle",
+    "summary": "Configured placeholder for future adapter.",
+    "real": false
+  },
+  {
+    "name": "OpenCode",
+    "status": "idle",
+    "summary": "Configured placeholder for future adapter.",
+    "real": false
+  }
+]

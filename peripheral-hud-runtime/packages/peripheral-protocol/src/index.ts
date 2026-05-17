@@ -1,0 +1,441 @@
+export const GLASS_DISPLAY = {
+  width: 540,
+  height: 280,
+  bitsPerPixel: 2,
+  rawBytes: 37_800,
+  setupProfile: "full-panel",
+  imagePrefixHex: "fe000000",
+  route: "full_panel_image",
+} as const;
+
+export const MAP_WIDGET_DISPLAY = {
+  width: 304,
+  height: 179,
+  bitsPerPixel: 2,
+  rawBytes: 13_604,
+  setupProfile: "standard",
+  imagePrefixHex: "00000080",
+  route: "captured_map_widget",
+} as const;
+
+export const WIDGET_TYPES = [
+  "live_call",
+  "strategy_card",
+  "people_list",
+  "person_detail",
+  "approval_card",
+  "status_icon",
+  "generic_card",
+  "table",
+  "checklist",
+  "terminal",
+] as const;
+
+export type WidgetType = (typeof WIDGET_TYPES)[number];
+
+export const HUD_RUNTIME_STATES = [
+  "blank",
+  "agent_hud",
+  "active_agent",
+  "terminal",
+  "dynamic_result",
+  "error",
+] as const;
+
+export type HudRuntimeState = (typeof HUD_RUNTIME_STATES)[number];
+
+export const AGENT_STATUSES = [
+  "idle",
+  "launching",
+  "running",
+  "waiting",
+  "needs_attention",
+  "completed",
+  "error",
+] as const;
+
+export type AgentStatus = (typeof AGENT_STATUSES)[number];
+
+export type Choice = {
+  id?: string;
+  label: string;
+  tone?: "primary" | "secondary" | "danger";
+};
+
+export type PersonSummary = {
+  name: string;
+  role?: string;
+  company?: string;
+  reason?: string;
+  score?: string | number;
+  image?: string;
+};
+
+export type TranscriptBubble = {
+  speaker: "agent" | "other" | "user" | string;
+  text: string;
+};
+
+export type TableRow = string[] | Record<string, string | number | boolean | null | undefined>;
+
+export type ChecklistItem = {
+  label: string;
+  checked?: boolean;
+  status?: AgentStatus | string;
+};
+
+export type GlassWidget = {
+  id: string;
+  type: WidgetType;
+  title: string;
+  status?: string;
+  body?: string;
+  bullets?: string[];
+  footer?: string;
+  source?: string;
+  created_at?: string;
+  icon?: string;
+  left_image?: string;
+  primary?: string;
+  action?: string;
+  choices?: Choice[];
+  transcript?: TranscriptBubble[];
+  facts?: string[];
+  player_hand?: string;
+  dealer_card?: string;
+  people?: PersonSummary[];
+  name?: string;
+  role?: string;
+  company?: string;
+  columns?: string[];
+  rows?: TableRow[];
+  items?: ChecklistItem[];
+  terminal?: string[];
+  prompt?: string;
+};
+
+export type ValidationIssue = {
+  path: string;
+  message: string;
+};
+
+export function isWidgetType(value: unknown): value is WidgetType {
+  return typeof value === "string" && (WIDGET_TYPES as readonly string[]).includes(value);
+}
+
+export function validateWidget(input: unknown): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (!isRecord(input)) {
+    return [{ path: "$", message: "Widget must be a JSON object." }];
+  }
+
+  const type = input.type;
+  if (!isWidgetType(type)) {
+    issues.push({
+      path: "$.type",
+      message: `Unknown widget type ${JSON.stringify(type)}. Use one of: ${WIDGET_TYPES.join(", ")}.`,
+    });
+    return issues;
+  }
+
+  requireString(input, "id", issues);
+  requireString(input, "title", issues);
+
+  switch (type) {
+    case "live_call":
+      requireArray(input, "transcript", issues, false);
+      break;
+    case "strategy_card":
+      requireString(input, "player_hand", issues);
+      requireString(input, "dealer_card", issues);
+      requireString(input, "action", issues);
+      break;
+    case "people_list":
+      requireArray(input, "people", issues, true);
+      break;
+    case "person_detail":
+      if (!isString(input.name) && !isString(input.title)) {
+        issues.push({ path: "$.name", message: "person_detail requires name or title." });
+      }
+      break;
+    case "approval_card":
+      requireArray(input, "choices", issues, true);
+      break;
+    case "status_icon":
+      if (!isString(input.status) && !isString(input.body)) {
+        issues.push({ path: "$.status", message: "status_icon requires status or body." });
+      }
+      break;
+    case "generic_card":
+      if (!isString(input.body) && !Array.isArray(input.bullets)) {
+        issues.push({ path: "$.body", message: "generic_card requires body or bullets." });
+      }
+      break;
+    case "table":
+      requireArray(input, "columns", issues, true);
+      requireArray(input, "rows", issues, true);
+      break;
+    case "checklist":
+      if (!Array.isArray(input.items) && !Array.isArray(input.bullets)) {
+        issues.push({ path: "$.items", message: "checklist requires items or bullets." });
+      }
+      break;
+    case "terminal":
+      if (!Array.isArray(input.terminal) && !isString(input.body)) {
+        issues.push({ path: "$.terminal", message: "terminal requires terminal lines or body." });
+      }
+      break;
+  }
+
+  if (input.bullets !== undefined && !arrayOfStrings(input.bullets)) {
+    issues.push({ path: "$.bullets", message: "bullets must be an array of strings." });
+  }
+  if (input.facts !== undefined && !arrayOfStrings(input.facts)) {
+    issues.push({ path: "$.facts", message: "facts must be an array of strings." });
+  }
+  if (input.transcript !== undefined && !Array.isArray(input.transcript)) {
+    issues.push({ path: "$.transcript", message: "transcript must be an array." });
+  }
+  if (input.terminal !== undefined && !arrayOfStrings(input.terminal)) {
+    issues.push({ path: "$.terminal", message: "terminal must be an array of strings." });
+  }
+  validateTranscript(input.transcript, issues);
+  validatePeople(input.people, issues);
+  validateChoices(input.choices, issues);
+  validateTable(input.columns, input.rows, issues);
+  validateChecklistItems(input.items, issues);
+
+  return issues;
+}
+
+export function assertWidget(input: unknown): GlassWidget {
+  const issues = validateWidget(input);
+  if (issues.length > 0) {
+    const message = issues.map((issue) => `${issue.path}: ${issue.message}`).join("\n");
+    throw new Error(message);
+  }
+  return normalizeWidget(input as GlassWidget);
+}
+
+export function normalizeWidget(widget: GlassWidget): GlassWidget {
+  return {
+    ...widget,
+    id: cleanText(widget.id, 80),
+    title: cleanText(widget.title, 80),
+    status: optionalText(widget.status, 40),
+    body: optionalText(widget.body, 300),
+    footer: optionalText(widget.footer, 80),
+    source: optionalText(widget.source, 80),
+    prompt: optionalText(widget.prompt, 80),
+    primary: optionalText(widget.primary, 40),
+    action: optionalText(widget.action, 40),
+    player_hand: optionalText(widget.player_hand, 40),
+    dealer_card: optionalText(widget.dealer_card, 40),
+    name: optionalText(widget.name, 80),
+    role: optionalText(widget.role, 80),
+    company: optionalText(widget.company, 80),
+    created_at: widget.created_at || new Date().toISOString(),
+    bullets: widget.bullets?.map((item) => cleanText(item, 90)).slice(0, 6),
+    facts: widget.facts?.map((item) => cleanText(item, 90)).slice(0, 6),
+    transcript: widget.transcript?.map((item) => ({
+      speaker: cleanText(item.speaker || "agent", 20),
+      text: cleanText(item.text || "", 130),
+    })).slice(-3),
+    people: widget.people?.map((person) => ({
+      name: cleanText(person.name, 60),
+      role: optionalText(person.role, 50),
+      company: optionalText(person.company, 50),
+      reason: optionalText(person.reason, 80),
+      score: person.score,
+      image: optionalText(person.image, 120),
+    })).slice(0, 3),
+    choices: widget.choices?.map((choice) => ({
+      id: optionalText(choice.id, 40),
+      label: cleanText(choice.label, 40),
+      tone: choice.tone,
+    })).slice(0, 3),
+    columns: widget.columns?.map((item) => cleanText(item, 24)).slice(0, 4),
+    rows: normalizeRows(widget.rows)?.slice(0, 5),
+    items: normalizeChecklistItems(widget.items, widget.bullets)?.slice(0, 6),
+    terminal: widget.terminal?.map((item) => cleanText(item, 160)).slice(-12),
+  };
+}
+
+export function cleanText(value: unknown, maxChars = 120): string {
+  const text = String(value ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= maxChars) {
+    return text;
+  }
+  return text.slice(0, Math.max(0, maxChars - 3)).trimEnd() + "...";
+}
+
+function optionalText(value: unknown, maxChars: number): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const text = cleanText(value, maxChars);
+  return text ? text : undefined;
+}
+
+function requireString(input: Record<string, unknown>, key: string, issues: ValidationIssue[]): void {
+  if (!isString(input[key])) {
+    issues.push({ path: `$.${key}`, message: `${key} is required and must be a string.` });
+  }
+}
+
+function requireArray(input: Record<string, unknown>, key: string, issues: ValidationIssue[], nonEmpty: boolean): void {
+  if (!Array.isArray(input[key])) {
+    issues.push({ path: `$.${key}`, message: `${key} is required and must be an array.` });
+  } else if (nonEmpty && (input[key] as unknown[]).length === 0) {
+    issues.push({ path: `$.${key}`, message: `${key} must not be empty.` });
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function arrayOfStrings(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isScalar(value: unknown): value is string | number | boolean | null | undefined {
+  return ["string", "number", "boolean", "undefined"].includes(typeof value) || value === null;
+}
+
+function validateTranscript(value: unknown, issues: ValidationIssue[]): void {
+  if (value === undefined || !Array.isArray(value)) return;
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      issues.push({ path: `$.transcript[${index}]`, message: "transcript entries must be objects." });
+      return;
+    }
+    if (!isString(item.speaker)) {
+      issues.push({ path: `$.transcript[${index}].speaker`, message: "speaker is required and must be a string." });
+    }
+    if (!isString(item.text)) {
+      issues.push({ path: `$.transcript[${index}].text`, message: "text is required and must be a string." });
+    }
+  });
+}
+
+function validatePeople(value: unknown, issues: ValidationIssue[]): void {
+  if (value === undefined || !Array.isArray(value)) return;
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      issues.push({ path: `$.people[${index}]`, message: "people entries must be objects." });
+      return;
+    }
+    if (!isString(item.name)) {
+      issues.push({ path: `$.people[${index}].name`, message: "name is required and must be a string." });
+    }
+    for (const key of ["role", "company", "reason", "image"] as const) {
+      if (item[key] !== undefined && typeof item[key] !== "string") {
+        issues.push({ path: `$.people[${index}].${key}`, message: `${key} must be a string when provided.` });
+      }
+    }
+    if (item.score !== undefined && !isScalar(item.score)) {
+      issues.push({ path: `$.people[${index}].score`, message: "score must be a scalar when provided." });
+    }
+  });
+}
+
+function validateChoices(value: unknown, issues: ValidationIssue[]): void {
+  if (value === undefined || !Array.isArray(value)) return;
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      issues.push({ path: `$.choices[${index}]`, message: "choices entries must be objects." });
+      return;
+    }
+    if (!isString(item.label)) {
+      issues.push({ path: `$.choices[${index}].label`, message: "label is required and must be a string." });
+    }
+    if (item.id !== undefined && typeof item.id !== "string") {
+      issues.push({ path: `$.choices[${index}].id`, message: "id must be a string when provided." });
+    }
+    if (item.tone !== undefined && !["primary", "secondary", "danger"].includes(String(item.tone))) {
+      issues.push({ path: `$.choices[${index}].tone`, message: "tone must be primary, secondary, or danger." });
+    }
+  });
+}
+
+function validateTable(columns: unknown, rows: unknown, issues: ValidationIssue[]): void {
+  if (columns !== undefined && !arrayOfStrings(columns)) {
+    issues.push({ path: "$.columns", message: "columns must be an array of strings." });
+  }
+  if (rows === undefined || !Array.isArray(rows)) return;
+  rows.forEach((row, index) => {
+    if (Array.isArray(row)) {
+      row.forEach((cell, cellIndex) => {
+        if (!isScalar(cell)) {
+          issues.push({ path: `$.rows[${index}][${cellIndex}]`, message: "table cells must be scalar values." });
+        }
+      });
+      return;
+    }
+    if (!isRecord(row)) {
+      issues.push({ path: `$.rows[${index}]`, message: "table rows must be arrays or objects." });
+      return;
+    }
+    for (const [key, cell] of Object.entries(row)) {
+      if (!isScalar(cell)) {
+        issues.push({ path: `$.rows[${index}].${key}`, message: "table cells must be scalar values." });
+      }
+    }
+  });
+}
+
+function validateChecklistItems(value: unknown, issues: ValidationIssue[]): void {
+  if (value === undefined || !Array.isArray(value)) return;
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      issues.push({ path: `$.items[${index}]`, message: "checklist items must be objects." });
+      return;
+    }
+    if (!isString(item.label)) {
+      issues.push({ path: `$.items[${index}].label`, message: "label is required and must be a string." });
+    }
+    if (item.checked !== undefined && typeof item.checked !== "boolean") {
+      issues.push({ path: `$.items[${index}].checked`, message: "checked must be a boolean when provided." });
+    }
+    if (item.status !== undefined && typeof item.status !== "string") {
+      issues.push({ path: `$.items[${index}].status`, message: "status must be a string when provided." });
+    }
+  });
+}
+
+function normalizeRows(rows: TableRow[] | undefined): TableRow[] | undefined {
+  if (!Array.isArray(rows)) return undefined;
+  return rows.map((row) => {
+    if (Array.isArray(row)) return row.map((item) => cleanText(item, 36)).slice(0, 4);
+    if (isRecord(row)) {
+      const clean: Record<string, string> = {};
+      for (const [key, value] of Object.entries(row).slice(0, 4)) {
+        clean[cleanText(key, 24)] = cleanText(value, 36);
+      }
+      return clean;
+    }
+    return [cleanText(row, 36)];
+  });
+}
+
+function normalizeChecklistItems(items: ChecklistItem[] | undefined, bullets: string[] | undefined): ChecklistItem[] | undefined {
+  if (Array.isArray(items)) {
+    return items.map((item) => ({
+      label: cleanText(item.label, 80),
+      checked: Boolean(item.checked),
+      status: optionalText(item.status, 24),
+    }));
+  }
+  if (Array.isArray(bullets)) {
+    return bullets.map((label) => ({ label: cleanText(label, 80), checked: false }));
+  }
+  return undefined;
+}

@@ -1,0 +1,18 @@
+{
+  "id": "person-maya-lee",
+  "type": "person_detail",
+  "title": "Maya Lee",
+  "name": "Maya Lee",
+  "role": "Spatial UX",
+  "company": "FieldKit",
+  "left_image": "maya_headshot.json",
+  "body": "Builds glanceable agent interfaces for industrial wearables.",
+  "facts": [
+    "Ask about HUD cadence",
+    "Knows approval UI",
+    "Looking for display prototypes"
+  ],
+  "footer": "Next: intro after talk",
+  "source": "fixture",
+  "created_at": "2026-05-16T12:04:00-07:00"
+}

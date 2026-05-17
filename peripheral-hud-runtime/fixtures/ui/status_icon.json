@@ -1,0 +1,10 @@
+{
+  "id": "agent-stuck-icon",
+  "type": "status_icon",
+  "title": "Agent Stuck",
+  "status": "NEEDS APPROVAL",
+  "body": "Restaurant asked for a card hold.",
+  "icon": "warning",
+  "source": "fixture",
+  "created_at": "2026-05-16T12:06:00-07:00"
+}

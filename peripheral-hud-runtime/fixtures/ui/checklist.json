@@ -1,0 +1,14 @@
+{
+  "id": "agent-hud-fixture",
+  "type": "checklist",
+  "title": "Agent HUD",
+  "status": "LOOK UP",
+  "items": [
+    { "label": "Hermes: installed and ready", "checked": true, "status": "idle" },
+    { "label": "Codex: standing by", "checked": true, "status": "idle" },
+    { "label": "Claude: adapter later", "checked": false, "status": "waiting" },
+    { "label": "OpenCode: adapter later", "checked": false, "status": "waiting" }
+  ],
+  "footer": "SAY HERMES <TASK>",
+  "created_at": "2026-05-16T00:00:00.000Z"
+}

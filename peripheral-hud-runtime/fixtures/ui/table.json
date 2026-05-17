@@ -1,0 +1,15 @@
+{
+  "id": "hermes-table-demo",
+  "type": "table",
+  "title": "Restaurant Options",
+  "status": "RESULT",
+  "columns": ["Name", "Time", "Fit"],
+  "rows": [
+    { "Name": "Sato Table", "Time": "7:45", "Fit": "Best" },
+    { "Name": "Mira", "Time": "8:15", "Fit": "Quiet" },
+    { "Name": "Oro", "Time": "9:00", "Fit": "Bar" }
+  ],
+  "footer": "HERMES RESULT",
+  "source": "fixture",
+  "created_at": "2026-05-16T00:00:00.000Z"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "blackjack-soft18",
+  "type": "strategy_card",
+  "title": "Blackjack Basic",
+  "player_hand": "A,7",
+  "dealer_card": "9",
+  "action": "HIT",
+  "body": "Soft 18 loses value against dealer 9. Take one card, then reassess.",
+  "source": "fixture",
+  "created_at": "2026-05-16T12:02:00-07:00"
+}

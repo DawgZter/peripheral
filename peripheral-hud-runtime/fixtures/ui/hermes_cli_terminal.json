@@ -1,0 +1,14 @@
+{
+  "id": "hermes-cli",
+  "type": "terminal",
+  "title": "Hermes CLI",
+  "status": "native",
+  "terminal": [
+    "$ hermes chat",
+    "Hermes Agent v0.12.0",
+    "> summarize current session",
+    "Hermes: working through the active files.",
+    "Hermes: result is ready."
+  ],
+  "prompt": "TYPE TO HERMES / EXIT CLI"
+}

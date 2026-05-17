@@ -1,0 +1,7 @@
+# Plain mock-ASR transcript replay. @wait applies after the previous line.
+Hermes CLI
+@wait 350
+what is the HUD doing?
+@wait 700
+give me the next step
+@wait 700

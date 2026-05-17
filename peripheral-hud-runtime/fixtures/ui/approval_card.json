@@ -1,0 +1,24 @@
+{
+  "id": "approval-card-hold",
+  "type": "approval_card",
+  "title": "Approve Hold?",
+  "status": "$25 CARD HOLD",
+  "body": "Sato Table can hold the booking with a refundable authorization.",
+  "choices": [
+    {
+      "id": "approve",
+      "label": "Approve",
+      "tone": "primary"
+    },
+    {
+      "id": "deny",
+      "label": "Deny"
+    },
+    {
+      "id": "details",
+      "label": "Details"
+    }
+  ],
+  "source": "fixture",
+  "created_at": "2026-05-16T12:05:00-07:00"
+}

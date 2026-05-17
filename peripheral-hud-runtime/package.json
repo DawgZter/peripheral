@@ -1,0 +1,21 @@
+{
+  "name": "peripheral-hud-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "peripheralctl": "./dist/apps/peripheralctl/src/index.js",
+    "hudctl": "./dist/apps/peripheralctl/src/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "peripheralctl": "node dist/apps/peripheralctl/src/index.js",
+    "hudctl": "node dist/apps/peripheralctl/src/index.js hudctl",
+    "demo": "npm run build && npm run peripheralctl -- demo live-call --mock",
+    "test": "npm run build && node dist/tests/renderer-smoke.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.57",
+    "typescript": "^5.9.3"
+  }
+}

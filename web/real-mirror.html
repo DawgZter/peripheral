@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Peripheral Real Mirror</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        color-scheme: dark;
+        --panel: #f7f8fa;
+        --panel-line: #d9e0e8;
+        --ink: #15191d;
+        --muted: #64717d;
+        --stage: #11130f;
+        --aqua: #aaf6e7;
+        --mint: #d8fff2;
+        --amber: #ffdca7;
+        --button: #ffffff;
+        --primary: #0b7066;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #10110e;
+        color: #eef7f2;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }
+
+      .mirror-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+      }
+
+      .stage {
+        min-width: 0;
+        position: relative;
+        display: grid;
+        place-items: center;
+        padding: 22px;
+        background:
+          radial-gradient(circle at 52% 48%, rgba(200, 255, 239, 0.1), transparent 38%),
+          linear-gradient(145deg, #14160f 0%, #0c0e0c 52%, #161714 100%);
+        overflow: hidden;
+      }
+
+      .stage::before,
+      .stage::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .stage::before {
+        background:
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+        background-size: 5px 5px;
+        opacity: 0.34;
+        mix-blend-mode: overlay;
+      }
+
+      .stage::after {
+        background:
+          radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.42) 100%),
+          linear-gradient(90deg, rgba(255, 212, 156, 0.06), transparent 18%, transparent 82%, rgba(150, 230, 255, 0.05));
+      }
+
+      .viewport {
+        width: min(96vw, 1160px);
+        aspect-ratio: 16 / 9;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(236, 255, 245, 0.22);
+        border-radius: 8px;
+        background: #080907;
+        box-shadow:
+          inset 0 0 90px rgba(255, 255, 255, 0.04),
+          0 30px 100px rgba(0, 0, 0, 0.48);
+      }
+
+      .record-canvas {
+        position: absolute;
+        left: -2px;
+        top: -2px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .camera-video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0;
+        transition: opacity 180ms ease;
+        filter: contrast(1.03) saturate(0.88) brightness(0.86);
+      }
+
+      .viewport.camera-on .camera-video {
+        opacity: 1;
+      }
+
+      .optical-plane {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+      }
+
+      .optic-frame {
+        width: min(84%, 900px);
+        aspect-ratio: 540 / 280;
+        position: relative;
+        transform: translate(var(--shift-x, 0px), var(--shift-y, 0px)) scale(var(--optic-scale, 1));
+      }
+
+      .optic-frame canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+      }
+
+      #glowCanvas {
+        filter: blur(3px);
+        opacity: 0.58;
+        mix-blend-mode: screen;
+      }
+
+      #frameCanvas {
+        opacity: 0.86;
+        mix-blend-mode: screen;
+      }
+
+      #bloomCanvas {
+        filter: blur(11px);
+        opacity: 0.2;
+        mix-blend-mode: screen;
+      }
+
+      #fringeCanvas {
+        filter: blur(1.4px);
+        opacity: 0.42;
+        mix-blend-mode: screen;
+      }
+
+      .viewport.clean #glowCanvas,
+      .viewport.clean #bloomCanvas,
+      .viewport.clean #fringeCanvas {
+        display: none;
+      }
+
+      .viewport.clean #frameCanvas {
+        opacity: 1;
+        mix-blend-mode: normal;
+      }
+
+      .viewport.pov .optic-frame {
+        transform:
+          translate(var(--shift-x, 0px), var(--shift-y, 0px))
+          perspective(1200px)
+          rotateX(1.5deg)
+          rotateY(-2deg)
+          scale(var(--optic-scale, 1));
+      }
+
+      .viewport.pov #frameCanvas {
+        opacity: 0.72;
+        filter: contrast(1.15) saturate(1.08);
+      }
+
+      .viewport.pov #glowCanvas {
+        opacity: 0.72;
+        filter: blur(4px);
+      }
+
+      .viewport.pov #bloomCanvas {
+        opacity: 0.32;
+        filter: blur(16px);
+      }
+
+      .lens-sheen {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(ellipse at 38% 34%, rgba(255, 255, 255, 0.16), transparent 16%),
+          radial-gradient(ellipse at 62% 52%, rgba(160, 230, 255, 0.08), transparent 22%),
+          linear-gradient(105deg, transparent 0%, rgba(255, 245, 215, 0.06) 37%, transparent 55%);
+        mix-blend-mode: screen;
+        opacity: 0.5;
+      }
+
+      .cast-clean .controls {
+        display: none;
+      }
+
+      .cast-clean .mirror-shell {
+        display: block;
+      }
+
+      .cast-clean .stage {
+        min-height: 100vh;
+        padding: 0;
+      }
+
+      .cast-clean .viewport {
+        width: 100vw;
+        height: 100vh;
+        border: 0;
+        border-radius: 0;
+      }
+
+      .record-dot {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        width: 11px;
+        height: 11px;
+        border-radius: 999px;
+        background: #6d7671;
+        box-shadow: 0 0 0 rgba(255, 85, 85, 0);
+      }
+
+      .record-dot.is-live {
+        background: #ff6d5f;
+        box-shadow: 0 0 20px rgba(255, 109, 95, 0.72);
+      }
+
+      .hud-readout {
+        position: absolute;
+        left: 16px;
+        bottom: 14px;
+        right: 16px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        color: rgba(238, 247, 242, 0.72);
+        font-size: 12px;
+        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+      }
+
+      .controls {
+        background: var(--panel);
+        color: var(--ink);
+        border-left: 1px solid var(--panel-line);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .controls h1 {
+        margin: 0;
+        font-size: 19px;
+        line-height: 1.15;
+        letter-spacing: 0;
+      }
+
+      .actions,
+      .segmented,
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      button,
+      select,
+      input {
+        font: inherit;
+        letter-spacing: 0;
+      }
+
+      button,
+      .link-button {
+        min-height: 36px;
+        border: 1px solid #aeb8c4;
+        border-radius: 7px;
+        background: var(--button);
+        color: var(--ink);
+        padding: 0 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        text-decoration: none;
+      }
+
+      button.primary {
+        color: #fff;
+        border-color: var(--primary);
+        background: var(--primary);
+      }
+
+      button.is-live {
+        color: #fff;
+        border-color: #b8463d;
+        background: #b8463d;
+      }
+
+      button:disabled {
+        opacity: 0.54;
+        cursor: not-allowed;
+      }
+
+      .field {
+        display: grid;
+        gap: 5px;
+      }
+
+      .field span,
+      .check span,
+      .stat span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .field input,
+      .field select {
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid #b9c3cf;
+        border-radius: 7px;
+        padding: 7px 9px;
+        background: #fff;
+        color: var(--ink);
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .stat {
+        border: 1px solid #dfe5ed;
+        background: #fff;
+        border-radius: 7px;
+        min-width: 0;
+        padding: 8px;
+      }
+
+      .stat strong {
+        display: block;
+        margin-top: 3px;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+
+      .log {
+        min-height: 108px;
+        max-height: 190px;
+        overflow: auto;
+        border: 1px solid #dfe5ed;
+        border-radius: 7px;
+        background: #fff;
+        padding: 8px;
+        font-size: 12px;
+        color: #3c4650;
+      }
+
+      .log div + div {
+        margin-top: 5px;
+      }
+
+      @media (max-width: 940px) {
+        .mirror-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .controls {
+          border-left: 0;
+          border-top: 1px solid var(--panel-line);
+        }
+      }
+
+      .simple-mirror .mirror-shell {
+        display: block;
+      }
+
+      .simple-mirror .stage {
+        min-height: 100vh;
+        padding: 0;
+      }
+
+      .simple-mirror .viewport {
+        width: 100vw;
+        height: 100vh;
+        border: 0;
+        border-radius: 0;
+      }
+
+      .simple-mirror .controls {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        z-index: 5;
+        width: auto;
+        min-height: 0;
+        padding: 10px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 8px;
+        background: rgba(18, 20, 18, 0.78);
+        color: #eef7f2;
+        backdrop-filter: blur(18px);
+      }
+
+      .simple-mirror .controls h1,
+      .simple-mirror .field,
+      .simple-mirror .grid-2,
+      .simple-mirror .check,
+      .simple-mirror .stats,
+      .simple-mirror .log,
+      .simple-mirror #tickButton,
+      .simple-mirror #castButton,
+      .simple-mirror .actions a[href="/framebuffer.html"] {
+        display: none;
+      }
+
+      .simple-mirror .actions {
+        width: 100%;
+        gap: 10px;
+      }
+
+      .simple-mirror button,
+      .simple-mirror .link-button {
+        min-height: 40px;
+        border-color: rgba(255, 255, 255, 0.28);
+        background: rgba(255, 255, 255, 0.1);
+        color: #eef7f2;
+      }
+
+      .simple-mirror button.primary {
+        border-color: #83f1dc;
+        background: #0b7066;
+      }
+
+      .simple-mirror button.is-live {
+        border-color: #ff8173;
+        background: #b8463d;
+      }
+
+      .simple-mirror #clipDownload:not([hidden]) {
+        margin-left: auto;
+      }
+
+      @media (max-width: 680px) {
+        .simple-mirror .controls {
+          left: 10px;
+          right: 10px;
+          bottom: 10px;
+        }
+
+        .simple-mirror .actions {
+          justify-content: center;
+        }
+
+        .simple-mirror button,
+        .simple-mirror .link-button {
+          flex: 1 1 42%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="mirror-shell">
+      <section class="stage" aria-label="Real display view">
+        <div id="viewport" class="viewport optical">
+          <video id="cameraVideo" class="camera-video" autoplay muted playsinline></video>
+          <div class="optical-plane">
+            <div id="opticFrame" class="optic-frame">
+              <canvas id="bloomCanvas" width="540" height="280"></canvas>
+              <canvas id="fringeCanvas" width="540" height="280"></canvas>
+              <canvas id="glowCanvas" width="540" height="280"></canvas>
+              <canvas id="frameCanvas" width="540" height="280"></canvas>
+            </div>
+          </div>
+          <div class="lens-sheen"></div>
+          <div id="recordDot" class="record-dot"></div>
+          <div class="hud-readout">
+            <span id="statusLine">Idle</span>
+            <span id="fpsReadout">0.00 FPS</span>
+          </div>
+          <canvas id="recordCanvas" class="record-canvas" width="1280" height="720"></canvas>
+        </div>
+      </section>
+
+      <aside class="controls" aria-label="Mirror controls">
+        <h1>Real Mirror</h1>
+        <div class="actions">
+          <button id="recordButton" class="primary" type="button">Record</button>
+          <button id="cameraButton" type="button">Camera</button>
+          <button id="clipButton" type="button">Clip</button>
+          <button id="fullscreenButton" type="button">Fullscreen</button>
+          <button id="castButton" type="button">Cast</button>
+          <button id="tickButton" type="button">Tick</button>
+          <a id="clipDownload" class="link-button" href="#" download="peripheral-real-mirror.webm" hidden>Download</a>
+          <a class="link-button" href="/framebuffer.html">Display Debug</a>
+        </div>
+
+        <label class="field">
+          <span>Effect</span>
+          <select id="effectSelect">
+            <option value="optical" selected>Optical</option>
+            <option value="pov">POV</option>
+            <option value="clean">Clean</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Decode</span>
+          <select id="decodeSelect">
+            <option value="packed4bpp" selected>Packed 4bpp</option>
+            <option value="highEven">High even</option>
+            <option value="highStretch">High stretch</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Preset</span>
+          <select id="presetSelect">
+            <option value="fast4" selected>Verified ROI</option>
+            <option value="fast3">Fast strip</option>
+            <option value="readable7">Readable ROI</option>
+            <option value="text11">Text band</option>
+            <option value="full300">Full frame</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Text</span>
+          <input id="textTemplateInput" type="text" value="" />
+        </label>
+
+        <div class="grid-2">
+          <label class="field">
+            <span>Page</span>
+            <input id="pageStartInput" type="number" min="0" max="299" step="1" value="183" />
+          </label>
+          <label class="field">
+            <span>Pages</span>
+            <input id="pageCountInput" type="number" min="1" max="300" step="1" value="4" />
+          </label>
+        </div>
+
+        <div class="grid-2">
+          <label class="field">
+            <span>Window</span>
+            <input id="pipelineWindowInput" type="number" min="1" max="16" step="1" value="12" />
+          </label>
+          <label class="field">
+            <span>Delay</span>
+            <input id="delayInput" type="number" min="0" max="5000" step="10" value="0" />
+          </label>
+        </div>
+
+        <div class="grid-2">
+          <label class="check">
+            <input id="burstCheck" type="checkbox" checked />
+            <span>Burst</span>
+          </label>
+          <label class="field">
+            <span>Burst win</span>
+            <input id="burstWindowInput" type="number" min="1" max="16" step="1" value="2" />
+          </label>
+        </div>
+
+        <div class="grid-2">
+          <label class="field">
+            <span>X</span>
+            <input id="offsetXInput" type="number" min="-240" max="240" step="1" value="0" />
+          </label>
+          <label class="field">
+            <span>Y</span>
+            <input id="offsetYInput" type="number" min="-180" max="180" step="1" value="0" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Scale</span>
+          <input id="scaleInput" type="range" min="70" max="135" step="1" value="100" />
+        </label>
+
+        <label class="check">
+          <input id="autoTickCheck" type="checkbox" />
+          <span>Auto tick</span>
+        </label>
+
+        <label class="check">
+          <input id="baselineCheck" type="checkbox" checked />
+          <span>Baseline</span>
+        </label>
+
+        <label class="check">
+          <input id="dirtyCropCheck" type="checkbox" checked />
+          <span>Delta</span>
+        </label>
+
+        <label class="check">
+          <input id="adaptiveCheck" type="checkbox" checked />
+          <span>Adaptive</span>
+        </label>
+
+        <div class="stats">
+          <div class="stat"><span>FPS</span><strong id="fpsStat">-</strong></div>
+          <div class="stat"><span>Frame</span><strong id="frameStat">-</strong></div>
+          <div class="stat"><span>Capture</span><strong id="captureStat">-</strong></div>
+          <div class="stat"><span>Protocol</span><strong id="protocolStat">-</strong></div>
+          <div class="stat"><span>Valid</span><strong id="validStat">-</strong></div>
+          <div class="stat"><span>Hashes</span><strong id="uniqueHashStat">-</strong></div>
+          <div class="stat"><span>Goal</span><strong id="goalStat">-</strong></div>
+          <div class="stat"><span>High hash</span><strong id="hashStat">-</strong></div>
+          <div class="stat"><span>Bytes</span><strong id="bytesStat">-</strong></div>
+          <div class="stat"><span>Baseline</span><strong id="baselineStat">-</strong></div>
+          <div class="stat"><span>Bridge</span><strong id="bridgeStat">-</strong></div>
+        </div>
+
+        <div id="log" class="log" aria-live="polite"></div>
+      </aside>
+    </main>
+    <script src="/real-mirror.js"></script>
+  </body>
+</html>

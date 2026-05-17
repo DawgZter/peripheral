@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>dev.peripheral.hud.macos-speech-asr</string>
+  <key>CFBundleExecutable</key>
+  <string>peripheral-mac-asr</string>
+  <key>CFBundleName</key>
+  <string>Peripheral Mac ASR</string>
+  <key>CFBundleDisplayName</key>
+  <string>Peripheral Mac ASR</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Peripheral uses the Mac microphone to turn your speech into Hermes prompts shown on the glasses.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Peripheral uses speech recognition to transcribe your prompts for Hermes.</string>
+</dict>
+</plist>

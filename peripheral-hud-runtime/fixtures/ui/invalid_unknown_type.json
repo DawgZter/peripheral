@@ -1,0 +1,6 @@
+{
+  "id": "bad-widget",
+  "type": "magic_unicorn",
+  "title": "Should Fail",
+  "body": "Unknown widget types must be rejected."
+}

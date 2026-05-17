@@ -1,0 +1,17 @@
+{
+  "name": "peripheral",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Peripheral Agent HUD runtime and Mac-connected display tooling.",
+  "workspaces": [
+    "peripheral-hud-runtime"
+  ],
+  "scripts": {
+    "check": "npm run check:viewer && npm run check:hud",
+    "check:viewer": "node --check web/cast-mirror.js && node --check web/real-mirror.js",
+    "check:hud": "npm --prefix peripheral-hud-runtime test",
+    "pusher:build": "macos_corebluetooth/peripheral-mac-pusher/build.sh",
+    "hud:build": "npm --prefix peripheral-hud-runtime run build",
+    "hud:demo": "npm --prefix peripheral-hud-runtime run peripheralctl -- hud --mock-display --text"
+  }
+}

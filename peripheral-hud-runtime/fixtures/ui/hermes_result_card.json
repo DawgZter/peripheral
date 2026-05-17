@@ -1,0 +1,15 @@
+{
+  "id": "hermes-result-fixture",
+  "type": "generic_card",
+  "title": "Hermes Result",
+  "status": "COMPLETED",
+  "body": "The agent produced a semantic HUD result instead of raw pixels or transport packets.",
+  "bullets": [
+    "Launched from a voice or text task",
+    "Updates stayed on subtitle cadence",
+    "Final card came from validated JSON"
+  ],
+  "footer": "DYNAMIC RESULT",
+  "source": "fixture",
+  "created_at": "2026-05-16T00:00:00.000Z"
+}
