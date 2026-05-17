@@ -253,6 +253,8 @@ const fakeAliasSttScript = [
   "setTimeout(() => console.log('close Hermes'), 140)",
   "setTimeout(() => console.log('Finn Hermes'), 280)",
   "setTimeout(() => console.log('close Hermes'), 410)",
+  "setTimeout(() => console.log('Open for me'), 540)",
+  "setTimeout(() => console.log('Close her'), 670)",
 ].join(";");
 const fakeAliasSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeAliasSttScript);
 const voiceAliasProjectRoot = makeTempProjectRoot("voice-alias");
@@ -281,6 +283,8 @@ try {
   const voiceAliasLog = readFileSync(voiceAliasResult.logPath, "utf8");
   assert.match(voiceAliasLog, /"event":"input.voice_command.alias","text":"Pinot noir","command":"open hermes"/);
   assert.match(voiceAliasLog, /"event":"input.voice_command.alias","text":"Finn Hermes","command":"open hermes"/);
+  assert.match(voiceAliasLog, /"event":"input.voice_command.alias","text":"Open for me","command":"open hermes"/);
+  assert.match(voiceAliasLog, /"text":"Close her"/);
   assert.match(voiceAliasLog, /"event":"hermes_cli.close","reason":"input.dismiss"/);
   assert.doesNotMatch(voiceAliasLog, /Unknown HUD command/);
 } finally {
