@@ -1,5 +1,7 @@
 # Peripheral
 
+[![Check](https://github.com/DawgZter/peripheral/actions/workflows/check.yml/badge.svg?branch=public/peripheral-clean)](https://github.com/DawgZter/peripheral/actions/workflows/check.yml?query=branch%3Apublic%2Fperipheral-clean)
+
 Mac-connected Agent HUD runtime and display tooling for Peripheral glasses.
 
 This repository contains the public Peripheral runtime slice. It excludes local environment files, generated output, and machine-specific notes.
@@ -35,9 +37,10 @@ This repo is meant to show the Peripheral runtime cleanly. It contains the publi
 ## Checks
 
 ```sh
-npm run check:viewer
-npm --prefix peripheral-hud-runtime test
-npm run pusher:build
+npm --prefix peripheral-hud-runtime ci
+npm run check
 ```
 
-For HUD runtime commands and live-glasses safety notes, see `peripheral-hud-runtime/docs/HUD_RUNTIME.md`.
+The CI workflow runs the same source checks on `public/peripheral-clean`. The macOS helper can be built separately with `npm run pusher:build`.
+
+For HUD runtime commands and live display safety notes, see `peripheral-hud-runtime/docs/HUD_RUNTIME.md`.
