@@ -19,7 +19,7 @@ import {
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
 import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeLaunchCommand, buildAgentBridgeRuntimeHandshake, buildAgentBridgeTranscript, buildAgentLaunchSpecs, buildAgentRuntimePlan, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, runAgentCliLaunch, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
-import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralHardwareProfile, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
+import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesEvidence, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralHardwareProfile, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
@@ -98,12 +98,17 @@ assert.equal(connectedState.phone.ownsBle, true);
 assert.equal(connectedState.broker.activeLease.owner, "broker");
 assert.ok(connectedState.surfaceCommands.some((command) => command.kind === "enter_agent_mode"));
 const runtimeProfileState = buildConnectedGlassesState(new Date("2026-05-17T00:00:00Z"));
-assert.equal(runtimeProfileState.glasses.connected, true);
+assert.equal(runtimeProfileState.glasses.connected, false);
 assert.equal(runtimeProfileState.glasses.batteryPercent, undefined);
 assert.equal(runtimeProfileState.glasses.rssi, undefined);
 assert.equal(runtimeProfileState.glasses.telemetry.source, "phone_gateway_runtime");
 assert.equal(runtimeProfileState.glasses.telemetry.batterySource, "phone_gateway_profile");
 assert.equal(runtimeProfileState.glasses.telemetry.rssiSource, "phone_gateway_profile");
+const gatewayConnectedState = buildConnectedGlassesState(new Date("2026-05-17T00:00:00Z"), buildConnectedGlassesEvidence({
+  PERIPHERAL_PHONE_GATEWAY_CONNECTED: "1",
+}, new Date("2026-05-17T00:00:00Z")));
+assert.equal(gatewayConnectedState.glasses.connected, true);
+assert.equal(gatewayConnectedState.glasses.telemetry.source, "operator_env");
 const hardwareProfile = buildPeripheralHardwareProfile(new Date("2026-05-17T00:00:00Z"));
 assert.equal(hardwareProfile.origin.buildLocation, "Shenzhen");
 assert.equal(hardwareProfile.industrialDesign.weightGrams, 28);

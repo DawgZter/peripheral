@@ -694,7 +694,7 @@ export function buildConnectedGlassesEvidence(env: EnvSnapshot = {}, now = new D
   const hasOperatorTelemetry = batteryPercent !== undefined || rssi !== undefined || connectedDeviceCount !== undefined || explicitConnected !== undefined || gatewayConnected !== undefined;
   return {
     source: hasOperatorTelemetry ? "operator_env" : "phone_gateway_runtime",
-    connected: explicitConnected ?? (connectedDeviceCount !== undefined ? connectedDeviceCount > 0 : gatewayConnected ?? true),
+    connected: explicitConnected ?? (connectedDeviceCount !== undefined ? connectedDeviceCount > 0 : gatewayConnected ?? false),
     observedAt: now.toISOString(),
     sidecarUrl: env.PERIPHERAL_SIDECAR_URL || env.PERIPHERAL_HUD_SIDECAR_URL,
     connectedDeviceCount,
