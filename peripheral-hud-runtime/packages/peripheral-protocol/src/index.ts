@@ -33,6 +33,79 @@ export const WIDGET_TYPES = [
 
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 
+export const APP_MODES = [
+  "current_stage",
+  "ambient_agent_hud",
+  "agent_mode",
+  "pairing",
+  "debug",
+  "system",
+] as const;
+
+export type AppMode = (typeof APP_MODES)[number];
+
+export const SURFACE_OWNERS = [
+  "current_stage",
+  "agent_mode",
+  "debug",
+  "system",
+  "broker",
+  "agent",
+  "sponsor",
+] as const;
+
+export type SurfaceOwner = (typeof SURFACE_OWNERS)[number];
+
+export const SURFACE_PRIORITIES = ["ambient", "normal", "high", "urgent"] as const;
+
+export type SurfacePriority = (typeof SURFACE_PRIORITIES)[number];
+
+export const SURFACE_KINDS = ["tiny_hud", "glance", "fullscreen", "pinned"] as const;
+
+export type SurfaceKind = (typeof SURFACE_KINDS)[number];
+
+export const SURFACE_COMMAND_KINDS = [
+  "show_status_icon",
+  "show_card",
+  "show_widget",
+  "update_widget",
+  "clear_surface",
+  "enter_agent_mode",
+  "exit_agent_mode",
+] as const;
+
+export type SurfaceCommandKind = (typeof SURFACE_COMMAND_KINDS)[number];
+
+export const INPUT_EVENT_KINDS = [
+  "voice_text",
+  "tap",
+  "double_tap",
+  "long_press",
+  "head_pose",
+  "look_up",
+  "look_down",
+  "app_button",
+  "dismiss",
+] as const;
+
+export type InputEventKind = (typeof INPUT_EVENT_KINDS)[number];
+
+export const AGENT_EVENT_KINDS = [
+  "approval_required",
+  "session_started",
+  "session_waiting",
+  "session_progress",
+  "session_completed",
+  "session_stuck",
+  "session_error",
+] as const;
+
+export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number];
+
+export const APPROVAL_RISK_LEVELS = ["low", "medium", "high"] as const;
+
+export type ApprovalRiskLevel = (typeof APPROVAL_RISK_LEVELS)[number];
+
 export const HUD_RUNTIME_STATES = [
   "blank",
   "agent_hud",
@@ -55,6 +128,81 @@ export const AGENT_STATUSES = [
 ] as const;
 
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
+
+export type PeripheralSource = {
+  id: string;
+  label: string;
+  kind: "agent_cli" | "sponsor" | "system" | "demo";
+  vendor?: string;
+  session_id?: string;
+};
+
+export type SurfaceLease = {
+  id: string;
+  owner: SurfaceOwner;
+  priority: SurfacePriority;
+  surface: SurfaceKind;
+  mode: AppMode;
+  interruptible: boolean;
+  reason: string;
+  source?: PeripheralSource;
+  expires_at?: string;
+  created_at?: string;
+};
+
+export type SurfaceCommand = {
+  kind: SurfaceCommandKind;
+  id: string;
+  mode: AppMode;
+  surface: SurfaceKind;
+  lease?: SurfaceLease;
+  widget?: PeripheralWidget;
+  card?: PeripheralWidget;
+  source?: PeripheralSource;
+  reason?: string;
+  created_at?: string;
+};
+
+export type InputEvent = {
+  kind: InputEventKind;
+  id: string;
+  mode: AppMode;
+  source?: PeripheralSource;
+  focused_card_id?: string;
+  focused_widget_id?: string;
+  text?: string;
+  value?: string | number | boolean;
+  head_pose?: {
+    pitch?: number;
+    yaw?: number;
+    roll?: number;
+  };
+  timestamp: string;
+};
+
+export type AgentEvent = {
+  kind: AgentEventKind;
+  id: string;
+  source: PeripheralSource;
+  session_id: string;
+  title: string;
+  summary?: string;
+  status?: AgentStatus;
+  risk?: ApprovalRiskLevel;
+  choices?: Choice[];
+  widget?: PeripheralWidget;
+  created_at: string;
+};
+
+export type UserDecision = {
+  kind: "approval_decision" | "dismiss" | "details" | "reply";
+  event_id: string;
+  session_id: string;
+  decision: "approve" | "deny" | "details" | "dismiss" | "reply";
+  confirmation_level: "voice" | "tap" | "voice_and_tap" | "phone" | "desktop";
+  text?: string;
+  timestamp: string;
+};
 
 export type Choice = {
   id?: string;
