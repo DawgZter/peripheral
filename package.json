@@ -10,7 +10,10 @@
     "peripheral-hud-runtime"
   ],
   "scripts": {
-    "check": "npm run check:public-source && npm run check:review-posture && npm run check:sponsor-tools && npm run check:hud",
+    "test": "npm run check",
+    "prepack": "npm run check",
+    "check": "npm run check:public-source && npm run check:review-posture && npm run check:sponsor-tools && npm run check:pack && npm run check:hud",
+    "check:pack": "node tools/check-package-pack.mjs",
     "check:public-source": "node tools/check-public-source.mjs",
     "check:public-source:commits": "node tools/check-public-source.mjs --commits",
     "check:review-posture": "node tools/check-review-posture.mjs",

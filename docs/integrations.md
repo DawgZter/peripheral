@@ -143,13 +143,15 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime followu
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser-task --goal "Check restaurant availability" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime sponge-context --context-text "Summarize customer context for glasses" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime sponge-context --context-text "Pause before persisting sensitive context" --mode redaction_warning --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows widgets --json
 ```
 
-The `widgets` command renders the sponsor and CLI matrices into `peripheral-hud-runtime/out/frames/integrations/`. Use `sponsor-workflows widgets` for the sponsor approval surfaces and `hud --real` when the operator is ready to drive the glasses.
+The `widgets` command renders the sponsor and CLI matrices into `peripheral-hud-runtime/out/frames/integrations/`. Use `sponsor-workflows widgets` for the sponsor approval surfaces, `live-proof dinner-booking` for the full service/display proof path, and `hud --real` when the operator is ready to drive the glasses.
 
 ## Safety Boundary
 

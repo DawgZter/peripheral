@@ -19,16 +19,18 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --l
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-run --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge session-pack --session-prefix reviewer --json
 ```
 
-`review-run` generates the dinner-booking frames, the six-agent CLI frame pack, the post-approval sponsor follow-up frames, and a single evidence index. `review-bundle` checks the rendered frames, timeline, log, and MP4, then embeds the connected-state, phone-runtime, and agent-bridge route summaries for operator-driven glasses access.
+`review-run` generates the dinner-booking frames, the six-agent CLI frame pack, the post-approval sponsor follow-up frames, and a single evidence index. `review-bundle` checks the rendered frames, timeline, log, MP4, adapter catalog, and support report, then embeds connected-state, phone-runtime, agent-bridge, and `liveProof` summaries for operator-driven glasses access.
 
 Artifacts:
 
 - `peripheral-hud-runtime/out/frames/dinner-booking/`
 - `peripheral-hud-runtime/out/demo/dinner-booking-timeline.json`
 - `peripheral-hud-runtime/out/logs/dinner-booking.jsonl`
+- `peripheral-hud-runtime/out/demo/dinner-booking-live-proof.json`
 - `peripheral-hud-runtime/out/frames/agent-bridge-session/`
 - `peripheral-hud-runtime/out/agent-bridge/session-pack.json`
 - `peripheral-hud-runtime/out/frames/sponsor-followup/`
@@ -49,8 +51,12 @@ For direct runtime inspection, the same bundle points at these commands:
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime dinner-followups --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime approval-policy --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime evaluate-decision --risk high --confirmation voice --choice approve --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json
@@ -65,6 +71,7 @@ For hardware context, see `docs/peripheral-glasses.md`; the same profile is expo
 - AgentPhone call events become glasses HUD updates.
 - Inbound sponsor and agent events can be ingested, rendered, lease-checked, and logged by the phone runtime.
 - Human approval gates a consequential real-world action.
+- Low, medium, and high-risk approvals are evaluated by the phone runtime before an external action can continue.
 - AgentMail and Supermemory follow-up events are rendered on glasses.
 - Agents never write pixels or BLE packets directly.
 - The phone/runtime owns surface leases, input focus, rendering, and safety.
@@ -96,7 +103,16 @@ Then run the same flow with the AgentPhone, AgentMail, and Supermemory adapter p
 
 ```sh
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
 ```
+
+To inspect the AgentMail and Supermemory follow-up payloads, credential binding names, and glasses approval surfaces before any provider call:
+
+```sh
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime dinner-followups --json
+```
+
+For single sponsor-runtime probes, `--real-sponsor` or the adapter-specific flag such as `--real-agentmail`, `--real-supermemory`, `--real-stripe`, `--real-browser-use`, `--real-sponge`, or `--real-gemini` switches from phone-gateway review mode to the credential-bound provider adapter.
 
 ## Sponsor Status
 

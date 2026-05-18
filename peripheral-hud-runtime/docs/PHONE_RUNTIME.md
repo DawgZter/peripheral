@@ -36,6 +36,12 @@ The runtime routes wearer input in this order:
 
 If a Stripe approval card is focused and the wearer says `approve`, that input goes back to the approval event. If there is no focused card and the wearer says `hey codex`, the broker routes to the Codex CLI adapter.
 
+## Approval Policy
+
+The phone runtime evaluates approval decisions before an external action can continue. Low-risk actions can proceed from voice or tap. Medium-risk actions require voice plus tap, phone, or desktop confirmation. High-risk actions require phone or desktop confirmation.
+
+The rule only advances `approve`. `deny`, `details`, and `dismiss` remain safe card actions because they do not continue the external operation.
+
 ## Review Commands
 
 ```sh
@@ -48,6 +54,9 @@ npm run peripheralctl -- agent-bridge runtime-plan --agent codex_cli --session-i
 npm run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- phone-runtime route --line "hey codex show status" --json
 npm run peripheralctl -- phone-runtime agent-mode-lease --line "User looked up into Agent Mode" --json
+npm run peripheralctl -- phone-runtime approval-policy --json
+npm run peripheralctl -- phone-runtime evaluate-decision --risk high --confirmation voice --choice approve --json
+npm run peripheralctl -- phone-runtime evaluate-decision --risk high --confirmation phone --choice approve --json
 ```
 
 These commands expose the same phone-owned routing path used by runtime and glasses flows. The runtime plan records launch commands, stdout/stderr line routing, JSONL audit posture, semantic surface conversion, and approve/deny return commands for each supported CLI.

@@ -39,6 +39,8 @@ npm run peripheralctl -- agent-bridge session-pack --session-prefix reviewer --j
 npm run peripheralctl -- agent-bridge event --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- agent-bridge route --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
+npm run peripheralctl -- phone-runtime approval-policy --json
+npm run peripheralctl -- phone-runtime evaluate-decision --risk high --confirmation voice --choice approve --json
 npm run peripheralctl -- sponsor-workflows dossier --json
 npm run peripheralctl -- sponsor-runtime adapters --json
 npm run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
@@ -46,11 +48,16 @@ npm run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +141
 npm run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm run peripheralctl -- sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json
 npm run peripheralctl -- sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
+npm run peripheralctl -- sponsor-runtime dinner-followups --json
+npm run peripheralctl -- sponsor-runtime agentmail-confirmation --json
+npm run peripheralctl -- sponsor-runtime supermemory-preference --json
 npm run peripheralctl -- sponsor-runtime browser-task --goal "Check restaurant availability" --json
 npm run peripheralctl -- sponsor-runtime sponge-context --context-text "Summarize customer context for glasses" --json
+npm run peripheralctl -- sponsor-runtime sponge-context --context-text "Pause before persisting sensitive context" --mode redaction_warning --json
 npm run peripheralctl -- sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface" --json
 npm run peripheralctl -- review-run --json
 npm run peripheralctl -- review-bundle --json
+npm run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
 npm run peripheralctl -- sponsor-workflows widgets --json
 npm run peripheralctl -- integrations widgets --json
 npm run peripheralctl -- walkthrough live-call --local
@@ -112,7 +119,7 @@ Works now in runtime mode:
 - peripheralctl review-run generates the dinner-booking, agent CLI, and sponsor follow-up glasses evidence packs plus `out/review/evidence-index.json`
 - peripheralctl agent-bridge normalizes OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI output into AgentEvent objects, HUD widgets, executable launch envelopes, approval return paths, phone-routable surface commands, and adapter metadata for the intended glasses surface
 - peripheralctl agent-bridge session-pack renders all six agent CLI surfaces into `out/frames/agent-bridge-session/` and writes `out/agent-bridge/session-pack.json`
-- peripheralctl phone-runtime exposes the phone-owned mode manager, lease arbiter, and input router as runtime commands
+- peripheralctl phone-runtime exposes the phone-owned mode manager, lease arbiter, approval policy, and input router as runtime commands
 - peripheralctl sponsor-workflows documents sponsor event loops, approval gates, semantic surfaces, and workflow widgets
 - hudctl can show validated JSON/cards, clear runtime display state, report status, and emit manual agent status
 - runtime push, clear, status, diagnostics, and latency commands work
