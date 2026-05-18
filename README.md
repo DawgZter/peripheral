@@ -70,7 +70,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --r
 | AgentPhone | Credential-bound call path plus local review path for dinner booking |
 | AgentMail | Credential-bound confirmation-send adapter path with local review transport |
 | Supermemory | Credential-bound preference-save adapter path with local review transport |
-| Stripe | Approval/risk surface for card holds and payment checkpoints |
+| Stripe | Credential-bound card-hold adapter path plus approval/risk surface |
 | Browser Use | Evidence and sensitive-action surface |
 | Sponge | Context and redaction surface |
 | Gemini | Routing and summary surface |

@@ -22,7 +22,7 @@ import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesSt
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
-import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, normalizeAgentPhoneEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking, saveDinnerPreference, sendAgentMailConfirmation } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking, saveDinnerPreference, sendAgentMailConfirmation } from "../packages/peripheral-sponsor-kit/src/index.js";
 import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
@@ -254,6 +254,50 @@ const sponsorOkFetch: typeof fetch = async () => new Response(JSON.stringify({ i
   status: 200,
   headers: { "content-type": "application/json" },
 });
+const stripeLocal = await createStripePaymentIntent({
+  sessionId: "stripe-card-hold",
+  amountCents: 2500,
+  currency: "usd",
+  description: "Refundable dinner hold.",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(stripeLocal.mode, "local_review");
+assert.equal(stripeLocal.requestBody.amount, 2500);
+assert.equal(stripeLocal.requestBody.capture_method, "manual");
+assert.equal((stripeLocal.requestBody.metadata as Record<string, unknown>).approval_surface, "glasses");
+const stripeReal = await createStripePaymentIntent({
+  sessionId: "stripe-card-hold",
+  amountCents: 2500,
+  currency: "usd",
+  description: "Refundable dinner hold.",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  forceReal: true,
+  env: { STRIPE_SECRET_KEY: "set", STRIPE_API_URL: "https://example.invalid/stripe" },
+  fetchImpl: sponsorOkFetch,
+});
+assert.equal(stripeReal.mode, "real");
+assert.equal(stripeReal.ok, true);
+assert.equal(stripeReal.endpoint, "https://example.invalid/stripe/payment_intents");
+const stripeHoldRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "stripe-hold",
+  "--hold-amount",
+  "25.00",
+  "--currency",
+  "usd",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(stripeHoldRun.status, 0, stripeHoldRun.stderr);
+const stripeHoldResult = JSON.parse(stripeHoldRun.stdout.slice(stripeHoldRun.stdout.indexOf("{"))) as { mode: string; stripe: { requestBody: { amount: number } }; command: { decision_required: boolean } };
+assert.equal(stripeHoldResult.mode, "local_review");
+assert.equal(stripeHoldResult.stripe.requestBody.amount, 2500);
+assert.equal(stripeHoldResult.command.decision_required, true);
 const agentMailLocal = await sendAgentMailConfirmation({
   sessionId: "dinner-confirmation-email",
   restaurantName: "Sato Table",

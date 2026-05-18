@@ -66,9 +66,10 @@ Each workflow declares the event trigger, target surface, risk level, phone runt
 - `PeripheralWidget` for the semantic HUD renderer.
 - `SurfaceCommand` for the phone-owned mode manager.
 
-The same package now includes concrete dinner-booking adapters for the real follow-up path:
+The same package now includes concrete real-world task adapters for calls, payment holds, email, and memory:
 
 - `agentphone.ts` starts and polls the restaurant call, with a local review path.
+- `stripe.ts` creates approval-gated card holds when `STRIPE_SECRET_KEY` is configured, with a local review path.
 - `agentmail.ts` sends the confirmation email when `AGENTMAIL_API_KEY` is configured, with a local review path.
 - `supermemory.ts` saves the dinner preference when `SUPERMEMORY_API_KEY` is configured, with a local review path.
 
@@ -98,6 +99,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows dossi
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows workflow stripe --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime adapters --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows widgets --json
 ```

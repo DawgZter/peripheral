@@ -29,6 +29,13 @@ export {
   type SupermemorySaveResult,
 } from "./supermemory.js";
 export * from "./supermemory.js";
+export {
+  buildStripePaymentIntentBody,
+  createStripePaymentIntent,
+  type StripePaymentIntentRequest,
+  type StripePaymentIntentResult,
+} from "./stripe.js";
+export * from "./stripe.js";
 
 export type SponsorEventKind =
   | "call_started"

@@ -74,6 +74,7 @@ import {
   buildSponsorEventDossier,
   buildSponsorRuntimeAdapters,
   buildSponsorRuntimeRequest,
+  createStripePaymentIntent,
   dispatchSponsorEvent,
   normalizeSponsorEvent,
   saveDinnerPreference,
@@ -126,6 +127,10 @@ const VALUE_FLAGS = new Set([
   "summary",
   "risk",
   "amount",
+  "currency",
+  "description",
+  "customer",
+  "payment-method",
   "target",
   "code",
   "choice",
@@ -513,8 +518,37 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
         request: redactSponsorRuntimeRequest(result.request),
       };
     }
+    case "stripe-hold": {
+      const sessionId = String(cli.options["session-id"] || "stripe-card-hold");
+      const amountCents = parseMoneyCents(cli.options["hold-amount"] || cli.options.amount || "25.00", "--hold-amount");
+      const currency = typeof cli.options.currency === "string" ? cli.options.currency : "usd";
+      const summary = String(cli.options.summary || cli.options.description || "Approval-gated Stripe card hold for a real-world agent task.");
+      const result = await createStripePaymentIntent({
+        sessionId,
+        amountCents,
+        currency,
+        description: summary,
+        customer: typeof cli.options.customer === "string" ? cli.options.customer : undefined,
+        paymentMethod: typeof cli.options["payment-method"] === "string" ? cli.options["payment-method"] : undefined,
+        now,
+      }, {
+        forceReal: Boolean(cli.options["real-stripe"]),
+        env: process.env,
+      });
+      const normalized = normalizeSponsorEvent({
+        sponsorId: "stripe",
+        event: "payment_intent_requires_action",
+        sessionId,
+        title: "Approve Card Hold?",
+        summary,
+        amount: formatMoneyCents(amountCents, currency),
+        risk: "medium",
+        now,
+      });
+      return { ok: result.ok, mode: result.mode, stripe: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
+    }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, stripe-hold");
   }
 }
 
@@ -1419,6 +1453,7 @@ function capabilities(): unknown {
       "sponsor-runtime adapters",
       "sponsor-runtime request",
       "sponsor-runtime dispatch",
+      "sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd",
       "hudctl show-json",
       "hudctl show-card",
       "hudctl clear",
@@ -1650,6 +1685,7 @@ Usage:
   peripheralctl sponsor-runtime adapters
   peripheralctl sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold"
   peripheralctl sponsor-runtime dispatch --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
+  peripheralctl sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold"
   peripheralctl demo dinner-booking --local
   peripheralctl demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
   peripheralctl phone-runtime decide --event booking-approval-1 --choice approve
@@ -1682,6 +1718,10 @@ Global options:
   --session-id <id>       Stable session id for the normalized event.
   --line <text>           Bounded CLI transcript, input line, or fallback sponsor summary to normalize.
   --summary <text>        For sponsor-runtime: event summary sent through the broker payload.
+  --hold-amount <amount>  For sponsor-runtime stripe-hold: card-hold amount, e.g. 25.00 or cents.
+  --currency <code>       For sponsor-runtime stripe-hold: currency code, default usd.
+  --customer <id>         For sponsor-runtime stripe-hold: optional Stripe customer id.
+  --payment-method <id>   For sponsor-runtime stripe-hold: optional Stripe payment method id.
   --email-to <addr>       For dinner-booking: override AgentMail recipient.
   --email-from <addr>     For dinner-booking: override AgentMail sender.
   --memory-container <id> For dinner-booking: override Supermemory container.
@@ -1780,6 +1820,21 @@ function flagNumber(value: unknown, name: string, min: number): number | undefin
     throw new Error(name + " must be a number.");
   }
   return Math.max(min, number);
+}
+
+function parseMoneyCents(value: unknown, name: string): number {
+  const text = String(value ?? "").trim();
+  if (!text) throw new Error(name + " is required.");
+  const amount = Number(text.replace(/^\$/, ""));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error(name + " must be a positive amount.");
+  }
+  return text.includes(".") ? Math.round(amount * 100) : Math.round(amount);
+}
+
+function formatMoneyCents(amountCents: number, currency: string): string {
+  const amount = (amountCents / 100).toFixed(2);
+  return currency.toUpperCase() + " " + amount;
 }
 
 function delay(ms: number): Promise<void> {
