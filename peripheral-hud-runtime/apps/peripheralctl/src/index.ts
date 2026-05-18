@@ -248,6 +248,9 @@ async function main(): Promise<void> {
     case "review-bundle":
       result = commandReviewBundle(projectRoot, repoRoot);
       break;
+    case "review-run":
+      result = await commandReviewRun(cli, projectRoot, repoRoot, driverOptions);
+      break;
     case "walkthrough":
       result = await commandWalkthrough(cli, projectRoot, driverOptions);
       break;
@@ -428,6 +431,7 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     },
     commands: {
       generate: "npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json",
+      reviewRun: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-run --json",
       inspect: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json",
       approve: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event booking-approval-1 --choice approve",
       connectedState: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json",
@@ -494,6 +498,76 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     },
     checks,
   };
+}
+
+async function commandReviewRun(cli: ParsedCli, projectRoot: string, repoRoot: string, driverOptions: DriverOptions): Promise<unknown> {
+  const now = new Date();
+  const sessionPrefix = String(cli.options["session-prefix"] || "reviewer");
+  const localOptions = {
+    ...cli.options,
+    local: true,
+    "local-display": true,
+    "auto-approve": true,
+  };
+  const dinner = await commandDinnerBookingDemo({
+    command: "demo",
+    positionals: ["dinner-booking"],
+    options: localOptions,
+  }, projectRoot, {
+    ...driverOptions,
+    local: true,
+  });
+  const agentBridge = writeAgentBridgeSessionPack(projectRoot, now, sessionPrefix);
+  const sponsorFollowup = await commandSponsorRuntime({
+    command: "sponsor-runtime",
+    positionals: ["followup-pack"],
+    options: localOptions,
+  }, projectRoot);
+  const reviewBundle = commandReviewBundle(projectRoot, repoRoot);
+  const evidencePath = join(projectRoot, "out", "review", "evidence-index.json");
+  const evidence = {
+    schema: "peripheral-review-run-evidence-v1",
+    generatedAt: now.toISOString(),
+    commands: {
+      reviewRun: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-run --json",
+      dinnerBooking: "npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json",
+      agentSessionPack: "npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge session-pack --session-prefix " + sessionPrefix + " --json",
+      sponsorFollowup: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime followup-pack --json",
+      reviewBundle: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json",
+    },
+    dinner,
+    agentBridge,
+    sponsorFollowup,
+    reviewBundle,
+  };
+  mkdirSync(dirname(evidencePath), { recursive: true });
+  writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
+  return {
+    ok: Boolean(asRecord(dinner).ok) && Boolean(asRecord(sponsorFollowup).ok) && Boolean(asRecord(reviewBundle).ok),
+    schema: evidence.schema,
+    evidencePath,
+    dinnerFrameDir: asRecord(dinner).frameDir,
+    agentBridgeFrameDir: agentBridge.frameDir,
+    sponsorFollowupFrameDir: asRecord(sponsorFollowup).frameDir,
+    reviewBundle,
+  };
+}
+
+function writeAgentBridgeSessionPack(projectRoot: string, now: Date, sessionPrefix: string): {
+  sessionPack: ReturnType<typeof buildAgentBridgeSessionPack>;
+  frameDir: string;
+  packPath: string;
+  artifacts: ReturnType<typeof renderWidgetToFile>[];
+} {
+  const sessionPack = buildAgentBridgeSessionPack(now, sessionPrefix);
+  const frameDir = join(projectRoot, "out", "frames", "agent-bridge-session");
+  const artifacts = sessionPack.agents.map((agent, index) => renderWidgetToFile(agent.widget, join(frameDir, String(index + 1).padStart(2, "0") + "-" + agent.id + "-" + agent.widget.id + ".png"), {
+    assetRoot: join(projectRoot, "fixtures", "images"),
+  }));
+  const packPath = join(projectRoot, "out", "agent-bridge", "session-pack.json");
+  mkdirSync(dirname(packPath), { recursive: true });
+  writeFileSync(packPath, JSON.stringify({ ...sessionPack, frames: artifacts }, null, 2));
+  return { sessionPack, frameDir, packPath, artifacts };
 }
 
 async function commandAgents(cli: ParsedCli, projectRoot: string, repoRoot: string, logPath: string): Promise<unknown> {
@@ -2021,6 +2095,7 @@ function capabilities(): unknown {
       "demo dinner-booking",
       "demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display",
       "review-bundle",
+      "review-run",
       "hud --local-display --text",
       "hud --local-display --mic mac",
       "hud --local-display --mic mac --asr-provider openai-realtime",
@@ -2275,6 +2350,7 @@ Usage:
   peripheralctl measure-latency [--local]
   peripheralctl demo dinner-booking [--local] [--json]
   peripheralctl review-bundle --json
+  peripheralctl review-run --json
   peripheralctl hud --local-display --text
   peripheralctl hud --local-display --text --hermes-cli
   peripheralctl hud --local-display --mic mac

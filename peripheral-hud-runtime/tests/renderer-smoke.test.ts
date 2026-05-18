@@ -916,7 +916,7 @@ const reviewBundle = JSON.parse(reviewBundleRun.stdout.slice(reviewBundleRun.std
   schema: string;
   artifacts: { frameCount: number; video: { exists: boolean; sha256?: string } };
   experience: { primarySurface: string; browserPreviewSurface: boolean; reviewSurface: string; accessSurface: string };
-  commands: { connectedState: string; phoneRuntime: string; agentRoute: string; support: string; liveAdapters: string };
+  commands: { reviewRun: string; connectedState: string; phoneRuntime: string; agentRoute: string; support: string; liveAdapters: string };
   timeline: { stepCount: number; approvalSteps: number };
   runtime: {
     hardwareAccessRequired: boolean;
@@ -955,6 +955,7 @@ assert.equal(reviewBundle.experience.primarySurface, "Peripheral glasses");
 assert.equal(reviewBundle.experience.browserPreviewSurface, false);
 assert.equal(reviewBundle.experience.reviewSurface, "rendered_glasses_frames");
 assert.equal(reviewBundle.experience.accessSurface, "glasses_only");
+assert.match(reviewBundle.commands.reviewRun, /review-run/);
 assert.match(reviewBundle.commands.connectedState, /connected-state/);
 assert.match(reviewBundle.commands.phoneRuntime, /phone-runtime snapshot/);
 assert.match(reviewBundle.commands.agentRoute, /agent-bridge route/);
@@ -991,6 +992,23 @@ assert.ok(reviewBundle.runtime.agentBridge.phoneDecision.focusedCardId);
 assert.equal(reviewBundle.artifacts.frameCount >= 5, true);
 assert.equal(reviewBundle.artifacts.video.exists, true);
 assert.equal(typeof reviewBundle.artifacts.video.sha256, "string");
+const reviewRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "review-run",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 20_000,
+});
+assert.equal(reviewRun.status, 0, reviewRun.stderr);
+const reviewRunResult = JSON.parse(reviewRun.stdout.slice(reviewRun.stdout.indexOf("{"))) as { schema: string; evidencePath: string; agentBridgeFrameDir: string; sponsorFollowupFrameDir: string; reviewBundle: { ok: boolean } };
+assert.equal(reviewRunResult.schema, "peripheral-review-run-evidence-v1");
+assert.equal(reviewRunResult.reviewBundle.ok, true);
+assert.ok(existsSync(reviewRunResult.evidencePath));
+assert.ok(existsSync(reviewRunResult.agentBridgeFrameDir));
+assert.ok(existsSync(reviewRunResult.sponsorFollowupFrameDir));
+assert.match(readFileSync(reviewRunResult.evidencePath, "utf8"), /peripheral-review-run-evidence-v1/);
 const dinnerDecisionRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "phone-runtime",

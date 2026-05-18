@@ -7,6 +7,7 @@ Review Peripheral as a dinner-booking control surface first, then as a general a
 ```sh
 npm --prefix peripheral-hud-runtime ci
 npm run check
+npm --prefix peripheral-hud-runtime run peripheralctl -- review-run --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
@@ -21,6 +22,7 @@ Expected artifacts:
 - `peripheral-hud-runtime/out/logs/dinner-booking.jsonl`
 - `peripheral-hud-runtime/out/frames/sponsor-followup/`
 - `peripheral-hud-runtime/out/sponsor-runtime/followup-pack.json`
+- `peripheral-hud-runtime/out/review/evidence-index.json`
 - `docs/media/peripheral-demo-dinner-booking.mp4`
 
 ## Single Flow
@@ -41,6 +43,7 @@ Expected artifacts:
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- review-run --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
@@ -70,6 +73,7 @@ The support and live-adapter reports expose 13 supported integration records, 13
 | Area | Where to inspect |
 | --- | --- |
 | Phone-owned surface runtime | `peripheral-hud-runtime/packages/peripheral-phone-runtime/src/index.ts` |
+| One-command evidence pack | `peripheralctl review-run --json` |
 | Inbound runtime ingest | `peripheralctl phone-runtime ingest --sponsor agentphone --event call_connected --json` |
 | AgentPhone call adapter | `peripheralctl sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json` |
 | AgentMail send adapter | `peripheralctl sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json` |

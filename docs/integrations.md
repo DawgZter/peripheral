@@ -109,6 +109,7 @@ Use `peripheralctl integrations sponsor-events --json` to inspect the sample eve
 
 ```sh
 npm --prefix peripheral-hud-runtime run build
+npm --prefix peripheral-hud-runtime run peripheralctl -- review-run --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations summary --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations sponsors --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations agent-clis --json
