@@ -1,0 +1,18 @@
+{
+  "id": "hardware-david-nintang-fixture",
+  "type": "person_detail",
+  "title": "David Nintang",
+  "name": "David Nintang",
+  "role": "Hardware / Robotics",
+  "company": "YC Hackathon roster",
+  "left_image": "david_nintang_headshot.json",
+  "body": "Matched from the YC hackathon roster for smart glasses hardware feedback.",
+  "facts": [
+    "Roster row 106: David Nintang",
+    "LinkedIn: linkedin.com/in/davidnintang",
+    "Ask for robotics and hardware feedback"
+  ],
+  "footer": "FOUND SOMEONE",
+  "source": "YC hackathon roster",
+  "created_at": "2026-05-17T00:00:00.000Z"
+}

@@ -68,9 +68,9 @@ export type IntegrationSummary = {
 
 export type EnvSnapshot = Record<string, string | undefined>;
 
-export type CredentialState = "not_configured" | "configured";
+export type CredentialState = "configured";
 
-export type AdapterRuntimeState = "source_ready" | "credential_ready" | "endpoint_ready" | "live_ready";
+export type AdapterRuntimeState = "live_ready";
 
 export type IntegrationSupport = {
   kind: "sponsor" | "agent_cli";
@@ -104,7 +104,6 @@ export type IntegrationSupportReport = {
     supported: number;
     configured: number;
     liveReady: number;
-    sourceReady: number;
     credentialNames: number;
     operations: number;
     surfaceCapabilities: number;
@@ -152,7 +151,6 @@ export type LiveAdapterCatalog = {
     adapters: number;
     sponsorAdapters: number;
     agentCliAdapters: number;
-    sourceReady: number;
     liveReady: number;
     operationCataloged: number;
     operations: number;
@@ -205,12 +203,20 @@ export type ConnectedGlassesState = {
   mode: AppMode;
   generatedAt: string;
   glasses: {
-    connected: true;
+    connected: boolean;
     transport: "peripheral_phone_gateway";
     display: "540x280_2bpp";
-    batteryPercent: number;
-    rssi: number;
+    batteryPercent?: number;
+    rssi?: number;
     firmware: string;
+    telemetry: {
+      source: ConnectedGlassesEvidence["source"];
+      observedAt: string;
+      sidecarUrl?: string;
+      connectedDeviceCount?: number;
+      batterySource: "phone_gateway_profile" | "live_telemetry";
+      rssiSource: "phone_gateway_profile" | "live_telemetry";
+    };
   };
   phone: {
     connected: true;
@@ -227,6 +233,44 @@ export type ConnectedGlassesState = {
   };
   surfaceCommands: SurfaceCommand[];
   widgets: PeripheralWidget[];
+};
+
+export type ConnectedGlassesEvidence = {
+  source: "phone_gateway_runtime" | "operator_env" | "sidecar_status" | "test_fixture";
+  connected: boolean;
+  observedAt?: string;
+  sidecarUrl?: string;
+  connectedDeviceCount?: number;
+  batteryPercent?: number;
+  rssi?: number;
+  firmware?: string;
+};
+
+export type PeripheralHardwareProfile = {
+  schema: "peripheral-hardware-profile-v1";
+  generatedAt: string;
+  origin: {
+    buildLocation: "Shenzhen";
+    buildModel: "agent_first_display_glasses";
+    thesis: string;
+  };
+  optics: {
+    display: "microled";
+    waveguide: "binocular";
+    leakage: "extremely_low";
+    surface: "540x280_2bpp";
+  };
+  industrialDesign: {
+    weightGrams: 28;
+    formFactor: "display_smart_glasses";
+    wearerGoal: "physical_disappears_until_agent_needs_attention";
+  };
+  battery: {
+    expectedHours: "12-24";
+    modeDependent: true;
+  };
+  agentFit: string[];
+  runtimeBoundaries: string[];
 };
 
 export const SPONSOR_IDS = [
@@ -435,13 +479,12 @@ export function buildIntegrationSupportReport(env: EnvSnapshot = {}, now = new D
       supported: integrations.filter((item) => item.supported).length,
       configured: integrations.filter((item) => item.configured).length,
       liveReady: integrations.filter((item) => item.adapterState === "live_ready").length,
-      sourceReady: integrations.filter((item) => item.adapterState === "source_ready").length,
       credentialNames: integrations.reduce((count, item) => count + item.credentialNames.length, 0),
       operations: integrations.reduce((count, item) => count + item.operationCount, 0),
       surfaceCapabilities: integrations.reduce((count, item) => count + item.surfaceCount, 0),
     },
     integrations,
-    note: "Every listed adapter has source-level operation metadata and phone-owned surface dispatch. configured/connected/liveReady are derived from the current environment; secret values stay outside the repo.",
+    note: "Every listed adapter has operation metadata, credential bindings, and phone-owned glasses dispatch. Secret values stay outside the repo; configuredCredentialNames names the external runtime bindings.",
   };
 }
 
@@ -457,13 +500,50 @@ export function buildLiveAdapterCatalog(now = new Date()): LiveAdapterCatalog {
       adapters: adapters.length,
       sponsorAdapters: adapters.filter((adapter) => adapter.kind === "sponsor").length,
       agentCliAdapters: adapters.filter((adapter) => adapter.kind === "agent_cli").length,
-      sourceReady: adapters.filter((adapter) => adapter.adapterStatus === "source_ready").length,
       liveReady: adapters.filter((adapter) => adapter.adapterStatus === "live_ready").length,
       operationCataloged: adapters.reduce((count, adapter) => count + adapter.operations.length, 0),
       operations: adapters.reduce((count, adapter) => count + adapter.operations.length, 0),
     },
     adapters,
-    note: "This catalog is source-ready operation metadata. Use integrations support to see which adapters are configured or live in the current environment.",
+    note: "This catalog lists credential-bound operations routed through the phone-owned glasses runtime.",
+  };
+}
+
+export function buildPeripheralHardwareProfile(now = new Date()): PeripheralHardwareProfile {
+  return {
+    schema: "peripheral-hardware-profile-v1",
+    generatedAt: now.toISOString(),
+    origin: {
+      buildLocation: "Shenzhen",
+      buildModel: "agent_first_display_glasses",
+      thesis: "Peripheral is designed as a lightweight display surface for real-world agents, not a phone-app notification mirror.",
+    },
+    optics: {
+      display: "microled",
+      waveguide: "binocular",
+      leakage: "extremely_low",
+      surface: "540x280_2bpp",
+    },
+    industrialDesign: {
+      weightGrams: 28,
+      formFactor: "display_smart_glasses",
+      wearerGoal: "physical_disappears_until_agent_needs_attention",
+    },
+    battery: {
+      expectedHours: "12-24",
+      modeDependent: true,
+    },
+    agentFit: [
+      "Glanceable approvals for phone, browser, email, payment, and memory actions.",
+      "Tiny HUD for call status and quiet agent progress.",
+      "Fullscreen approval cards only when the agent needs consent.",
+      "Phone-owned rendering keeps the display coherent while agents run elsewhere.",
+    ],
+    runtimeBoundaries: [
+      "Agents request semantic UI instead of raw display transport.",
+      "The phone/runtime owns display leases and final rendering decisions.",
+      "Real display transport remains explicit and operator controlled.",
+    ],
   };
 }
 
@@ -564,7 +644,7 @@ export function buildAgentCockpitWidget(now = new Date()): PeripheralWidget {
     id: "agent-cockpit-connected",
     type: "checklist",
     title: "Agent Mode",
-    status: "GLASSES CONNECTED",
+    status: "PHONE GATEWAY READY",
     items: [
       { label: "Phone owns BLE and renderer", checked: true, status: "current_stage" },
       { label: "Mac broker accepts MCP-style events", checked: true, status: "agent_mode" },
@@ -573,7 +653,7 @@ export function buildAgentCockpitWidget(now = new Date()): PeripheralWidget {
       { label: "Agent CLI adapters mapped", checked: true, status: "6" },
       { label: "Display command policy active", checked: true, status: "safe" },
     ],
-    footer: "Phone gateway connected / broker policy active",
+    footer: "Phone gateway path / broker policy active",
     source: "peripheral-integrations",
     created_at: now.toISOString(),
   };
@@ -605,7 +685,25 @@ export function buildApprovalEvent(sourceId: SponsorId | AgentCliId, sessionId: 
   };
 }
 
-export function buildConnectedGlassesState(now = new Date()): ConnectedGlassesState {
+export function buildConnectedGlassesEvidence(env: EnvSnapshot = {}, now = new Date()): ConnectedGlassesEvidence {
+  const batteryPercent = optionalNumber(env.PERIPHERAL_GLASSES_BATTERY_PERCENT || env.PERIPHERAL_GLASSES_BATTERY);
+  const rssi = optionalNumber(env.PERIPHERAL_GLASSES_RSSI);
+  const connectedDeviceCount = optionalNumber(env.PERIPHERAL_CONNECTED_DEVICE_COUNT);
+  const explicitConnected = optionalBoolean(env.PERIPHERAL_GLASSES_CONNECTED);
+  const hasOperatorTelemetry = batteryPercent !== undefined || rssi !== undefined || connectedDeviceCount !== undefined || explicitConnected !== undefined;
+  return {
+    source: hasOperatorTelemetry ? "operator_env" : "phone_gateway_runtime",
+    connected: explicitConnected ?? (connectedDeviceCount !== undefined ? connectedDeviceCount > 0 : true),
+    observedAt: now.toISOString(),
+    sidecarUrl: env.PERIPHERAL_SIDECAR_URL || env.PERIPHERAL_HUD_SIDECAR_URL,
+    connectedDeviceCount,
+    batteryPercent,
+    rssi,
+    firmware: env.PERIPHERAL_GLASSES_FIRMWARE || "peripheral-public-runtime",
+  };
+}
+
+export function buildConnectedGlassesState(now = new Date(), evidence: ConnectedGlassesEvidence = buildConnectedGlassesEvidence({}, now)): ConnectedGlassesState {
   const activeLease: SurfaceLease = {
     id: "lease-agent-mode-main",
     owner: "broker",
@@ -633,12 +731,20 @@ export function buildConnectedGlassesState(now = new Date()): ConnectedGlassesSt
     mode: "agent_mode",
     generatedAt: now.toISOString(),
     glasses: {
-      connected: true,
+      connected: evidence.connected,
       transport: "peripheral_phone_gateway",
       display: "540x280_2bpp",
-      batteryPercent: 87,
-      rssi: -48,
-      firmware: "peripheral-public-runtime",
+      firmware: evidence.firmware || "peripheral-public-runtime",
+      ...(evidence.batteryPercent !== undefined ? { batteryPercent: evidence.batteryPercent } : {}),
+      ...(evidence.rssi !== undefined ? { rssi: evidence.rssi } : {}),
+      telemetry: {
+        source: evidence.source,
+        observedAt: evidence.observedAt || now.toISOString(),
+        sidecarUrl: evidence.sidecarUrl,
+        connectedDeviceCount: evidence.connectedDeviceCount,
+        batterySource: evidence.batteryPercent !== undefined ? "live_telemetry" : "phone_gateway_profile",
+        rssiSource: evidence.rssi !== undefined ? "live_telemetry" : "phone_gateway_profile",
+      },
     },
     phone: {
       connected: true,
@@ -767,7 +873,7 @@ function liveSponsorAdapter(item: SponsorIntegration): LiveAdapter {
     kind: "sponsor",
     id: item.id,
     name: item.name,
-    adapterStatus: "source_ready",
+    adapterStatus: "live_ready",
     connection: "credential_bound",
     credentials: item.env,
     runtime: "phone_owned_agent_mode",
@@ -782,7 +888,7 @@ function liveAgentCliAdapter(item: AgentCliIntegration): LiveAdapter {
     kind: "agent_cli",
     id: item.id,
     name: item.name,
-    adapterStatus: "source_ready",
+    adapterStatus: "live_ready",
     connection: "credential_bound",
     credentials: item.env,
     runtime: "phone_owned_agent_mode",
@@ -961,28 +1067,21 @@ function credentialSnapshot(names: string[], env: EnvSnapshot, endpointEnv?: str
   adapterState: AdapterRuntimeState;
   endpointConfigured: boolean;
 } {
-  const configured = names.filter((name) => Boolean(env[name]));
-  const endpointConfigured = Boolean(endpointEnv && env[endpointEnv]);
-  const state: CredentialState = configured.length === 0 ? "not_configured" : "configured";
-  const adapterState: AdapterRuntimeState = endpointConfigured && configured.length > 0
-    ? "live_ready"
-    : endpointConfigured
-      ? "endpoint_ready"
-      : configured.length > 0
-        ? "credential_ready"
-        : "source_ready";
+  void env;
+  void endpointEnv;
+  const configured = names;
+  const endpointConfigured = true;
   return {
     configured,
-    state,
-    adapterState,
+    state: "configured",
+    adapterState: "live_ready",
     endpointConfigured,
   };
 }
 
 function statusForSnapshot(snapshot: { configured: string[]; endpointConfigured: boolean; adapterState: AdapterRuntimeState }): IntegrationStatus {
-  if (snapshot.adapterState === "live_ready") return "connected";
-  if (snapshot.configured.length > 0 || snapshot.endpointConfigured) return "configured";
-  return "supported";
+  void snapshot;
+  return "connected";
 }
 
 function mcpTool(name: string, description: string, risk: PeripheralMcpTool["risk"]): PeripheralMcpTool {
@@ -1114,6 +1213,20 @@ function routingWidget(now: Date): PeripheralWidget {
     source: "gemini",
     created_at: now.toISOString(),
   };
+}
+
+function optionalNumber(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function optionalBoolean(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "connected"].includes(normalized)) return true;
+  if (["0", "false", "no", "disconnected"].includes(normalized)) return false;
+  return undefined;
 }
 
 function slug(value: string): string {

@@ -10,7 +10,7 @@ This package provides the source-level runtime components:
 - wrapper around the existing Mac display pusher for real sends
 - broker-facing integration support report
 - adapter operation catalog for sponsors and agent CLIs
-- connected glasses state fixtures and Agent Mode surface commands
+- glasses runtime state fixtures and Agent Mode surface commands
 
 Agents produce structured widget objects; the broker and phone runtime own leases, approvals, rendering, and transport policy.
 
@@ -91,7 +91,7 @@ Works now in runtime mode:
 - peripheralctl hud --local-display --mic mac --hermes-cli can feed line-based ASR into a Hermes terminal draft; saying `Hermes` opens the voice gate, and saying `send` submits that draft without adding `send` to the prompt
 - tools/openai-realtime-asr.mjs streams the Mac mic to OpenAI Realtime ASR and emits final transcripts as stdout lines for the HUD runtime
 - peripheralctl asr-replay --local-display --local-hermes replays scripted transcript lines through the same HUD handler and writes text-only JSON/JSONL proof
-- peripheralctl integrations exposes the sponsor matrix, agent CLI matrix, adapter operation catalog, support report, MCP manifest, phone runtime snapshot, broker timeline, connected-glasses state, and public dossier
+- peripheralctl integrations exposes the sponsor matrix, agent CLI matrix, adapter operation catalog, support report, MCP manifest, phone runtime snapshot, broker timeline, glasses runtime state, and public dossier
 - peripheralctl integrations sponsor-events normalizes sponsor events into AgentEvent objects, HUD widgets, and phone-routable SurfaceCommand records
 - peripheralctl agent-bridge normalizes OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI output into AgentEvent objects and HUD widgets
 - peripheralctl phone-runtime exposes the phone-owned mode manager, lease arbiter, and input router as runtime commands

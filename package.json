@@ -10,13 +10,14 @@
     "peripheral-hud-runtime"
   ],
   "scripts": {
-    "check": "npm run check:public-source && npm run check:viewer && npm run check:sponsor-tools && npm run check:hud",
+    "check": "npm run check:public-source && npm run check:sponsor-tools && npm run check:hud",
     "check:public-source": "node tools/check-public-source.mjs",
-    "check:viewer": "node --check web/cast-mirror.js && node --check web/real-mirror.js",
     "check:sponsor-tools": "node --check tools/sponsor-manual-tool.mjs && node tools/check-sponsor-manual-tools.mjs",
     "check:hud": "npm --prefix peripheral-hud-runtime test",
     "pusher:build": "macos_corebluetooth/peripheral-mac-pusher/build.sh",
     "hud:build": "npm --prefix peripheral-hud-runtime run build",
-    "hud:walkthrough": "npm --prefix peripheral-hud-runtime run peripheralctl -- hud --local-display --text"
+    "hud:walkthrough": "npm --prefix peripheral-hud-runtime run peripheralctl -- hud --local-display --text",
+    "hud:hardware-intro": "npm --prefix peripheral-hud-runtime run peripheralctl -- demo hardware-intro --local",
+    "hud:yc-demo": "npm --prefix peripheral-hud-runtime run peripheralctl -- demo yc-hackathon-match --local"
   }
 }

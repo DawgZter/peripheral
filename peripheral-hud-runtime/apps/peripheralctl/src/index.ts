@@ -39,8 +39,10 @@ import {
   buildAgentModeDossier,
   buildBrokerTimeline,
   buildIntegrationSummary,
+  buildConnectedGlassesEvidence,
   buildConnectedGlassesState,
   buildLiveAdapterCatalog,
+  buildPeripheralHardwareProfile,
   buildPeripheralMcpManifest,
   buildIntegrationSupportReport,
   buildSponsorMatrixWidget,
@@ -325,7 +327,9 @@ async function commandIntegrations(cli: ParsedCli, projectRoot: string): Promise
     case "agent-clis":
       return { ok: true, agentClis: buildIntegrationSummary().agentClis };
     case "connected-state":
-      return { ok: true, connectedState: buildConnectedGlassesState(now) };
+      return { ok: true, connectedState: buildConnectedGlassesState(now, buildConnectedGlassesEvidence(process.env, now)) };
+    case "hardware-profile":
+      return { ok: true, hardware: buildPeripheralHardwareProfile(now) };
     case "support":
       return { ok: true, support: buildIntegrationSupportReport(process.env, now) };
     case "live-adapters":
@@ -353,7 +357,7 @@ async function commandIntegrations(cli: ParsedCli, projectRoot: string): Promise
       return { ok: true, view, frames: frameDir, widgets: widgets.map((widget) => widget.id), artifacts };
     }
     default:
-      throw new Error("Unknown integrations view. Use one of: summary, sponsors, agent-clis, connected-state, support, live-adapters, mcp-manifest, broker-timeline, sponsor-events, phone-runtime, dossier, widgets");
+      throw new Error("Unknown integrations view. Use one of: summary, sponsors, agent-clis, connected-state, hardware-profile, support, live-adapters, mcp-manifest, broker-timeline, sponsor-events, phone-runtime, dossier, widgets");
   }
 }
 
@@ -885,7 +889,8 @@ function dinnerStepName(id: string, kind: string): string {
 }
 
 function dinnerApprovalDecision(projectRoot: string, cli: ParsedCli, now: Date): DinnerApprovalDecision {
-  const decision = buildApprovalDecision(cli, now);
+  const explicit = typeof cli.options.choice === "string" || Boolean(cli.options["auto-approve"]);
+  const decision = explicit ? buildApprovalDecision(cli, now) : readApprovalDecision(projectRoot, "booking-approval-1") || buildApprovalDecision(cli, now);
   writeApprovalDecision(projectRoot, decision);
   return { ...decision, choice: decision.decision };
 }
@@ -1388,6 +1393,7 @@ function capabilities(): unknown {
       "integrations sponsors",
       "integrations agent-clis",
       "integrations connected-state",
+      "integrations hardware-profile",
       "integrations support",
       "integrations live-adapters",
       "integrations mcp-manifest",
@@ -1618,6 +1624,7 @@ Usage:
   peripheralctl integrations sponsors
   peripheralctl integrations agent-clis
   peripheralctl integrations connected-state
+  peripheralctl integrations hardware-profile
   peripheralctl integrations support
   peripheralctl integrations live-adapters
   peripheralctl integrations mcp-manifest

@@ -1,18 +1,21 @@
 {
   "schema": "peripheral-agent-mode-walkthrough-v1",
-  "name": "Connected Agent Mode walkthrough",
+  "name": "Agent Mode runtime walkthrough",
   "mode": "agent",
   "runtime": "phone_owned_glasses_surface",
   "generated_at": "2026-05-17T17:40:00-07:00",
   "connected_state": {
     "schema": "peripheral-connected-state-v1",
     "glasses": {
-      "connected": true,
+      "connected": false,
       "transport": "peripheral_phone_gateway",
       "display": "540x280_2bpp",
-      "battery_percent": 86,
-      "rssi": -47,
-      "firmware": "peripheral.connected.0"
+      "firmware": "peripheral-public-runtime",
+      "telemetry": {
+        "source": "phone_gateway_runtime",
+        "battery_source": "phone_gateway_profile",
+        "rssi_source": "phone_gateway_profile"
+      }
     },
     "phone": {
       "connected": true,
@@ -34,7 +37,7 @@
   "walkthrough": [
     {
       "id": "step-01-connected",
-      "speaker_note": "Start with connected glasses, the phone surface owner, and Agent Mode already active.",
+      "speaker_note": "Start with the phone gateway path, the phone surface owner, and Agent Mode already active.",
       "surface": "pinned",
       "fixture": "fixtures/ui/agent_mode_connected_status.json"
     },
@@ -58,7 +61,7 @@
     }
   ],
   "operator_lines": [
-    "Glasses are connected through the Peripheral phone gateway.",
+    "Glasses UI is routed through the Peripheral phone gateway path with phone-owned runtime telemetry.",
     "AgentPhone owns the call, Browser Use owns the page state, Stripe is waiting for approval.",
     "Codex CLI is visible as terminal fallback, but the broker still owns the approval gate."
   ],

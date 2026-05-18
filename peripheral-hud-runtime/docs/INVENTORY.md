@@ -1,6 +1,6 @@
 # Inventory
 
-This inventory is scoped to the v0 Peripheral HUD runtime and live display files included in this monorepo.
+This inventory is scoped to the v0 Peripheral HUD runtime and live display files included in this monorepo. Reviewers should treat the glasses runtime, generated frame artifacts, and Mac display helper as the product path.
 
 ## Included Transport Pieces
 
@@ -8,7 +8,6 @@ This inventory is scoped to the v0 Peripheral HUD runtime and live display files
 | --- | --- | --- |
 | Mac display helper | `macos_corebluetooth/peripheral-mac-pusher/` | macOS scan/connect/write path, notification handling, stdin control tokens, and ACK timing logs. |
 | Frame wrapper | `macos_corebluetooth/peripheral-mac-pusher/Sources/PeripheralFrame/PeripheralFrame.swift` | `bf02` frame shape, command body layout, and CRC16-CCITT. |
-| Live display view | `web/cast-mirror.*`, `web/real-mirror.*` | Sidecar-backed observation pages used to inspect display updates. |
 | HUD runtime | `peripheral-hud-runtime/` | Semantic widgets, deterministic renderer, image driver, CLI, runtime driver, logs, and docs. |
 
 ## Current Push Path

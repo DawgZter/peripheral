@@ -1,6 +1,6 @@
 # Development
 
-This repo is split into a browser-side display viewer, a TypeScript HUD runtime, and a small macOS display helper.
+This repo is split into a TypeScript glasses HUD runtime and a small macOS display helper. The product path is the glasses runtime: semantic agent events become rendered 540x280 frames, audit logs, and gated transport commands.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ npm --prefix peripheral-hud-runtime ci
 npm run check
 ```
 
-That command runs the public-source guard, browser JavaScript syntax checks, compiles the HUD runtime, and runs renderer/runtime smoke tests.
+That command runs the public-source guard, validates sponsor tooling, compiles the HUD runtime, and runs renderer/runtime smoke tests.
 
 For glasses runtime inspection and adapter coverage:
 
@@ -34,7 +34,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge widget --a
 npm --prefix peripheral-hud-runtime run peripheralctl -- hud --real --mic mac --hermes-cli --real-hermes
 ```
 
-Those commands exercise sponsor descriptors, agent CLI descriptors, connected-glasses state, phone runtime policy, normalized CLI events, and rendered Agent Mode widgets with hardware writes gated behind explicit operator commands.
+Those commands exercise sponsor descriptors, agent CLI descriptors, glasses runtime state, phone runtime policy, normalized CLI events, and rendered Agent Mode widgets with hardware writes gated behind explicit operator commands.
 
 ## Optional macOS Helper Build
 

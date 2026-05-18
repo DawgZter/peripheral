@@ -376,7 +376,11 @@ function drawAvatar(r: Raster, widget: PeripheralWidget, x: number, y: number, w
   let pattern = "diagonal";
   if (widget.left_image && assetRoot) {
     try {
-      const asset = JSON.parse(readFileSync(resolve(assetRoot, widget.left_image), "utf8")) as { initials?: string; pattern?: string };
+      const asset = JSON.parse(readFileSync(resolve(assetRoot, widget.left_image), "utf8")) as { initials?: string; pattern?: string; kind?: string; rows?: string[] };
+      if (asset.kind === "bitmap_avatar" && Array.isArray(asset.rows)) {
+        drawBitmapAvatar(r, asset.rows, x + 6, y + 6, w - 12, h - 12);
+        return;
+      }
       initials = asset.initials || initials;
       pattern = asset.pattern || pattern;
     } catch {
@@ -390,6 +394,29 @@ function drawAvatar(r: Raster, widget: PeripheralWidget, x: number, y: number, w
     }
   }
   drawCentered(r, initials, x, y + Math.round(h / 2) - 18, w, 5, WHITE);
+}
+
+function drawBitmapAvatar(r: Raster, rows: string[], x: number, y: number, w: number, h: number): void {
+  const height = Math.max(1, rows.length);
+  const width = Math.max(1, ...rows.map((row) => row.length));
+  const valueFor = (char: string): number => {
+    if (char === "3") return WHITE;
+    if (char === "2") return MID;
+    if (char === "1") return DIM;
+    return BLACK;
+  };
+  for (let rowIndex = 0; rowIndex < height; rowIndex += 1) {
+    const row = rows[rowIndex] || "";
+    const y0 = y + Math.floor((rowIndex * h) / height);
+    const y1 = y + Math.floor(((rowIndex + 1) * h) / height);
+    for (let columnIndex = 0; columnIndex < width; columnIndex += 1) {
+      const value = valueFor(row[columnIndex] || "0");
+      if (value === BLACK) continue;
+      const x0 = x + Math.floor((columnIndex * w) / width);
+      const x1 = x + Math.floor(((columnIndex + 1) * w) / width);
+      r.rect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0), value);
+    }
+  }
 }
 
 function drawIcon(r: Raster, icon: string, x: number, y: number, size: number): void {

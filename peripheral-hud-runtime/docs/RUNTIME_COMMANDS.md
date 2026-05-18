@@ -67,7 +67,7 @@ Agent cockpit approval mini-flow:
 npm run peripheralctl -- walkthrough agent --local
 ```
 
-Connected Agent Mode walkthrough:
+Agent Mode runtime walkthrough:
 
 ```sh
 npm run peripheralctl -- render-json fixtures/ui/agent_mode_connected_status.json --out out/frames/agent-mode-connected-status.png
@@ -76,7 +76,7 @@ npm run peripheralctl -- render-json fixtures/ui/agent_mode_cli_status.json --ou
 npm run peripheralctl -- render-json fixtures/ui/agent_mode_approval_gate.json --out out/frames/agent-mode-approval-gate.png
 ```
 
-See `docs/AGENT_MODE_RUNBOOK.md` for the connected-state storyboard.
+See `docs/AGENT_MODE_RUNBOOK.md` for the Agent Mode runtime storyboard.
 
 Sponsor and agent CLI matrix:
 

@@ -152,8 +152,8 @@ export async function runHudRuntime(options: HudRuntimeOptions): Promise<Record<
       if (micSource) {
         transcriptSources.push(micSource);
       } else {
-        await runtime.log({ event: "input.mic_unavailable", note: "No Mac mic STT command is configured or available; text fallback remains active." });
-        if (process.stdin.isTTY) process.stdout.write("Mac mic STT is not configured or available. Text fallback is active.\n");
+        await runtime.log({ event: "input.mic_unavailable", note: "Mac mic STT is unavailable in this shell; text input remains active." });
+        if (process.stdin.isTTY) process.stdout.write("Mac mic STT is unavailable in this shell. Text input is active.\n");
       }
     }
     if (options.asrHttpPort !== undefined) {

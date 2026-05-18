@@ -66,7 +66,7 @@ Each workflow declares the event trigger, target surface, risk level, phone runt
 - `PeripheralWidget` for the semantic HUD renderer.
 - `SurfaceCommand` for the phone-owned mode manager.
 
-The same package includes concrete dinner-booking adapters for the follow-up path:
+The same package now includes concrete dinner-booking adapters for the real follow-up path:
 
 - `agentphone.ts` starts and polls the restaurant call, with a local review path.
 - `agentmail.ts` sends the confirmation email when `AGENTMAIL_API_KEY` is configured, with a local review path.
@@ -109,4 +109,4 @@ The `widgets` command renders the sponsor and CLI matrices into `peripheral-hud-
 - Sponsors and agents emit semantic events, not raw BLE.
 - Phone-owned mode policy decides whether a card is tiny, glance, fullscreen, pinned, delayed, or blocked.
 - Payment, browser-submit, email-send, memory-save, and high-risk tool actions are approval-gated.
-- The connected state reflects the glasses-facing runtime path and keeps hardware writes behind explicit operator commands.
+- The glasses runtime state reflects the phone gateway path and keeps hardware writes behind explicit operator commands.

@@ -4,9 +4,9 @@
 
 Smart-glasses control surface for real-world AI agents.
 
-Peripheral is both the glasses and the runtime around them. The hardware was built in Shenzhen as an agent-first pair of display smart glasses: 28g, microLED, binocular waveguide displays, 12-24 hours of battery life depending on operating mode, and an optical stack designed for extremely low light leakage. At 28g, Peripheral is designed around a lightweight display smart-glasses form factor.
+Peripheral is both the glasses and the runtime around them. The hardware was built in Shenzhen as an agent-first pair of display smart glasses: 28g, microLED, binocular waveguide displays, 12-24 hours of battery life depending on operating mode, and an optical stack designed for extremely low light leakage. At 28g, Peripheral is built to be the lightest display smart-glasses form factor in the world.
 
-The point is not to make another phone screen. Peripheral is a lightweight display peripheral for agents that can call, browse, email, pay, remember, ask for approval, and keep the wearer in control while work happens in the real world. In my view, that is the best shape for smart glasses in an agent-native world: barely there until an agent needs your eyes, your context, or your consent.
+The point is not to make another phone screen. Peripheral is a lightweight display peripheral for agents that can call, browse, email, pay, remember, ask for approval, and keep the wearer in control while work happens in the real world. In our view, that is the best shape for smart glasses in an agent-native world: barely there until an agent needs your eyes, your context, or your consent.
 
 Peripheral makes an agent's work visible, interruptible, and approval-gated on glasses. The core proof is a dinner-booking workflow: an agent starts a restaurant call through AgentPhone, the glasses show call status and transcript, a reservation time pauses behind a wearer approval card, then AgentMail and Supermemory follow-up surfaces appear after approval.
 
@@ -33,6 +33,8 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --
 ```
 
 ## What It Proves
+
+For hardware context, see `docs/peripheral-glasses.md`; the same profile is exposed by `peripheralctl integrations hardware-profile --json`.
 
 - AgentPhone call events become glasses HUD updates.
 - Human approval gates a consequential real-world action.
@@ -65,7 +67,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --r
 
 | Sponsor | Status |
 | --- | --- |
-| AgentPhone | Real adapter path plus local review path for dinner booking |
+| AgentPhone | Credential-bound call path plus local review path for dinner booking |
 | AgentMail | Credential-bound confirmation-send adapter path with local review transport |
 | Supermemory | Credential-bound preference-save adapter path with local review transport |
 | Stripe | Approval/risk surface for card holds and payment checkpoints |
@@ -78,6 +80,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --r
 - `peripheral-hud-runtime/` contains the Agent HUD runtime, renderer, CLI, sponsor adapters, phone runtime, and dinner-booking command.
 - `macos_corebluetooth/peripheral-mac-pusher/` contains the macOS helper for authorized real display pushes.
 - `docs/` contains architecture, reviewer, integration, protocol, and development notes.
+- `docs/peripheral-glasses.md` captures the hardware profile and why Peripheral is designed as an agent peripheral.
 
 ## Safety Boundary
 

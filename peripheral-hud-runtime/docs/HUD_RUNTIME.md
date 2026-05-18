@@ -135,7 +135,7 @@ npm run peripheralctl -- hud --real --mic mac --hermes-cli --real-hermes --asr-h
 
 When the glasses are paired, the wake flow keeps the display blank until `open Hermes` is heard. Once the CLI is open, voice transcripts are ignored until a line begins with `Hermes`; that line opens an `ASR draft` on the glasses. Say `send` to write the draft into `hermes chat --source peripheral-hud`; the word `send` is not included in the prompt, and the gate resets after sending. Say `close Hermes` to close the CLI and blank the display. Use --asr-silence-ms 900 to make stable partials emit faster, --asr-partials to log partial recognition to stderr/JSONL, or --asr-duration-seconds 30 for bounded tests.
 
-If local mic permission is awkward from the Codex-launched helper, use the browser fallback only as a transport bridge: start with --asr-http-port 8792, open http://127.0.0.1:8792/, click Start, and allow microphone permission in the browser. Final browser speech transcripts update the same queued Hermes/glasses draft, and `send` submits it, but this is not the preferred GPT Realtime ASR path.
+If local mic permission is awkward from the Codex-launched helper, use the HTTP transcript bridge only as an input transport: start with `--asr-http-port 8792` and post final transcripts into the runtime. Those transcripts update the same queued Hermes/glasses draft, and `send` submits it, but the preferred path is GPT Realtime ASR feeding the glasses runtime directly.
 
 No touch input is required for v0.
 

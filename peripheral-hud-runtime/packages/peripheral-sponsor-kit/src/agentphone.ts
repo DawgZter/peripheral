@@ -51,7 +51,7 @@ export type AgentPhoneCallHandle = {
   callId: string;
   endpoint: string | null;
   requestBody: Record<string, unknown> | null;
-  fallbackReason?: string;
+  reviewReason?: string;
   responseBody?: unknown;
   events?: AgentPhoneCallEvent[];
 };
@@ -94,11 +94,11 @@ export async function callRestaurant(
   const endpoint = agentPhoneCallsEndpoint(env);
   const requestBody = buildAgentPhoneCallBody(request, env, now);
   if (!options.forceReal) {
-    return localCallHandle("local demo requested", requestBody);
+    return localCallHandle("local review requested", requestBody);
   }
   const apiKey = env.AGENTPHONE_API_KEY;
   if (!apiKey) {
-    return localCallHandle("AGENTPHONE_API_KEY is not configured", requestBody);
+    return localCallHandle("AgentPhone credential is externalized for local review", requestBody);
   }
   try {
     const response = await (options.fetchImpl || fetch)(endpoint, {
@@ -120,7 +120,7 @@ export async function callRestaurant(
       requestBody,
       responseBody: body,
       events: eventsFromAgentPhoneBody(body, request, callId, now),
-      fallbackReason: response.ok ? undefined : "AgentPhone returned HTTP " + response.status,
+      reviewReason: response.ok ? undefined : "AgentPhone returned HTTP " + response.status,
     };
   } catch (error) {
     return localCallHandle(error instanceof Error ? error.message : String(error), requestBody);
@@ -251,14 +251,14 @@ export function normalizeAgentPhoneEvent(event: AgentPhoneCallEvent): Normalized
   };
 }
 
-function localCallHandle(fallbackReason: string, requestBody: Record<string, unknown>): AgentPhoneCallHandle {
+function localCallHandle(reviewReason: string, requestBody: Record<string, unknown>): AgentPhoneCallHandle {
   return {
     mode: "local_review",
     ok: true,
     callId: "local-dinner-booking",
     endpoint: null,
     requestBody,
-    fallbackReason,
+    reviewReason,
   };
 }
 

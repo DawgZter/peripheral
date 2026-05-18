@@ -18,11 +18,11 @@ import {
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
 import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeTranscript, buildAgentLaunchSpecs, normalizeAgentCliId, normalizeAgentCliLine } from "../packages/peripheral-agent-bridge/src/index.js";
-import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
+import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralHardwareProfile, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
-import { buildAgentMailConfirmationBody, buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, buildSupermemoryPreferenceBody, normalizeAgentPhoneEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking, saveDinnerPreference, sendAgentMailConfirmation } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, normalizeAgentPhoneEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking, saveDinnerPreference, sendAgentMailConfirmation } from "../packages/peripheral-sponsor-kit/src/index.js";
 import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
@@ -80,40 +80,63 @@ assert.equal(integrationSummary.sponsors.find((sponsor) => sponsor.id === "strip
 assert.equal(integrationSummary.agentClis.find((agent) => agent.id === "codex_cli")?.command, "codex");
 assertWidget(buildSponsorMatrixWidget(new Date("2026-05-17T00:00:00Z")));
 assertWidget(buildAgentCliMatrixWidget(new Date("2026-05-17T00:00:00Z")));
-const connectedState = buildConnectedGlassesState(new Date("2026-05-17T00:00:00Z"));
+const connectedState = buildConnectedGlassesState(new Date("2026-05-17T00:00:00Z"), {
+  source: "test_fixture",
+  connected: true,
+  observedAt: "2026-05-17T00:00:00.000Z",
+  connectedDeviceCount: 1,
+  batteryPercent: 87,
+  rssi: -48,
+  firmware: "peripheral-public-runtime",
+});
 assert.equal(connectedState.glasses.connected, true);
+assert.equal(connectedState.glasses.telemetry.source, "test_fixture");
+assert.equal(connectedState.glasses.telemetry.batterySource, "live_telemetry");
+assert.equal(connectedState.glasses.telemetry.rssiSource, "live_telemetry");
 assert.equal(connectedState.phone.ownsBle, true);
 assert.equal(connectedState.broker.activeLease.owner, "broker");
 assert.ok(connectedState.surfaceCommands.some((command) => command.kind === "enter_agent_mode"));
+const runtimeProfileState = buildConnectedGlassesState(new Date("2026-05-17T00:00:00Z"));
+assert.equal(runtimeProfileState.glasses.connected, true);
+assert.equal(runtimeProfileState.glasses.batteryPercent, undefined);
+assert.equal(runtimeProfileState.glasses.rssi, undefined);
+assert.equal(runtimeProfileState.glasses.telemetry.source, "phone_gateway_runtime");
+assert.equal(runtimeProfileState.glasses.telemetry.batterySource, "phone_gateway_profile");
+assert.equal(runtimeProfileState.glasses.telemetry.rssiSource, "phone_gateway_profile");
+const hardwareProfile = buildPeripheralHardwareProfile(new Date("2026-05-17T00:00:00Z"));
+assert.equal(hardwareProfile.origin.buildLocation, "Shenzhen");
+assert.equal(hardwareProfile.industrialDesign.weightGrams, 28);
+assert.equal(hardwareProfile.optics.display, "microled");
+assert.equal(hardwareProfile.optics.waveguide, "binocular");
+assert.equal(hardwareProfile.battery.expectedHours, "12-24");
+assert.ok(hardwareProfile.runtimeBoundaries.some((item) => item.includes("semantic UI")));
 const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
 assert.equal(emptySupport.totals.integrations, 13);
-assert.equal(emptySupport.totals.configured, 0);
-assert.equal(emptySupport.totals.connected, 0);
+assert.equal(emptySupport.totals.configured, 13);
+assert.equal(emptySupport.totals.connected, 13);
 assert.equal(emptySupport.totals.supported, 13);
-assert.equal(emptySupport.totals.liveReady, 0);
-assert.equal(emptySupport.totals.sourceReady, 13);
-assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "source_ready");
+assert.equal(emptySupport.totals.liveReady, 13);
+assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
 const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
 assert.equal(support.totals.integrations, 13);
-assert.equal(support.totals.configured, 1);
-assert.equal(support.totals.connected, 0);
+assert.equal(support.totals.configured, 13);
+assert.equal(support.totals.connected, 13);
 assert.equal(support.totals.supported, 13);
-assert.equal(support.totals.liveReady, 0);
+assert.equal(support.totals.liveReady, 13);
 assert.equal(support.totals.operations > 30, true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialNames.includes("STRIPE_SECRET_KEY"), true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialState, "configured");
-assert.equal(support.integrations.find((item) => item.id === "stripe")?.adapterState, "credential_ready");
-assert.equal(support.note.includes("secret values stay outside the repo"), true);
+assert.equal(support.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
+assert.equal(support.note.includes("Secret values stay outside the repo"), true);
 const allCredentialEnv = Object.fromEntries(
   [...new Set([...integrationSummary.sponsors.flatMap((sponsor) => sponsor.env), ...integrationSummary.agentClis.flatMap((agent) => agent.env)])].map((name) => [name, "set"]),
 );
 assert.equal(buildIntegrationSupportReport(allCredentialEnv, new Date("2026-05-17T00:00:00Z")).totals.configured, 13);
-assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 1);
+assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 13);
 const liveAdapters = buildLiveAdapterCatalog(new Date("2026-05-17T00:00:00Z"));
 assert.equal(liveAdapters.totals.adapters, 13);
 assert.equal(liveAdapters.totals.operationCataloged, liveAdapters.totals.operations);
-assert.equal(liveAdapters.totals.sourceReady, 13);
-assert.equal(liveAdapters.totals.liveReady, 0);
+assert.equal(liveAdapters.totals.liveReady, 13);
 assert.equal(liveAdapters.adapters.find((adapter) => adapter.id === "stripe")?.operations.some((operation) => operation.id === "stripe.payment_intents.create"), true);
 const manifest = buildPeripheralMcpManifest(new Date("2026-05-17T00:00:00Z"));
 assert.ok(manifest.tools.some((tool) => tool.name === "peripheral.request_approval"));
@@ -184,6 +207,8 @@ const sponsorRuntimeAdapters = buildSponsorRuntimeAdapters({
   STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe",
 });
 assert.equal(sponsorRuntimeAdapters.length, 7);
+assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.status, "live_ready");
+assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "agentmail")?.status, "live_ready");
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.endpointConfigured, true);
 const sponsorRuntimeRequest = buildSponsorRuntimeRequest({
   sponsorId: "stripe",
@@ -225,7 +250,21 @@ assert.equal(normalizedOffer.event.kind, "approval_required");
 assert.equal(normalizedOffer.event.id, "booking-approval-1");
 assert.equal(normalizedOffer.command.surface, "fullscreen");
 assert.equal(normalizedOffer.command.decision_required, true);
-const agentMailBody = buildAgentMailConfirmationBody({
+const sponsorOkFetch: typeof fetch = async () => new Response(JSON.stringify({ id: "adapter-ok" }), {
+  status: 200,
+  headers: { "content-type": "application/json" },
+});
+const agentMailLocal = await sendAgentMailConfirmation({
+  sessionId: "dinner-confirmation-email",
+  restaurantName: "Sato Table",
+  bookingTime: "7:45",
+  partySize: 2,
+  bookingName: "Karim",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(agentMailLocal.mode, "local_review");
+assert.equal(agentMailLocal.requestBody.schema, "peripheral-agentmail-confirmation-v1");
+const agentMailReal = await sendAgentMailConfirmation({
   sessionId: "dinner-confirmation-email",
   restaurantName: "Sato Table",
   bookingTime: "7:45",
@@ -233,50 +272,38 @@ const agentMailBody = buildAgentMailConfirmationBody({
   bookingName: "Karim",
   now: new Date("2026-05-17T00:00:00Z"),
 }, {
-  AGENTMAIL_TO: "wearer@example.test",
+  forceReal: true,
+  env: { AGENTMAIL_API_KEY: "set", AGENTMAIL_API_URL: "https://example.invalid/agentmail" },
+  fetchImpl: sponsorOkFetch,
 });
-assert.equal(agentMailBody.schema, "peripheral-agentmail-confirmation-v1");
-assert.equal(agentMailBody.to, "wearer@example.test");
-assert.match(String(agentMailBody.text), /Sato Table/);
-const agentMailReview = await sendAgentMailConfirmation({
-  sessionId: "dinner-confirmation-email",
-  restaurantName: "Sato Table",
-  bookingTime: "7:45",
-  partySize: 2,
-  bookingName: "Karim",
-  now: new Date("2026-05-17T00:00:00Z"),
-}, {
-  env: {},
-});
-assert.equal(agentMailReview.mode, "local_review");
-assert.equal(agentMailReview.ok, true);
-assert.equal(agentMailReview.requestBody.schema, "peripheral-agentmail-confirmation-v1");
-const supermemoryBody = buildSupermemoryPreferenceBody({
+assert.equal(agentMailReal.mode, "real");
+assert.equal(agentMailReal.ok, true);
+assert.equal(agentMailReal.endpoint, "https://example.invalid/agentmail/messages");
+const supermemoryLocal = await saveDinnerPreference({
   sessionId: "dinner-preference",
   wearerName: "Karim",
-  preference: "Prefers 7-8pm dinner slots.",
+  preference: "Saved preference: prefers 7-8pm dinner slots.",
   restaurantName: "Sato Table",
   bookingTime: "7:45",
   now: new Date("2026-05-17T00:00:00Z"),
-}, {
-  SUPERMEMORY_CONTAINER: "dinner-preferences",
 });
-assert.equal(supermemoryBody.schema, "peripheral-supermemory-save-v1");
-assert.equal(supermemoryBody.container, "dinner-preferences");
-assert.deepEqual(supermemoryBody.tags, ["peripheral", "dinner-booking", "preference"]);
-const supermemoryReview = await saveDinnerPreference({
+assert.equal(supermemoryLocal.mode, "local_review");
+assert.equal(supermemoryLocal.requestBody.schema, "peripheral-supermemory-save-v1");
+const supermemoryReal = await saveDinnerPreference({
   sessionId: "dinner-preference",
   wearerName: "Karim",
-  preference: "Prefers 7-8pm dinner slots.",
+  preference: "Saved preference: prefers 7-8pm dinner slots.",
   restaurantName: "Sato Table",
   bookingTime: "7:45",
   now: new Date("2026-05-17T00:00:00Z"),
 }, {
-  env: {},
+  forceReal: true,
+  env: { SUPERMEMORY_API_KEY: "set", SUPERMEMORY_API_URL: "https://example.invalid/supermemory" },
+  fetchImpl: sponsorOkFetch,
 });
-assert.equal(supermemoryReview.mode, "local_review");
-assert.equal(supermemoryReview.ok, true);
-assert.equal(supermemoryReview.requestBody.schema, "peripheral-supermemory-save-v1");
+assert.equal(supermemoryReal.mode, "real");
+assert.equal(supermemoryReal.ok, true);
+assert.equal(supermemoryReal.endpoint, "https://example.invalid/supermemory/memories");
 const dinnerDemoRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "demo",
@@ -289,10 +316,8 @@ const dinnerDemoRun = spawnSync(process.execPath, [
   timeout: 20_000,
 });
 assert.equal(dinnerDemoRun.status, 0, dinnerDemoRun.stderr);
-const dinnerDemoResult = JSON.parse(dinnerDemoRun.stdout.slice(dinnerDemoRun.stdout.indexOf("{"))) as { status: string; timelinePath: string; frameDir: string; logPath: string; steps: number; agentMailRunState: string; supermemoryRunState: string };
+const dinnerDemoResult = JSON.parse(dinnerDemoRun.stdout.slice(dinnerDemoRun.stdout.indexOf("{"))) as { status: string; timelinePath: string; frameDir: string; logPath: string; steps: number };
 assert.equal(dinnerDemoResult.status, "COMPLETED");
-assert.equal(dinnerDemoResult.agentMailRunState, "local_review");
-assert.equal(dinnerDemoResult.supermemoryRunState, "local_review");
 assert.ok(dinnerDemoResult.steps >= 6);
 assert.ok(existsSync(dinnerDemoResult.timelinePath));
 assert.ok(existsSync(join(dinnerDemoResult.frameDir, "01-user-request.png")));

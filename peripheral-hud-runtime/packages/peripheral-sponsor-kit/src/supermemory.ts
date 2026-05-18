@@ -82,9 +82,10 @@ export function buildSupermemoryPreferenceBody(
   env: Record<string, string | undefined> = process.env,
 ): Record<string, unknown> {
   const now = input.now || new Date();
+  const content = cleanText(input.preference, 1000);
   return {
     schema: "peripheral-supermemory-save-v1",
-    content: cleanText(input.preference, 1000),
+    content,
     container: env.SUPERMEMORY_CONTAINER || env.SUPERMEMORY_CONTAINER_ID || undefined,
     tags: ["peripheral", "dinner-booking", "preference"],
     metadata: {
