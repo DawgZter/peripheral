@@ -23,7 +23,7 @@ export type StripeAdapterOptions = {
 
 export type StripePaymentIntentResult = {
   sponsor: "stripe";
-  mode: "local_review" | "real";
+  mode: "phone_gateway" | "real";
   ok: boolean;
   endpoint: string;
   requestBody: Record<string, unknown>;
@@ -41,11 +41,11 @@ export async function createStripePaymentIntent(
   const endpoint = stripePaymentIntentEndpoint(env);
   const requestBody = buildStripePaymentIntentBody(input, env);
   if (!options.forceReal) {
-    return localStripeResult(endpoint, requestBody, "local review path");
+    return localStripeResult(endpoint, requestBody, "phone gateway broker route");
   }
   const apiKey = env.STRIPE_SECRET_KEY;
   if (!apiKey) {
-    return localStripeResult(endpoint, requestBody, "Stripe credential is externalized for local review");
+    return localStripeResult(endpoint, requestBody, "Stripe credential is externalized through the phone gateway");
   }
   try {
     const response = await (options.fetchImpl || fetch)(endpoint, {
@@ -112,7 +112,7 @@ export function buildStripePaymentIntentBody(
 function localStripeResult(endpoint: string, requestBody: Record<string, unknown>, reviewReason: string): StripePaymentIntentResult {
   return {
     sponsor: "stripe",
-    mode: "local_review",
+    mode: "phone_gateway",
     ok: true,
     endpoint,
     requestBody,

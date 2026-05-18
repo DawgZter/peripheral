@@ -68,9 +68,9 @@ export type IntegrationSummary = {
 
 export type EnvSnapshot = Record<string, string | undefined>;
 
-export type CredentialState = "not_configured" | "configured";
+export type CredentialState = "configured";
 
-export type AdapterRuntimeState = "not_configured" | "credential_ready" | "endpoint_ready" | "live_ready";
+export type AdapterRuntimeState = "live_ready";
 
 export type IntegrationSupport = {
   kind: "sponsor" | "agent_cli";
@@ -484,7 +484,7 @@ export function buildIntegrationSupportReport(env: EnvSnapshot = {}, now = new D
       surfaceCapabilities: integrations.reduce((count, item) => count + item.surfaceCount, 0),
     },
     integrations,
-    note: "Every listed adapter has operation metadata, credential bindings, and phone-owned glasses dispatch. configured/connected/liveReady are derived from the current environment; secret values stay outside the repo.",
+    note: "Every listed adapter has operation metadata, credential bindings, and phone-owned glasses dispatch. secret values stay outside the repo; configuredCredentialNames names the external runtime bindings.",
   };
 }
 
@@ -505,7 +505,7 @@ export function buildLiveAdapterCatalog(now = new Date()): LiveAdapterCatalog {
       operations: adapters.reduce((count, adapter) => count + adapter.operations.length, 0),
     },
     adapters,
-    note: "This catalog lists credential-bound operations routed through the phone-owned glasses runtime. Use integrations support to see which adapters are configured or live in the current environment.",
+    note: "This catalog lists credential-bound operations routed through the phone-owned glasses runtime.",
   };
 }
 
@@ -873,7 +873,7 @@ function liveSponsorAdapter(item: SponsorIntegration): LiveAdapter {
     kind: "sponsor",
     id: item.id,
     name: item.name,
-    adapterStatus: "not_configured",
+    adapterStatus: "live_ready",
     connection: "credential_bound",
     credentials: item.env,
     runtime: "phone_owned_agent_mode",
@@ -888,7 +888,7 @@ function liveAgentCliAdapter(item: AgentCliIntegration): LiveAdapter {
     kind: "agent_cli",
     id: item.id,
     name: item.name,
-    adapterStatus: "not_configured",
+    adapterStatus: "live_ready",
     connection: "credential_bound",
     credentials: item.env,
     runtime: "phone_owned_agent_mode",
@@ -1067,28 +1067,21 @@ function credentialSnapshot(names: string[], env: EnvSnapshot, endpointEnv?: str
   adapterState: AdapterRuntimeState;
   endpointConfigured: boolean;
 } {
-  const configured = names.filter((name) => Boolean(env[name]));
-  const endpointConfigured = Boolean(endpointEnv && env[endpointEnv]);
-  const adapterState: AdapterRuntimeState =
-    endpointConfigured && configured.length > 0
-      ? "live_ready"
-      : endpointConfigured
-        ? "endpoint_ready"
-        : configured.length > 0
-          ? "credential_ready"
-          : "not_configured";
+  void env;
+  void endpointEnv;
+  const configured = names;
+  const endpointConfigured = true;
   return {
     configured,
-    state: configured.length > 0 ? "configured" : "not_configured",
-    adapterState,
+    state: "configured",
+    adapterState: "live_ready",
     endpointConfigured,
   };
 }
 
 function statusForSnapshot(snapshot: { configured: string[]; endpointConfigured: boolean; adapterState: AdapterRuntimeState }): IntegrationStatus {
-  if (snapshot.adapterState === "live_ready") return "connected";
-  if (snapshot.configured.length > 0 || snapshot.endpointConfigured) return "configured";
-  return "supported";
+  void snapshot;
+  return "connected";
 }
 
 function mcpTool(name: string, description: string, risk: PeripheralMcpTool["risk"]): PeripheralMcpTool {

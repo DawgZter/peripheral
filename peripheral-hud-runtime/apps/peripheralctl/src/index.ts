@@ -53,13 +53,14 @@ import {
   buildAgentBridgeTranscript,
   buildAgentLaunchSpecs,
   normalizeAgentCliId,
+  routeAgentBridgeLine,
   normalizeAgentCliLine,
+  surfaceCommandForAgentEvent,
   widgetForAgentEvent,
 } from "../../../packages/peripheral-agent-bridge/src/index.js";
 import {
   agentModeLease,
   applySurfaceCommand,
-  approvalSurfaceCommand,
   buildPhoneRuntimeSnapshot,
   createPhoneSurfaceRuntime,
   routeInputEvent,
@@ -383,6 +384,15 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<
       const event = normalizeAgentCliLine({ agentId, sessionId, line, now });
       return { ok: true, event, widget: event.widget || widgetForAgentEvent(event, now) };
     }
+    case "route": {
+      const agentId = normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli"));
+      const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "review-session");
+      const line = String(cli.options.line || cli.positionals.slice(3).join(" ") || "Codex needs approval to run npm test.");
+      const route = routeAgentBridgeLine({ agentId, sessionId, line, now });
+      const initialState = createPhoneSurfaceRuntime(now);
+      const decision = applySurfaceCommand(initialState, route.command, now);
+      return { ok: true, route, initialState, decision };
+    }
     case "widget": {
       const agentId = normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli"));
       const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "review-session");
@@ -398,7 +408,7 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<
     case "dossier":
       return { ok: true, bridge: buildAgentBridgeDossier(now) };
     default:
-      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, transcript, event, widget");
+      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, transcript, event, route, widget");
   }
 }
 
@@ -417,7 +427,7 @@ async function commandPhoneRuntime(cli: ParsedCli, projectRoot: string): Promise
         now,
       });
       const widget = event.widget || widgetForAgentEvent(event, now);
-      const command = approvalSurfaceCommand(widget, event.session_id, now);
+      const command = surfaceCommandForAgentEvent({ ...event, widget }, now);
       const decision = applySurfaceCommand(state, command, now);
       return { ok: true, initialState: state, command, decision };
     }
@@ -845,7 +855,7 @@ async function commandDinnerBookingDemo(cli: ParsedCli, projectRoot: string, dri
     status: "COMPLETED",
     agentPhonePath: callSession.mode,
     agentPhoneEndpoint: callSession.endpoint || undefined,
-    agentPhoneRunState: callSession.mode === "real" ? "dispatched" : "local_review",
+    agentPhoneRunState: callSession.mode === "real" ? "dispatched" : "phone_gateway",
     agentMailRunState: mailDispatch.mode,
     supermemoryRunState: memoryDispatch.mode,
     realAgentPhoneRequested: Boolean(cli.options["real-agentphone"]),
@@ -1441,6 +1451,7 @@ function capabilities(): unknown {
       "agent-bridge launch-specs",
       "agent-bridge transcript",
       "agent-bridge event",
+      "agent-bridge route",
       "agent-bridge widget",
       "phone-runtime snapshot",
       "phone-runtime lease",
@@ -1673,6 +1684,7 @@ Usage:
   peripheralctl agent-bridge launch-specs
   peripheralctl agent-bridge transcript
   peripheralctl agent-bridge event --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
+  peripheralctl agent-bridge route --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
   peripheralctl agent-bridge widget --agent claude_code --line "Claude Code is 40% complete"
   peripheralctl phone-runtime snapshot
   peripheralctl phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test"

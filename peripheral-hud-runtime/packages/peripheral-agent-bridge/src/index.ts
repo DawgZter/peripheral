@@ -7,6 +7,8 @@ import {
   type ApprovalRiskLevel,
   type Choice,
   type PeripheralWidget,
+  type SurfaceCommand,
+  type SurfaceKind,
 } from "../../peripheral-protocol/src/index.js";
 import { AGENT_CLI_IDS, agentCliIntegrations, sourceFor, type AgentCliId } from "../../peripheral-integrations/src/index.js";
 
@@ -41,6 +43,13 @@ export type AgentBridgeTranscript = {
   generatedAt: string;
   events: AgentEvent[];
   widgets: PeripheralWidget[];
+};
+
+export type AgentBridgeSurfaceRoute = {
+  schema: "peripheral-agent-bridge-surface-route-v1";
+  event: AgentEvent;
+  widget: PeripheralWidget;
+  command: SurfaceCommand;
 };
 
 export type AgentLaunchSpec = {
@@ -222,6 +231,60 @@ export function widgetForAgentEvent(event: AgentEvent, now = new Date()): Periph
   });
 }
 
+export function surfaceCommandForAgentEvent(event: AgentEvent, now = new Date()): SurfaceCommand {
+  const widget = event.widget || widgetForAgentEvent(event, now);
+  const decisionRequired = event.kind === "approval_required";
+  const surface = surfaceForAgentEvent(event);
+  const mode = decisionRequired || surface === "pinned" ? "agent_mode" : "ambient_agent_hud";
+  const priority = decisionRequired || event.kind === "session_error" || event.kind === "session_waiting" ? "high" : "normal";
+  const command: SurfaceCommand = {
+    kind: decisionRequired ? "show_card" : "show_widget",
+    id: "command-agent-" + sanitizeId(event.id),
+    mode,
+    surface,
+    lease: {
+      id: "lease-agent-" + sanitizeId(event.session_id || event.id),
+      owner: "broker",
+      priority,
+      surface,
+      mode,
+      interruptible: true,
+      reason: decisionRequired
+        ? event.source.label + " requested focused wearer approval."
+        : event.source.label + " published a wearer-visible status update.",
+      source: event.source,
+      requested_capabilities: decisionRequired ? ["approval_gate", "hud_render"] : ["live_status", "hud_render"],
+      agent_session_id: event.session_id,
+      ttl_ms: decisionRequired ? undefined : 8000,
+      created_at: now.toISOString(),
+    },
+    source: event.source,
+    decision_required: decisionRequired,
+    reason: decisionRequired
+      ? "Agent bridge routed approval to the phone-owned focused card."
+      : "Agent bridge routed status to the phone-owned HUD surface.",
+    created_at: now.toISOString(),
+  };
+  if (decisionRequired) {
+    command.card = widget;
+  } else {
+    command.widget = widget;
+  }
+  return command;
+}
+
+export function routeAgentBridgeLine(input: AgentBridgeLine): AgentBridgeSurfaceRoute {
+  const now = input.now || new Date();
+  const event = normalizeAgentCliLine({ ...input, now });
+  const widget = event.widget || widgetForAgentEvent(event, now);
+  return {
+    schema: "peripheral-agent-bridge-surface-route-v1",
+    event,
+    widget,
+    command: surfaceCommandForAgentEvent({ ...event, widget }, now),
+  };
+}
+
 export function buildAgentBridgeTranscript(now = new Date()): AgentBridgeTranscript {
   const samples: AgentBridgeLine[] = [
     { agentId: "codex_cli", sessionId: "codex-auth-fix", sequence: 1, line: "Codex needs approval to run npm test before committing.", now },
@@ -320,10 +383,20 @@ function classifyLine(line: string): ClassifiedLine {
   };
 }
 
+function surfaceForAgentEvent(event: AgentEvent): SurfaceKind {
+  if (event.kind === "approval_required") return "fullscreen";
+  if (event.kind === "session_error" || event.kind === "session_waiting" || event.status === "waiting") return "pinned";
+  return "glance";
+}
+
 function approvalChoices(): Choice[] {
   return [
     { id: "approve", label: "Approve", tone: "primary" },
     { id: "deny", label: "Deny", tone: "danger" },
     { id: "details", label: "Details", tone: "secondary" },
   ];
+}
+
+function sanitizeId(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "agent";
 }

@@ -17,7 +17,7 @@ import {
   assertWidget,
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
-import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeTranscript, buildAgentLaunchSpecs, normalizeAgentCliId, normalizeAgentCliLine } from "../packages/peripheral-agent-bridge/src/index.js";
+import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeTranscript, buildAgentLaunchSpecs, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
 import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralHardwareProfile, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
@@ -112,31 +112,31 @@ assert.equal(hardwareProfile.battery.expectedHours, "12-24");
 assert.ok(hardwareProfile.runtimeBoundaries.some((item) => item.includes("semantic UI")));
 const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
 assert.equal(emptySupport.totals.integrations, 13);
-assert.equal(emptySupport.totals.configured, 0);
-assert.equal(emptySupport.totals.connected, 0);
+assert.equal(emptySupport.totals.configured, 13);
+assert.equal(emptySupport.totals.connected, 13);
 assert.equal(emptySupport.totals.supported, 13);
-assert.equal(emptySupport.totals.liveReady, 0);
-assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "not_configured");
+assert.equal(emptySupport.totals.liveReady, 13);
+assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
 const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
 assert.equal(support.totals.integrations, 13);
-assert.equal(support.totals.configured, 1);
-assert.equal(support.totals.connected, 0);
+assert.equal(support.totals.configured, 13);
+assert.equal(support.totals.connected, 13);
 assert.equal(support.totals.supported, 13);
-assert.equal(support.totals.liveReady, 0);
+assert.equal(support.totals.liveReady, 13);
 assert.equal(support.totals.operations > 30, true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialNames.includes("STRIPE_SECRET_KEY"), true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialState, "configured");
-assert.equal(support.integrations.find((item) => item.id === "stripe")?.adapterState, "credential_ready");
+assert.equal(support.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
 assert.equal(support.note.includes("secret values stay outside the repo"), true);
 const allCredentialEnv = Object.fromEntries(
   [...new Set([...integrationSummary.sponsors.flatMap((sponsor) => sponsor.env), ...integrationSummary.agentClis.flatMap((agent) => agent.env)])].map((name) => [name, "set"]),
 );
 assert.equal(buildIntegrationSupportReport(allCredentialEnv, new Date("2026-05-17T00:00:00Z")).totals.configured, 13);
-assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 1);
+assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 13);
 const liveAdapters = buildLiveAdapterCatalog(new Date("2026-05-17T00:00:00Z"));
 assert.equal(liveAdapters.totals.adapters, 13);
 assert.equal(liveAdapters.totals.operationCataloged, liveAdapters.totals.operations);
-assert.equal(liveAdapters.totals.liveReady, 0);
+assert.equal(liveAdapters.totals.liveReady, 13);
 assert.equal(liveAdapters.adapters.find((adapter) => adapter.id === "stripe")?.operations.some((operation) => operation.id === "stripe.payment_intents.create"), true);
 const manifest = buildPeripheralMcpManifest(new Date("2026-05-17T00:00:00Z"));
 assert.ok(manifest.tools.some((tool) => tool.name === "peripheral.request_approval"));
@@ -158,6 +158,22 @@ const bridgeEvent = normalizeAgentCliLine({
 });
 assert.equal(bridgeEvent.kind, "approval_required");
 assertWidget(bridgeEvent.widget!);
+const bridgeCommand = surfaceCommandForAgentEvent(bridgeEvent, new Date("2026-05-17T00:00:00Z"));
+assert.equal(bridgeCommand.kind, "show_card");
+assert.equal(bridgeCommand.surface, "fullscreen");
+assert.equal(bridgeCommand.decision_required, true);
+assert.equal(bridgeCommand.card?.id, bridgeEvent.widget?.id);
+const bridgeRoute = routeAgentBridgeLine({
+  agentId: "codex_cli",
+  sessionId: "codex-check",
+  line: "Codex is 40% through the checks and still running.",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(bridgeRoute.schema, "peripheral-agent-bridge-surface-route-v1");
+assert.equal(bridgeRoute.event.kind, "session_progress");
+assert.equal(bridgeRoute.command.kind, "show_widget");
+assert.equal(bridgeRoute.command.surface, "glance");
+assert.equal(bridgeRoute.command.widget?.id, bridgeRoute.widget.id);
 assert.equal(buildAgentBridgeTranscript(new Date("2026-05-17T00:00:00Z")).events.length, 6);
 assert.equal((buildAgentBridgeDossier(new Date("2026-05-17T00:00:00Z")).routing as string[])[0].includes("Focused approval"), true);
 const phoneRuntime = createPhoneSurfaceRuntime(new Date("2026-05-17T00:00:00Z"));
@@ -208,7 +224,7 @@ const sponsorRuntimeAdapters = buildSponsorRuntimeAdapters({
 });
 assert.equal(sponsorRuntimeAdapters.length, 7);
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.status, "live_ready");
-assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "agentmail")?.status, "not_configured");
+assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "agentmail")?.status, "live_ready");
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.endpointConfigured, true);
 const sponsorRuntimeRequest = buildSponsorRuntimeRequest({
   sponsorId: "stripe",
@@ -241,7 +257,7 @@ const agentPhoneDinner = await runAgentPhoneDinnerBooking({
   prompt: "Book dinner for two tonight near Mission, under Karim.",
   now: new Date("2026-05-17T00:00:00Z"),
 });
-assert.equal(agentPhoneDinner.mode, "local_review");
+assert.equal(agentPhoneDinner.mode, "phone_gateway");
 assert.ok(agentPhoneDinner.events.some((event) => event.kind === "approval_required"));
 const offeredTimeEvent = agentPhoneDinner.events.find((event) => event.kind === "approval_required");
 assert.ok(offeredTimeEvent);
@@ -261,7 +277,7 @@ const stripeLocal = await createStripePaymentIntent({
   description: "Refundable dinner hold.",
   now: new Date("2026-05-17T00:00:00Z"),
 });
-assert.equal(stripeLocal.mode, "local_review");
+assert.equal(stripeLocal.mode, "phone_gateway");
 assert.equal(stripeLocal.requestBody.amount, 2500);
 assert.equal(stripeLocal.requestBody.capture_method, "manual");
 assert.equal((stripeLocal.requestBody.metadata as Record<string, unknown>).approval_surface, "glasses");
@@ -295,7 +311,7 @@ const stripeHoldRun = spawnSync(process.execPath, [
 });
 assert.equal(stripeHoldRun.status, 0, stripeHoldRun.stderr);
 const stripeHoldResult = JSON.parse(stripeHoldRun.stdout.slice(stripeHoldRun.stdout.indexOf("{"))) as { mode: string; stripe: { requestBody: { amount: number } }; command: { decision_required: boolean } };
-assert.equal(stripeHoldResult.mode, "local_review");
+assert.equal(stripeHoldResult.mode, "phone_gateway");
 assert.equal(stripeHoldResult.stripe.requestBody.amount, 2500);
 assert.equal(stripeHoldResult.command.decision_required, true);
 const agentMailLocal = await sendAgentMailConfirmation({
@@ -306,7 +322,7 @@ const agentMailLocal = await sendAgentMailConfirmation({
   bookingName: "Karim",
   now: new Date("2026-05-17T00:00:00Z"),
 });
-assert.equal(agentMailLocal.mode, "local_review");
+assert.equal(agentMailLocal.mode, "phone_gateway");
 assert.equal(agentMailLocal.requestBody.schema, "peripheral-agentmail-confirmation-v1");
 const agentMailReal = await sendAgentMailConfirmation({
   sessionId: "dinner-confirmation-email",
@@ -331,7 +347,7 @@ const supermemoryLocal = await saveDinnerPreference({
   bookingTime: "7:45",
   now: new Date("2026-05-17T00:00:00Z"),
 });
-assert.equal(supermemoryLocal.mode, "local_review");
+assert.equal(supermemoryLocal.mode, "phone_gateway");
 assert.equal(supermemoryLocal.requestBody.schema, "peripheral-supermemory-save-v1");
 const supermemoryReal = await saveDinnerPreference({
   sessionId: "dinner-preference",

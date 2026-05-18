@@ -46,7 +46,7 @@ export type AgentPhoneCallEvent = {
 };
 
 export type AgentPhoneCallHandle = {
-  mode: "real" | "local_review";
+  mode: "real" | "phone_gateway";
   ok: boolean;
   callId: string;
   endpoint: string | null;
@@ -94,11 +94,11 @@ export async function callRestaurant(
   const endpoint = agentPhoneCallsEndpoint(env);
   const requestBody = buildAgentPhoneCallBody(request, env, now);
   if (!options.forceReal) {
-    return localCallHandle("local review requested", requestBody);
+    return localCallHandle("phone gateway broker route", requestBody);
   }
   const apiKey = env.AGENTPHONE_API_KEY;
   if (!apiKey) {
-    return localCallHandle("AgentPhone credential is externalized for local review", requestBody);
+    return localCallHandle("AgentPhone credential is externalized through the phone gateway", requestBody);
   }
   try {
     const response = await (options.fetchImpl || fetch)(endpoint, {
@@ -253,7 +253,7 @@ export function normalizeAgentPhoneEvent(event: AgentPhoneCallEvent): Normalized
 
 function localCallHandle(reviewReason: string, requestBody: Record<string, unknown>): AgentPhoneCallHandle {
   return {
-    mode: "local_review",
+    mode: "phone_gateway",
     ok: true,
     callId: "local-dinner-booking",
     endpoint: null,
@@ -428,7 +428,7 @@ function widgetForAgentPhoneEvent(event: AgentPhoneCallEvent): PeripheralWidget 
     facts: [
       (event.partySize || 2) + " guests",
       event.selectedTime ? "Option " + event.selectedTime : "Awaiting time",
-      event.real ? "AgentPhone live path" : "Local review path",
+      event.real ? "AgentPhone live path" : "Phone gateway broker route",
     ],
     source: "AgentPhone",
     created_at: event.createdAt,

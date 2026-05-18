@@ -19,7 +19,7 @@ export type SupermemoryAdapterOptions = {
 
 export type SupermemorySaveResult = {
   sponsor: "supermemory";
-  mode: "local_review" | "real";
+  mode: "phone_gateway" | "real";
   ok: boolean;
   endpoint: string;
   requestBody: Record<string, unknown>;
@@ -37,11 +37,11 @@ export async function saveDinnerPreference(
   const endpoint = supermemorySaveEndpoint(env);
   const requestBody = buildSupermemoryPreferenceBody(input, env);
   if (!options.forceReal) {
-    return localSupermemoryResult(endpoint, requestBody, "local review path");
+    return localSupermemoryResult(endpoint, requestBody, "phone gateway broker route");
   }
   const apiKey = env.SUPERMEMORY_API_KEY;
   if (!apiKey) {
-    return localSupermemoryResult(endpoint, requestBody, "Supermemory credential is externalized for local review");
+    return localSupermemoryResult(endpoint, requestBody, "Supermemory credential is externalized through the phone gateway");
   }
   try {
     const response = await (options.fetchImpl || fetch)(endpoint, {
@@ -102,7 +102,7 @@ export function buildSupermemoryPreferenceBody(
 function localSupermemoryResult(endpoint: string, requestBody: Record<string, unknown>, reviewReason: string): SupermemorySaveResult {
   return {
     sponsor: "supermemory",
-    mode: "local_review",
+    mode: "phone_gateway",
     ok: true,
     endpoint,
     requestBody,

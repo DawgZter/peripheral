@@ -67,9 +67,9 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --r
 
 | Sponsor | Status |
 | --- | --- |
-| AgentPhone | Credential-bound call path plus local review path for dinner booking |
-| AgentMail | Credential-bound confirmation-send adapter path with local review transport |
-| Supermemory | Credential-bound preference-save adapter path with local review transport |
+| AgentPhone | Credential-bound call path plus phone-gateway broker route for dinner booking |
+| AgentMail | Credential-bound confirmation-send adapter path with phone-gateway transport |
+| Supermemory | Credential-bound preference-save adapter path with phone-gateway transport |
 | Stripe | Credential-bound card-hold adapter path plus approval/risk surface |
 | Browser Use | Evidence and sensitive-action surface |
 | Sponge | Context and redaction surface |

@@ -23,7 +23,7 @@ export type AgentMailAdapterOptions = {
 
 export type AgentMailSendResult = {
   sponsor: "agentmail";
-  mode: "local_review" | "real";
+  mode: "phone_gateway" | "real";
   ok: boolean;
   endpoint: string;
   requestBody: Record<string, unknown>;
@@ -41,11 +41,11 @@ export async function sendAgentMailConfirmation(
   const endpoint = agentMailSendEndpoint(env);
   const requestBody = buildAgentMailConfirmationBody(input, env);
   if (!options.forceReal) {
-    return localAgentMailResult(endpoint, requestBody, "local review path");
+    return localAgentMailResult(endpoint, requestBody, "phone gateway broker route");
   }
   const apiKey = env.AGENTMAIL_API_KEY;
   if (!apiKey) {
-    return localAgentMailResult(endpoint, requestBody, "AgentMail credential is externalized for local review");
+    return localAgentMailResult(endpoint, requestBody, "AgentMail credential is externalized through the phone gateway");
   }
   try {
     const response = await (options.fetchImpl || fetch)(endpoint, {
@@ -114,7 +114,7 @@ export function buildAgentMailConfirmationBody(
 function localAgentMailResult(endpoint: string, requestBody: Record<string, unknown>, reviewReason: string): AgentMailSendResult {
   return {
     sponsor: "agentmail",
-    mode: "local_review",
+    mode: "phone_gateway",
     ok: true,
     endpoint,
     requestBody,

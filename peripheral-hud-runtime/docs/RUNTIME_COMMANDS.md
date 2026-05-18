@@ -31,7 +31,7 @@ Common fields include `id`, `type`, `title`, `status`, `body`, `bullets`, `left_
 
 Unknown widget types are rejected. Use `generic_card` for explicit fallback behavior. Text is normalized and truncated before rendering so fixtures stay safe for a small HUD.
 
-## Render And Local Review Push
+## Render And Phone Gateway Push
 
 ```sh
 npm run peripheralctl -- render-json fixtures/ui/generic_card.json --out out/frames/generic_card.png
@@ -92,6 +92,7 @@ npm run peripheralctl -- integrations dossier --json
 npm run peripheralctl -- integrations widgets --json
 npm run peripheralctl -- walkthrough integrations --local
 npm run peripheralctl -- agent-bridge event --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
+npm run peripheralctl -- agent-bridge route --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- agent-bridge widget --agent claude_code --line "Claude Code is 40% complete" --json
 npm run peripheralctl -- phone-runtime snapshot --json
 npm run peripheralctl -- phone-runtime route --line "hey codex show status" --json

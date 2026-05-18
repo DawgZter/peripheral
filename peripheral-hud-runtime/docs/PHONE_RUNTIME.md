@@ -43,6 +43,7 @@ npm run peripheralctl -- integrations phone-runtime --json
 npm run peripheralctl -- integrations broker-timeline --json
 npm run peripheralctl -- integrations mcp-manifest --json
 npm run peripheralctl -- phone-runtime snapshot --json
+npm run peripheralctl -- agent-bridge route --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- phone-runtime route --line "hey codex show status" --json
 npm run peripheralctl -- phone-runtime agent-mode-lease --line "User looked up into Agent Mode" --json

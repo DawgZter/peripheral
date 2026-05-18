@@ -43,6 +43,7 @@ Adapters normalize CLI output into `AgentEvent` objects. The glasses see a compa
 - `adapters` lists command names, wake names, session transports, env names, and approval policy.
 - `transcript` emits one sample event per supported CLI.
 - `event --agent <id> --line <text>` normalizes one bounded CLI line into an `AgentEvent` plus widget.
+- `route --agent <id> --line <text>` adds the phone-owned `SurfaceCommand` and lease decision that would place the card or status surface on the glasses.
 - `widget --agent <id> --line <text>` renders that widget into `out/frames/agent-bridge/`.
 
 This is the broker-facing normalization layer that a PTY, tmux, stdio, or adapter transport can call.
@@ -68,10 +69,10 @@ Each workflow declares the event trigger, target surface, risk level, phone runt
 
 The same package now includes concrete real-world task adapters for calls, payment holds, email, and memory:
 
-- `agentphone.ts` starts and polls the restaurant call, with a local review path.
-- `stripe.ts` creates approval-gated card holds when `STRIPE_SECRET_KEY` is configured, with a local review path.
-- `agentmail.ts` sends the confirmation email when `AGENTMAIL_API_KEY` is configured, with a local review path.
-- `supermemory.ts` saves the dinner preference when `SUPERMEMORY_API_KEY` is configured, with a local review path.
+- `agentphone.ts` starts and polls the restaurant call through the phone-gateway broker route.
+- `stripe.ts` creates approval-gated card holds through the phone-gateway broker route.
+- `agentmail.ts` sends the confirmation email through the AgentMail adapter and phone-gateway transport.
+- `supermemory.ts` saves the dinner preference through the Supermemory adapter and phone-gateway transport.
 
 Use `peripheralctl integrations sponsor-events --json` to inspect the sample event dossier for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, and Gemini.
 
@@ -91,6 +92,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- integrations widgets --
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge dossier --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge launch-specs --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge event --agent codex_cli --line "Codex needs approval to run npm test" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge widget --agent opencode --line "OpenCode is waiting on user input"
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
