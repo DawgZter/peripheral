@@ -28,12 +28,20 @@ export type ImageFrameBuild = {
   imagePrefixHex: string;
 };
 
+export type FullPanelSetupPolicy = {
+  setupEnabled: boolean;
+  setupStrategy: string;
+  fullPanelPrimedBeforePush: boolean;
+  markPrimedAfterSuccess: boolean;
+};
+
 const FIRST_CHUNK_BYTES = 497;
 const CHUNK_BYTES = 501;
 const MAC_RAW_WRITE = "__PERIPHERAL_RAW_WRITE__:";
 const MAC_RAW_WRITE_NR = "__PERIPHERAL_RAW_WRITE_NR__:";
 const MAC_WAIT_APP_STATUS = "__PERIPHERAL_WAIT_APP_STATUS__:";
 const FULL_PANEL_SURFACE = 0xfe;
+let fullPanelPrimedForSkippedSetup = false;
 
 export function defaultLogPath(projectRoot: string, name = "peripheralctl"): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -226,30 +234,65 @@ function imagePayloadFrames(payload: Buffer): Buffer[] {
 async function pushFramesToMac(frames: Buffer[], options: DriverOptions): Promise<Record<string, unknown>> {
   const start = performance.now();
   const writePrefix = options.writeWithoutResponse ? MAC_RAW_WRITE_NR : MAC_RAW_WRITE;
-  const setupEnabled = process.env.PERIPHERAL_HUD_SKIP_SURFACE_SETUP !== "1";
+  const setupPolicy = fullPanelSetupPolicy();
   const result = await withMacBridge(options, { includeInit: false }, async (bridge) => {
-    if (setupEnabled) {
+    if (setupPolicy.setupEnabled) {
       await bridge.writeLine(MAC_RAW_WRITE + commandFrame(0x07, 0x01, [FULL_PANEL_SURFACE, 0x00]).toString("hex"));
       await bridge.writeLine(MAC_WAIT_APP_STATUS + "fe:01:8");
     }
     for (const frame of frames) {
       await bridge.writeLine(writePrefix + frame.toString("hex"));
     }
-    if (setupEnabled) {
+    if (setupPolicy.setupEnabled) {
       await bridge.writeLine(MAC_RAW_WRITE + commandFrame(0x07, 0x07, [FULL_PANEL_SURFACE]).toString("hex"));
     }
     return {
       queued: true,
-      setupFrames: setupEnabled ? 1 : 0,
-      setupWaits: setupEnabled ? 1 : 0,
-      refreshFrames: setupEnabled ? 1 : 0,
-      setupStrategy: setupEnabled ? "factory_hidden_wait_fe01" : "skipped_by_env",
-      fullPanelPrimedBeforePush: false,
+      setupFrames: setupPolicy.setupEnabled ? 1 : 0,
+      setupWaits: setupPolicy.setupEnabled ? 1 : 0,
+      refreshFrames: setupPolicy.setupEnabled ? 1 : 0,
+      setupStrategy: setupPolicy.setupStrategy,
+      fullPanelPrimedBeforePush: setupPolicy.fullPanelPrimedBeforePush,
       imageFrames: frames.length,
       writeWithoutResponse: Boolean(options.writeWithoutResponse),
     };
   });
+  if (setupPolicy.markPrimedAfterSuccess) fullPanelPrimedForSkippedSetup = true;
   return { ...result, elapsedMs: Math.round(performance.now() - start) };
+}
+
+export function fullPanelSetupPolicy(skipSurfaceSetup = process.env.PERIPHERAL_HUD_SKIP_SURFACE_SETUP, alreadyPrimed = fullPanelPrimedForSkippedSetup): FullPanelSetupPolicy {
+  const skip = String(skipSurfaceSetup || "").toLowerCase();
+  if (skip === "always" || skip === "force") {
+    return {
+      setupEnabled: false,
+      setupStrategy: "skipped_by_env_forced",
+      fullPanelPrimedBeforePush: false,
+      markPrimedAfterSuccess: false,
+    };
+  }
+  if (skip === "1" || skip === "true" || skip === "yes") {
+    if (alreadyPrimed) {
+      return {
+        setupEnabled: false,
+        setupStrategy: "skipped_by_env_after_initial_resync",
+        fullPanelPrimedBeforePush: true,
+        markPrimedAfterSuccess: false,
+      };
+    }
+    return {
+      setupEnabled: true,
+      setupStrategy: "factory_hidden_wait_fe01_initial_resync",
+      fullPanelPrimedBeforePush: false,
+      markPrimedAfterSuccess: true,
+    };
+  }
+  return {
+    setupEnabled: true,
+    setupStrategy: "factory_hidden_wait_fe01",
+    fullPanelPrimedBeforePush: false,
+    markPrimedAfterSuccess: false,
+  };
 }
 
 type Bridge = {

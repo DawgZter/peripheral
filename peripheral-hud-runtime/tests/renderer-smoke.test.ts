@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { assertWidget } from "../packages/peripheral-protocol/src/index.js";
-import { buildDisplayImageFrames, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
+import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
 
@@ -33,6 +33,24 @@ assert.throws(() => {
 }, /Unknown widget type/);
 
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
+assert.deepEqual(fullPanelSetupPolicy("1", false), {
+  setupEnabled: true,
+  setupStrategy: "factory_hidden_wait_fe01_initial_resync",
+  fullPanelPrimedBeforePush: false,
+  markPrimedAfterSuccess: true,
+});
+assert.deepEqual(fullPanelSetupPolicy("1", true), {
+  setupEnabled: false,
+  setupStrategy: "skipped_by_env_after_initial_resync",
+  fullPanelPrimedBeforePush: true,
+  markPrimedAfterSuccess: false,
+});
+assert.deepEqual(fullPanelSetupPolicy("always", false), {
+  setupEnabled: false,
+  setupStrategy: "skipped_by_env_forced",
+  fullPanelPrimedBeforePush: false,
+  markPrimedAfterSuccess: false,
+});
 assert.equal(sanitizeTerminalLine("╭──────────── Hermes Agent v0.12.0 · upstream ────────────╮"), "Hermes Agent v0.12.0 - upstream");
 assert.equal(sanitizeTerminalLine("⚕ gpt-5.5 │ ctx -- │ [░░░░] -- │ 8s │ ⏲ 0s"), "Hermes gpt-5.5 ctx -- [] -- 8s time 0s");
 assert.equal(sanitizeTerminalLine("│ ⠀⠀⠀⠀⠀ browser: browser_back, browser_click │"), "browser: browser_back, browser_click");
@@ -255,6 +273,11 @@ const fakeAliasSttScript = [
   "setTimeout(() => console.log('close Hermes'), 410)",
   "setTimeout(() => console.log('Open for me'), 540)",
   "setTimeout(() => console.log('Close her'), 670)",
+  "setTimeout(() => console.log('Okay well I will do this open'), 800)",
+  "setTimeout(() => console.log('Hermes'), 930)",
+  "setTimeout(() => console.log('Hear me say hello'), 1060)",
+  "setTimeout(() => console.log('send'), 1190)",
+  "setTimeout(() => console.log('Close her'), 1320)",
 ].join(";");
 const fakeAliasSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeAliasSttScript);
 const voiceAliasProjectRoot = makeTempProjectRoot("voice-alias");
@@ -285,6 +308,9 @@ try {
   assert.match(voiceAliasLog, /"event":"input.voice_command.alias","text":"Finn Hermes","command":"open hermes"/);
   assert.match(voiceAliasLog, /"event":"input.voice_command.alias","text":"Open for me","command":"open hermes"/);
   assert.match(voiceAliasLog, /"text":"Close her"/);
+  assert.match(voiceAliasLog, /"event":"input.voice_command.pending","command":"open"/);
+  assert.match(voiceAliasLog, /"event":"asr.voice_gate.open","text":"Hear me say hello","prompt":"say hello"/);
+  assert.match(voiceAliasLog, /"event":"hermes_cli.input","mode":"mock","text":"say hello"/);
   assert.match(voiceAliasLog, /"event":"hermes_cli.close","reason":"input.dismiss"/);
   assert.doesNotMatch(voiceAliasLog, /Unknown HUD command/);
 } finally {

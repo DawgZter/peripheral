@@ -1775,12 +1775,34 @@ function normalizeHermesVoiceCommandAlias(command: string): string {
   ]).get(command);
   if (mapped) return mapped;
 
+  const trailingControl = trailingVoiceControlPrefix(command);
+  if (trailingControl) return trailingControl;
+
+  const namePrefix = hermesNamePrefixAlias(command);
+  if (namePrefix) return namePrefix;
+
   const words = command.split(/\s+/).filter(Boolean);
   if (words.length >= 2 && (isHermesOpenPrefix(words[0]!) || isHermesClosePrefix(words[0]!)) && isHermesNameLike(words.slice(1).join(" "))) {
     return words[0] + " hermes";
   }
   if (isHermesNameLike(command)) return "hermes";
   return command;
+}
+
+function trailingVoiceControlPrefix(command: string): string | null {
+  const words = command.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return null;
+  const last = words[words.length - 1]!;
+  if (isHermesOpenPrefix(last)) return last;
+  if (isHermesClosePrefix(last)) return last;
+  return null;
+}
+
+function hermesNamePrefixAlias(command: string): string | null {
+  for (const prefix of ["hear me", "here me", "termites"]) {
+    if (command.startsWith(prefix + " ")) return "hermes " + command.slice(prefix.length).trim();
+  }
+  return null;
 }
 
 function isHermesNameLike(value: string): boolean {
