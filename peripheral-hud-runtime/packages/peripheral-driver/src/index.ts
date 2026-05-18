@@ -30,6 +30,7 @@ export type ImageFrameBuild = {
 
 export type FullPanelSetupPolicy = {
   setupEnabled: boolean;
+  waitForSurfaceReady: boolean;
   setupStrategy: string;
   fullPanelPrimedBeforePush: boolean;
   markPrimedAfterSuccess: boolean;
@@ -238,7 +239,9 @@ async function pushFramesToMac(frames: Buffer[], options: DriverOptions): Promis
   const result = await withMacBridge(options, { includeInit: false }, async (bridge) => {
     if (setupPolicy.setupEnabled) {
       await bridge.writeLine(MAC_RAW_WRITE + commandFrame(0x07, 0x01, [FULL_PANEL_SURFACE, 0x00]).toString("hex"));
-      await bridge.writeLine(MAC_WAIT_APP_STATUS + "fe:01:8");
+      if (setupPolicy.waitForSurfaceReady) {
+        await bridge.writeLine(MAC_WAIT_APP_STATUS + "fe:01:8");
+      }
     }
     for (const frame of frames) {
       await bridge.writeLine(writePrefix + frame.toString("hex"));
@@ -249,7 +252,7 @@ async function pushFramesToMac(frames: Buffer[], options: DriverOptions): Promis
     return {
       queued: true,
       setupFrames: setupPolicy.setupEnabled ? 1 : 0,
-      setupWaits: setupPolicy.setupEnabled ? 1 : 0,
+      setupWaits: setupPolicy.setupEnabled && setupPolicy.waitForSurfaceReady ? 1 : 0,
       refreshFrames: setupPolicy.setupEnabled ? 1 : 0,
       setupStrategy: setupPolicy.setupStrategy,
       fullPanelPrimedBeforePush: setupPolicy.fullPanelPrimedBeforePush,
@@ -266,6 +269,7 @@ export function fullPanelSetupPolicy(skipSurfaceSetup = process.env.PERIPHERAL_H
   if (skip === "always" || skip === "force") {
     return {
       setupEnabled: false,
+      waitForSurfaceReady: false,
       setupStrategy: "skipped_by_env_forced",
       fullPanelPrimedBeforePush: false,
       markPrimedAfterSuccess: false,
@@ -275,6 +279,7 @@ export function fullPanelSetupPolicy(skipSurfaceSetup = process.env.PERIPHERAL_H
     if (alreadyPrimed) {
       return {
         setupEnabled: false,
+        waitForSurfaceReady: false,
         setupStrategy: "skipped_by_env_after_initial_resync",
         fullPanelPrimedBeforePush: true,
         markPrimedAfterSuccess: false,
@@ -282,13 +287,15 @@ export function fullPanelSetupPolicy(skipSurfaceSetup = process.env.PERIPHERAL_H
     }
     return {
       setupEnabled: true,
-      setupStrategy: "factory_hidden_wait_fe01_initial_resync",
+      waitForSurfaceReady: false,
+      setupStrategy: "factory_hidden_initial_resync_no_wait",
       fullPanelPrimedBeforePush: false,
       markPrimedAfterSuccess: true,
     };
   }
   return {
     setupEnabled: true,
+    waitForSurfaceReady: true,
     setupStrategy: "factory_hidden_wait_fe01",
     fullPanelPrimedBeforePush: false,
     markPrimedAfterSuccess: false,

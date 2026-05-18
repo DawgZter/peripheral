@@ -35,18 +35,21 @@ assert.throws(() => {
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
 assert.deepEqual(fullPanelSetupPolicy("1", false), {
   setupEnabled: true,
-  setupStrategy: "factory_hidden_wait_fe01_initial_resync",
+  waitForSurfaceReady: false,
+  setupStrategy: "factory_hidden_initial_resync_no_wait",
   fullPanelPrimedBeforePush: false,
   markPrimedAfterSuccess: true,
 });
 assert.deepEqual(fullPanelSetupPolicy("1", true), {
   setupEnabled: false,
+  waitForSurfaceReady: false,
   setupStrategy: "skipped_by_env_after_initial_resync",
   fullPanelPrimedBeforePush: true,
   markPrimedAfterSuccess: false,
 });
 assert.deepEqual(fullPanelSetupPolicy("always", false), {
   setupEnabled: false,
+  waitForSurfaceReady: false,
   setupStrategy: "skipped_by_env_forced",
   fullPanelPrimedBeforePush: false,
   markPrimedAfterSuccess: false,
