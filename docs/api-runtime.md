@@ -1,6 +1,6 @@
 # Local Display Sidecar API
 
-The web pages in this repo expect the existing local sidecar server to provide the display observation API.
+Runtime clients use the existing local sidecar server for display observation and operator-gated transport checks.
 
 ## Runtime Protocol Types
 
@@ -22,11 +22,11 @@ Used to confirm the display transport is mac before starting a live stream.
 
 ## GET /api/glasses/status
 
-Used by the one-click cast page before opening the camera or display stream. It returns known Peripheral devices plus connected and paired subsets.
+Used by the runtime before opening a display stream. It returns known Peripheral devices plus connected and paired subsets.
 
 ## POST /api/glasses/pair-connect
 
-Used by Start when no glasses are currently connected. The sidecar powers display transport on, resolves the configured or discovered glasses target, stops any stale display bridge, pairs if needed, and connects through macOS.
+Used when no glasses are currently connected. The sidecar powers display transport on, resolves the configured or discovered glasses target, stops any stale display bridge, pairs if needed, and connects through macOS.
 
 This changes local connection state while display content remains behind the runtime transport gates. CLI validation keeps it behind `peripheralctl live-check --attempt-connect --real-hardware-ok` so an operator has to opt into the connection attempt.
 

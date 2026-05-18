@@ -67,12 +67,13 @@ Each workflow declares the event trigger, target surface, risk level, phone runt
 - `PeripheralWidget` for the semantic HUD renderer.
 - `SurfaceCommand` for the phone-owned mode manager.
 
-The same package now includes concrete real-world task adapters for calls, payment holds, email, and memory:
+The same package now includes concrete real-world task adapters for calls, payment holds, email, memory, and browser tasks:
 
 - `agentphone.ts` starts and polls the restaurant call through the phone-gateway broker route.
 - `stripe.ts` creates approval-gated card holds through the phone-gateway broker route.
 - `agentmail.ts` sends the confirmation email through the AgentMail adapter and phone-gateway transport.
 - `supermemory.ts` saves the dinner preference through the Supermemory adapter and phone-gateway transport.
+- `browseruse.ts` starts Browser Use Cloud v3 sessions through the phone-gateway broker route, polls task state, and pauses sensitive submits on a glasses approval card.
 
 Use `peripheralctl integrations sponsor-events --json` to inspect the sample event dossier for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, and Gemini.
 
@@ -102,6 +103,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows workf
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime adapters --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows widgets --json
 ```

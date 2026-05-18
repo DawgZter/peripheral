@@ -34,7 +34,7 @@ npm run peripheralctl -- integrations widgets --json
 The expected narration is:
 
 - AgentPhone owns the call surface.
-- Browser Use contributes website step telemetry.
+- Browser Use contributes browser task telemetry.
 - Supermemory contributes short recall cards.
 - Stripe requests a focused approval before any payment-like action.
 - Codex CLI is visible through bounded terminal fallback, but the surface lease and approval policy remain broker-owned.

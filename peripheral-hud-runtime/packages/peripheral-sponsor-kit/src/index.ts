@@ -36,6 +36,15 @@ export {
   type StripePaymentIntentResult,
 } from "./stripe.js";
 export * from "./stripe.js";
+export {
+  buildBrowserUseTaskBody,
+  normalizeBrowserUseEvent,
+  runBrowserUseTask,
+  type BrowserUseTaskEvent,
+  type BrowserUseTaskRequest,
+  type BrowserUseTaskResult,
+} from "./browseruse.js";
+export * from "./browseruse.js";
 
 export type SponsorEventKind =
   | "call_started"

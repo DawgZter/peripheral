@@ -22,7 +22,7 @@ import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesSt
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
-import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking, saveDinnerPreference, sendAgentMailConfirmation } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeBrowserUseEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking, runBrowserUseTask, saveDinnerPreference, sendAgentMailConfirmation } from "../packages/peripheral-sponsor-kit/src/index.js";
 import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
@@ -314,6 +314,71 @@ const stripeHoldResult = JSON.parse(stripeHoldRun.stdout.slice(stripeHoldRun.std
 assert.equal(stripeHoldResult.mode, "phone_gateway");
 assert.equal(stripeHoldResult.stripe.requestBody.amount, 2500);
 assert.equal(stripeHoldResult.command.decision_required, true);
+const browserUseLocal = await runBrowserUseTask({
+  sessionId: "browser-reservation-check",
+  task: "Check reservation availability and stop before submit.",
+  startUrl: "https://example.com/reservations",
+  approvalIntent: "Approve the reservation submit.",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(browserUseLocal.mode, "local_review");
+assert.equal(browserUseLocal.requestBody.model, "gemini-3-flash");
+assert.equal((browserUseLocal.requestBody.metadata as Record<string, unknown>).approval_surface, "glasses");
+assert.ok(browserUseLocal.events.some((event) => event.kind === "browser_submit_requested"));
+const browserUseApproval = browserUseLocal.events.find((event) => event.kind === "browser_submit_requested");
+assert.ok(browserUseApproval);
+const normalizedBrowserUseApproval = normalizeBrowserUseEvent(browserUseApproval!);
+assert.equal(normalizedBrowserUseApproval.event.kind, "approval_required");
+assert.equal(normalizedBrowserUseApproval.command.surface, "fullscreen");
+assert.equal(normalizedBrowserUseApproval.command.decision_required, true);
+const browserUseCalls: Array<{ url: string; method?: string }> = [];
+const browserUseFetch: typeof fetch = async (url, init) => {
+  browserUseCalls.push({ url: String(url), method: init?.method });
+  return new Response(JSON.stringify({
+    id: "browser-session-1",
+    status: "running",
+    lastStepSummary: init?.method === "POST" ? "Opened the reservation page." : "Ready to submit reservation.",
+    stepCount: init?.method === "POST" ? 1 : 2,
+    liveUrl: "https://cloud.browser-use.com/sessions/browser-session-1",
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+};
+const browserUseReal = await runBrowserUseTask({
+  sessionId: "browser-reservation-check",
+  task: "Check reservation availability and stop before submit.",
+  startUrl: "https://example.com/reservations",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  forceReal: true,
+  env: { BROWSER_USE_API_KEY: "set", BROWSER_USE_API_URL: "https://example.invalid/browser" },
+  fetchImpl: browserUseFetch,
+});
+assert.equal(browserUseReal.mode, "real");
+assert.equal(browserUseReal.ok, true);
+assert.equal(browserUseReal.endpoint, "https://example.invalid/browser/sessions");
+assert.equal(browserUseCalls.length, 2);
+assert.equal(browserUseReal.events.some((event) => event.kind === "browser_submit_requested"), true);
+const browserUseRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "browser-task",
+  "--task",
+  "Check reservation availability and stop before submit.",
+  "--start-url",
+  "https://example.com/reservations",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(browserUseRun.status, 0, browserUseRun.stderr);
+const browserUseResult = JSON.parse(browserUseRun.stdout.slice(browserUseRun.stdout.indexOf("{"))) as { mode: string; browserUse: { requestBody: { task: string } }; commands: Array<{ decision_required?: boolean }> };
+assert.equal(browserUseResult.mode, "local_review");
+assert.match(browserUseResult.browserUse.requestBody.task, /reservations/);
+assert.equal(browserUseResult.commands.some((command) => command.decision_required === true), true);
 const agentMailLocal = await sendAgentMailConfirmation({
   sessionId: "dinner-confirmation-email",
   restaurantName: "Sato Table",

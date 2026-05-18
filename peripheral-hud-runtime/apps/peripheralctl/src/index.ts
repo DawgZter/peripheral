@@ -77,7 +77,9 @@ import {
   buildSponsorRuntimeRequest,
   createStripePaymentIntent,
   dispatchSponsorEvent,
+  normalizeBrowserUseEvent,
   normalizeSponsorEvent,
+  runBrowserUseTask,
   saveDinnerPreference,
   sendAgentMailConfirmation,
   type SponsorRuntimeRequest,
@@ -126,6 +128,14 @@ const VALUE_FLAGS = new Set([
   "session-id",
   "line",
   "summary",
+  "task",
+  "start-url",
+  "browser-model",
+  "profile-id",
+  "workspace-id",
+  "max-cost-usd",
+  "proxy-country",
+  "approval-intent",
   "risk",
   "amount",
   "currency",
@@ -557,8 +567,37 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
       });
       return { ok: result.ok, mode: result.mode, stripe: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
     }
+    case "browser-task": {
+      const sessionId = String(cli.options["session-id"] || "browser-use-task");
+      const task = String(cli.options.task || cli.options.summary || cli.options.line || "Find the requested page evidence and stop before any sensitive submit.");
+      const result = await runBrowserUseTask({
+        sessionId,
+        task,
+        startUrl: typeof cli.options["start-url"] === "string" ? cli.options["start-url"] : undefined,
+        model: typeof cli.options["browser-model"] === "string" ? cli.options["browser-model"] : undefined,
+        profileId: typeof cli.options["profile-id"] === "string" ? cli.options["profile-id"] : undefined,
+        workspaceId: typeof cli.options["workspace-id"] === "string" ? cli.options["workspace-id"] : undefined,
+        maxCostUsd: typeof cli.options["max-cost-usd"] === "string" ? cli.options["max-cost-usd"] : undefined,
+        proxyCountryCode: typeof cli.options["proxy-country"] === "string" ? cli.options["proxy-country"] : undefined,
+        keepAlive: Boolean(cli.options["keep-alive"]),
+        approvalIntent: typeof cli.options["approval-intent"] === "string" ? cli.options["approval-intent"] : undefined,
+        now,
+      }, {
+        forceReal: Boolean(cli.options["real-browser-use"]),
+        env: process.env,
+      });
+      const normalized = result.events.map(normalizeBrowserUseEvent);
+      return {
+        ok: result.ok,
+        mode: result.mode,
+        browserUse: result,
+        events: normalized.map((item) => item.event),
+        widgets: normalized.map((item) => item.widget),
+        commands: normalized.map((item) => item.command),
+      };
+    }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, stripe-hold");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, stripe-hold, browser-task");
   }
 }
 
@@ -1465,6 +1504,7 @@ function capabilities(): unknown {
       "sponsor-runtime request",
       "sponsor-runtime dispatch",
       "sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd",
+      "sponsor-runtime browser-task --task <text> --start-url <url>",
       "hudctl show-json",
       "hudctl show-card",
       "hudctl clear",
@@ -1698,6 +1738,7 @@ Usage:
   peripheralctl sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold"
   peripheralctl sponsor-runtime dispatch --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
   peripheralctl sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold"
+  peripheralctl sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com
   peripheralctl demo dinner-booking --local
   peripheralctl demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
   peripheralctl phone-runtime decide --event booking-approval-1 --choice approve
@@ -1734,6 +1775,14 @@ Global options:
   --currency <code>       For sponsor-runtime stripe-hold: currency code, default usd.
   --customer <id>         For sponsor-runtime stripe-hold: optional Stripe customer id.
   --payment-method <id>   For sponsor-runtime stripe-hold: optional Stripe payment method id.
+  --task <text>           For sponsor-runtime browser-task: Browser Use Cloud task prompt.
+  --start-url <url>       For sponsor-runtime browser-task: initial URL context.
+  --browser-model <id>    For sponsor-runtime browser-task: Browser Use model, default gemini-3-flash.
+  --profile-id <id>       For sponsor-runtime browser-task: Browser Use profile id.
+  --workspace-id <id>     For sponsor-runtime browser-task: Browser Use workspace id.
+  --max-cost-usd <value>  For sponsor-runtime browser-task: Browser Use spend ceiling.
+  --proxy-country <code>  For sponsor-runtime browser-task: proxy country code, default us.
+  --approval-intent <txt> For sponsor-runtime browser-task: action that must pause on glasses.
   --email-to <addr>       For dinner-booking: override AgentMail recipient.
   --email-from <addr>     For dinner-booking: override AgentMail sender.
   --memory-container <id> For dinner-booking: override Supermemory container.

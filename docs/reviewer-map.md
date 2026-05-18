@@ -36,6 +36,7 @@ Expected artifacts:
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_API_URL`, `STRIPE_CUSTOMER_ID` |
 | AgentMail | `AGENTMAIL_API_KEY`, `AGENTMAIL_API_URL`, `AGENTMAIL_TO`, `AGENTMAIL_FROM` |
 | Supermemory | `SUPERMEMORY_API_KEY`, `SUPERMEMORY_API_URL`, `SUPERMEMORY_CONTAINER` |
+| Browser Use | `BROWSER_USE_API_KEY`, `BROWSER_USE_API_URL`, `BROWSER_USE_PROFILE_ID`, `BROWSER_USE_WORKSPACE_ID` |
 | Display transport | `PERIPHERAL_MAC_NAME_PREFIX`, `PERIPHERAL_HUD_SKIP_SURFACE_SETUP` |
 
 ## Architecture Proof Points
@@ -47,6 +48,7 @@ Expected artifacts:
 | Agent Mode protocol | `peripheral-hud-runtime/packages/peripheral-protocol/src/index.ts` |
 | Sponsor registry | `peripheral-hud-runtime/packages/peripheral-integrations/src/index.ts` |
 | Sponsor event kit | `peripheral-hud-runtime/packages/peripheral-sponsor-kit/src/index.ts` |
+| Browser task adapter | `peripheral-hud-runtime/packages/peripheral-sponsor-kit/src/browseruse.ts` |
 | CLI transcript normalization | `peripheral-hud-runtime/packages/peripheral-agent-bridge/src/index.ts` |
 | Smoke coverage | `peripheral-hud-runtime/tests/renderer-smoke.test.ts` |
 
