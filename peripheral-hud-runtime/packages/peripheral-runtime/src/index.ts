@@ -1520,11 +1520,14 @@ function mergeConfiguredAgents(base: AgentRecord[], configured: Partial<AgentRec
 function upsertAgent(agents: AgentRecord[], patch: Partial<AgentRecord> & { name: string; status?: AgentStatus; updatedAt?: string }): AgentRecord[] {
   const name = normalizeAgentName(patch.name);
   const existing = agents.find((agent) => agent.name.toLowerCase() === name.toLowerCase());
+  const patchSummary = patch.summary;
+  const keepExistingSummary = Boolean(existing?.summary && patchSummary === "Configured placeholder for future adapter.");
   const next: AgentRecord = {
     ...(existing || { name, status: "idle" as AgentStatus, updatedAt: new Date().toISOString() }),
     ...patch,
     name,
     status: patch.status || existing?.status || "idle",
+    summary: keepExistingSummary ? existing?.summary : patchSummary || existing?.summary,
     updatedAt: patch.updatedAt || new Date().toISOString(),
   };
   return [...agents.filter((agent) => agent.name.toLowerCase() !== name.toLowerCase()), next]
@@ -2293,6 +2296,9 @@ export function mergeVoiceDraft(current: string, piece: string, previousPiece = 
 
 function normalizeAgentName(name: string): string {
   const clean = cleanText(name, 40);
+  const lower = clean.toLowerCase();
+  if (lower === "codex") return "Codex CLI";
+  if (lower === "claude") return "Claude Code CLI";
   return clean ? clean[0]!.toUpperCase() + clean.slice(1) : "Agent";
 }
 

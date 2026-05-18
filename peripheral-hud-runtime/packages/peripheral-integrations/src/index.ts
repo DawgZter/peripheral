@@ -65,6 +65,75 @@ export type IntegrationSummary = {
   };
 };
 
+export type EnvSnapshot = Record<string, string | undefined>;
+
+export type IntegrationReadiness = {
+  kind: "sponsor" | "agent_cli";
+  id: SponsorId | AgentCliId;
+  name: string;
+  status: IntegrationStatus;
+  docs?: string;
+  command?: string;
+  env: string[];
+  presentEnv: string[];
+  missingEnv: string[];
+  readyForLive: boolean;
+  mockReady: true;
+  nextAction: string;
+};
+
+export type IntegrationReadinessReport = {
+  schema: "peripheral-integration-readiness-v1";
+  generatedAt: string;
+  totals: {
+    integrations: number;
+    mockReady: number;
+    liveReady: number;
+    missingEnv: number;
+  };
+  integrations: IntegrationReadiness[];
+  note: string;
+};
+
+export type PeripheralMcpTool = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  output: string;
+  risk: "low" | "medium" | "high";
+};
+
+export type PeripheralMcpManifest = {
+  schema: "peripheral-mcp-manifest-v1";
+  generatedAt: string;
+  server: {
+    name: "peripheral-glass-broker";
+    transport: "stdio";
+    surfaceRuntime: "phone-owned-renderer";
+  };
+  resources: Array<{
+    uri: string;
+    description: string;
+  }>;
+  tools: PeripheralMcpTool[];
+};
+
+export type BrokerTimeline = {
+  schema: "peripheral-broker-timeline-v1";
+  generatedAt: string;
+  premise: string;
+  steps: Array<{
+    id: string;
+    actor: string;
+    event: string;
+    route: string;
+    surface: SurfaceKind;
+    risk: "low" | "medium" | "high";
+    widget: PeripheralWidget;
+    command: SurfaceCommand;
+  }>;
+};
+
 export type MockConnectionState = {
   schema: "peripheral-connected-state-v1";
   mode: AppMode;
@@ -268,7 +337,7 @@ export const agentCliIntegrations: AgentCliIntegration[] = [
   agentCli("gemini_cli", "Gemini CLI", "gemini", ["gemini-cli"], "Install Gemini CLI and authenticate with Google AI Studio or gcloud.", "stdio", ["GEMINI_API_KEY", "GOOGLE_API_KEY"], "stubbed", [
     "Used for broker summaries, multimodal notes, and low-risk routing suggestions.",
   ]),
-  agentCli("codex_cli", "Codex CLI", "codex", ["codex"], "Install Codex CLI and run sessions from the Mac broker workspace.", "tmux", ["OPENAI_API_KEY"], "stubbed", [
+  agentCli("codex_cli", "Codex CLI", "codex", [], "Install Codex CLI and run sessions from the Mac broker workspace.", "tmux", ["OPENAI_API_KEY"], "stubbed", [
     "Codex events become approval cards, progress cards, and raw terminal fallback panes.",
   ]),
 ];
@@ -283,6 +352,76 @@ export function buildIntegrationSummary(): IntegrationSummary {
       sponsorCapabilities: sponsorIntegrations.reduce((count, item) => count + item.surfaces.length, 0),
       agentCliCapabilities: agentCliIntegrations.reduce((count, item) => count + item.surfaces.length, 0),
     },
+  };
+}
+
+export function buildReadinessReport(env: EnvSnapshot = {}, now = new Date()): IntegrationReadinessReport {
+  const integrations: IntegrationReadiness[] = [
+    ...sponsorIntegrations.map((item) => readinessForSponsor(item, env)),
+    ...agentCliIntegrations.map((item) => readinessForAgentCli(item, env)),
+  ];
+  return {
+    schema: "peripheral-integration-readiness-v1",
+    generatedAt: now.toISOString(),
+    totals: {
+      integrations: integrations.length,
+      mockReady: integrations.filter((item) => item.mockReady).length,
+      liveReady: integrations.filter((item) => item.readyForLive).length,
+      missingEnv: integrations.reduce((count, item) => count + item.missingEnv.length, 0),
+    },
+    integrations,
+    note: "Readiness intentionally reports env var names only; it never includes secret values.",
+  };
+}
+
+export function buildPeripheralMcpManifest(now = new Date()): PeripheralMcpManifest {
+  return {
+    schema: "peripheral-mcp-manifest-v1",
+    generatedAt: now.toISOString(),
+    server: {
+      name: "peripheral-glass-broker",
+      transport: "stdio",
+      surfaceRuntime: "phone-owned-renderer",
+    },
+    resources: [
+      {
+        uri: "peripheral://surface/connected-state",
+        description: "Mock-safe connected glasses, phone runtime, broker lease, and current widgets.",
+      },
+      {
+        uri: "peripheral://integrations/sponsors",
+        description: "Sponsor adapter capabilities and event names for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, and Gemini.",
+      },
+      {
+        uri: "peripheral://integrations/agent-clis",
+        description: "Agent CLI adapter manifest for OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI.",
+      },
+    ],
+    tools: [
+      mcpTool("peripheral.enter_agent_mode", "Ask the phone runtime to enter Agent Mode and grant the broker a fullscreen lease.", "low"),
+      mcpTool("peripheral.show_widget", "Render a semantic widget on the glasses through the phone-owned renderer.", "low"),
+      mcpTool("peripheral.request_approval", "Show a focused approval card with event_id, session_id, risk, and choices.", "medium"),
+      mcpTool("peripheral.route_input", "Route voice/tap/head-pose input to the focused card, named agent, app mode, or default broker.", "medium"),
+      mcpTool("peripheral.block_raw_ble", "Reject direct BLE/pixel writes from agents and explain the semantic surface contract.", "high"),
+    ],
+  };
+}
+
+export function buildBrokerTimeline(now = new Date()): BrokerTimeline {
+  const connected = buildMockConnectedState(now);
+  const lease = connected.broker.activeLease;
+  const steps = [
+    timelineStep("step-agentphone-call", "AgentPhone", "call_connected", "AgentPhone -> broker -> phone renderer", "glance", "low", liveCallWidget(now), lease, now),
+    timelineStep("step-browser-use-proof", "Browser Use", "browser_step", "Browser Use -> broker evidence digest -> glasses glance", "glance", "low", browserProofWidget(now), lease, now),
+    timelineStep("step-stripe-approval", "Stripe", "payment_intent_requires_action", "Stripe event -> approval policy -> focused approval card", "fullscreen", "medium", buildApprovalEvent("stripe", "booking-hold", "Approve Card Hold?", "AgentPhone booking needs a refundable Stripe hold.", now).widget!, lease, now),
+    timelineStep("step-codex-terminal", "Codex CLI", "session_waiting", "Codex CLI PTY -> bounded terminal fallback -> pinned surface", "pinned", "medium", terminalWidget(now), lease, now),
+    timelineStep("step-gemini-route", "Gemini", "route_decision", "Gemini suggestion -> deterministic router -> focused card reply", "tiny_hud", "low", routingWidget(now), lease, now),
+  ];
+  return {
+    schema: "peripheral-broker-timeline-v1",
+    generatedAt: now.toISOString(),
+    premise: "Agents and sponsors never write raw BLE; every event is normalized into a broker timeline and rendered by the phone runtime.",
+    steps,
   };
 }
 
@@ -434,6 +573,7 @@ export function buildMockConnectedState(now = new Date()): MockConnectionState {
 export function buildHackathonDossier(now = new Date()): Record<string, unknown> {
   const summary = buildIntegrationSummary();
   const connected = buildMockConnectedState(now);
+  const readiness = buildReadinessReport({}, now);
   return {
     schema: "peripheral-hackathon-dossier-v1",
     generatedAt: now.toISOString(),
@@ -455,6 +595,9 @@ export function buildHackathonDossier(now = new Date()): Record<string, unknown>
       capabilities: item.surfaces.map((surface) => surface.label),
     })),
     connectedGlasses: connected,
+    readiness,
+    mcpManifest: buildPeripheralMcpManifest(now),
+    brokerTimeline: buildBrokerTimeline(now),
     safety: [
       "Agents emit semantic widgets, never raw BLE bytes.",
       "Phone app owns display leases and final rendering.",
@@ -516,6 +659,177 @@ function agentCli(
       capability(id + ".approval", "Approval card", "Captures permission requests with event_id and session_id.", "fullscreen", "medium"),
       capability(id + ".terminal", "Raw terminal fallback", "Shows bounded terminal lines when semantic state is unavailable.", "pinned", "medium"),
     ],
+  };
+}
+
+function readinessForSponsor(item: SponsorIntegration, env: EnvSnapshot): IntegrationReadiness {
+  const presentEnv = item.env.filter((key) => Boolean(env[key]));
+  const missingEnv = item.env.filter((key) => !env[key]);
+  return {
+    kind: "sponsor",
+    id: item.id,
+    name: item.name,
+    status: item.status,
+    docs: item.docs,
+    env: item.env,
+    presentEnv,
+    missingEnv,
+    readyForLive: missingEnv.length === 0 && item.status === "ready",
+    mockReady: true,
+    nextAction: missingEnv.length
+      ? "Add " + missingEnv.join(", ") + " to enable live API wiring."
+      : "Promote the adapter from " + item.status + " after live API smoke validation.",
+  };
+}
+
+function readinessForAgentCli(item: AgentCliIntegration, env: EnvSnapshot): IntegrationReadiness {
+  const presentEnv = item.env.filter((key) => Boolean(env[key]));
+  const missingEnv = item.env.filter((key) => !env[key]);
+  return {
+    kind: "agent_cli",
+    id: item.id,
+    name: item.name,
+    status: item.status,
+    command: item.command,
+    env: item.env,
+    presentEnv,
+    missingEnv,
+    readyForLive: missingEnv.length === 0 && item.status === "ready",
+    mockReady: true,
+    nextAction: missingEnv.length
+      ? "Install/authenticate " + item.name + " and provide " + missingEnv.join(", ") + " if required."
+      : "Connect " + item.command + " to the broker PTY/session adapter.",
+  };
+}
+
+function mcpTool(name: string, description: string, risk: PeripheralMcpTool["risk"]): PeripheralMcpTool {
+  return {
+    name,
+    description,
+    risk,
+    output: "SurfaceCommand or UserDecision routed through the phone-owned renderer.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["session_id"],
+      properties: {
+        session_id: { type: "string" },
+        source: { type: "string" },
+        widget: { type: "object" },
+        risk: { enum: ["low", "medium", "high"] },
+      },
+    },
+  };
+}
+
+function timelineStep(
+  id: string,
+  actor: string,
+  event: string,
+  route: string,
+  surface: SurfaceKind,
+  risk: Capability["risk"],
+  widget: PeripheralWidget,
+  lease: SurfaceLease,
+  now: Date,
+): BrokerTimeline["steps"][number] {
+  return {
+    id,
+    actor,
+    event,
+    route,
+    surface,
+    risk,
+    widget,
+    command: {
+      kind: surface === "fullscreen" ? "show_card" : "show_widget",
+      id: "command-" + id,
+      mode: "agent_mode",
+      surface,
+      lease,
+      widget,
+      source: sourceFor(actorToSourceId(actor), id),
+      decision_required: risk !== "low",
+      reason: route,
+      created_at: now.toISOString(),
+    },
+  };
+}
+
+function actorToSourceId(actor: string): SponsorId | AgentCliId {
+  switch (actor) {
+    case "AgentPhone":
+      return "agentphone";
+    case "Browser Use":
+      return "browser_use";
+    case "Stripe":
+      return "stripe";
+    case "Codex CLI":
+      return "codex_cli";
+    case "Gemini":
+      return "gemini";
+    default:
+      return "agentphone";
+  }
+}
+
+function liveCallWidget(now: Date): PeripheralWidget {
+  return {
+    id: "timeline-agentphone-call",
+    type: "live_call",
+    title: "AgentPhone",
+    status: "CONNECTED",
+    transcript: [
+      { speaker: "agent", text: "Confirming the booking and checking deposit policy." },
+      { speaker: "other", text: "We can hold it with a refundable card authorization." },
+    ],
+    facts: ["Call agent active", "Human can take over", "Deposit question"],
+    source: "agentphone",
+    created_at: now.toISOString(),
+  };
+}
+
+function browserProofWidget(now: Date): PeripheralWidget {
+  return {
+    id: "timeline-browser-use",
+    type: "generic_card",
+    title: "Browser Use",
+    status: "EVIDENCE",
+    body: "Reservation page loaded; form is ready but submit is approval-gated.",
+    icon: "browser",
+    footer: "No raw screenshots on HUD",
+    source: "browser_use",
+    created_at: now.toISOString(),
+  };
+}
+
+function terminalWidget(now: Date): PeripheralWidget {
+  return {
+    id: "timeline-codex-terminal",
+    type: "terminal",
+    title: "Codex CLI",
+    status: "WAITING",
+    terminal: [
+      "> npm run check",
+      "needs approval: run local checks",
+      "approve / deny / details",
+    ],
+    prompt: "Reply to focused approval",
+    source: "codex_cli",
+    created_at: now.toISOString(),
+  };
+}
+
+function routingWidget(now: Date): PeripheralWidget {
+  return {
+    id: "timeline-gemini-routing",
+    type: "status_icon",
+    title: "Gemini Route",
+    status: "FOCUSED CARD",
+    body: "Voice input routes to the visible approval before default broker fallback.",
+    icon: "route",
+    source: "gemini",
+    created_at: now.toISOString(),
   };
 }
 
