@@ -118,15 +118,15 @@ assert.equal(hardwareProfile.battery.expectedHours, "12-24");
 assert.ok(hardwareProfile.runtimeBoundaries.some((item) => item.includes("semantic UI")));
 const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
 assert.equal(emptySupport.totals.integrations, 13);
-assert.equal(emptySupport.totals.configured, 13);
-assert.equal(emptySupport.totals.connected, 13);
+assert.equal(emptySupport.totals.configured, 0);
+assert.equal(emptySupport.totals.connected, 0);
 assert.equal(emptySupport.totals.supported, 13);
 assert.equal(emptySupport.totals.liveReady, 13);
 assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
 const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
 assert.equal(support.totals.integrations, 13);
-assert.equal(support.totals.configured, 13);
-assert.equal(support.totals.connected, 13);
+assert.equal(support.totals.configured, 1);
+assert.equal(support.totals.connected, 1);
 assert.equal(support.totals.supported, 13);
 assert.equal(support.totals.liveReady, 13);
 assert.equal(support.totals.operations > 30, true);
@@ -134,6 +134,7 @@ assert.equal(support.integrations.find((item) => item.id === "stripe")?.credenti
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialState, "configured");
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
 assert.equal(support.note.includes("secret values stay outside the repo"), true);
+assert.equal(support.note.includes("configuredCredentialNames lists values observed"), true);
 const allCredentialEnv = Object.fromEntries(
   [...new Set([...integrationSummary.sponsors.flatMap((sponsor) => sponsor.env), ...integrationSummary.agentClis.flatMap((agent) => agent.env)])].map((name) => [name, "set"]),
 );

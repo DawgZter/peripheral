@@ -85,6 +85,35 @@ for (const file of files) {
   }
 }
 
+const trustGuards = [
+  {
+    file: "peripheral-hud-runtime/packages/peripheral-integrations/src/index.ts",
+    checks: [
+      { name: "trust-hardcoded-credentials", regex: /configured:\s*names/ },
+      { name: "trust-hardcoded-endpoint", regex: /endpointConfigured:\s*true/ },
+      { name: "trust-hardcoded-connected", regex: /return\s+["']connected["'];\s*\}/ },
+    ],
+  },
+  {
+    file: "peripheral-hud-runtime/packages/peripheral-sponsor-kit/src/index.ts",
+    checks: [
+      { name: "trust-hardcoded-runtime-credentials", regex: /configuredCredentials:\s*sponsor\.env/ },
+      { name: "trust-hardcoded-runtime-endpoint", regex: /endpointConfigured:\s*true/ },
+    ],
+  },
+];
+
+for (const guard of trustGuards) {
+  const path = join(repoRoot, guard.file);
+  if (!existsSync(path)) continue;
+  const text = readFileSync(path, "utf8");
+  for (const check of guard.checks) {
+    if (check.regex.test(text)) {
+      violations.push({ file: guard.file, rule: check.name });
+    }
+  }
+}
+
 if (existsSync(join(repoRoot, "web"))) {
   violations.push({ file: "web", rule: "posture-web-surface" });
 }

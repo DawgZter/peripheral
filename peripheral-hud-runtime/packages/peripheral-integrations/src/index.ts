@@ -484,7 +484,7 @@ export function buildIntegrationSupportReport(env: EnvSnapshot = {}, now = new D
       surfaceCapabilities: integrations.reduce((count, item) => count + item.surfaceCount, 0),
     },
     integrations,
-    note: "Every listed adapter has operation metadata, credential bindings, and phone-owned glasses dispatch. secret values stay outside the repo; configuredCredentialNames names the external runtime bindings.",
+    note: "Every listed adapter has operation metadata, credential bindings, and phone-owned glasses dispatch. secret values stay outside the repo; credentialNames names required external bindings and configuredCredentialNames lists values observed in the operator environment.",
   };
 }
 
