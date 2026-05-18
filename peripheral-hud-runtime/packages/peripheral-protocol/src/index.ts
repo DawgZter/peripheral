@@ -129,12 +129,84 @@ export const AGENT_STATUSES = [
 
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+export const PERIPHERAL_AGENT_MODE_PROTOCOL = "peripheral.agent_mode.v1" as const;
+
+export const PERIPHERAL_SOURCE_KINDS = [
+  "agent_cli",
+  "sponsor",
+  "system",
+  "demo",
+  "local_tool",
+  "bridge",
+] as const;
+
+export type PeripheralSourceKind = (typeof PERIPHERAL_SOURCE_KINDS)[number];
+
+export const SOURCE_TRUST_LEVELS = ["mock", "local", "verified", "remote"] as const;
+
+export type SourceTrustLevel = (typeof SOURCE_TRUST_LEVELS)[number];
+
+export const AGENT_SURFACE_CAPABILITIES = [
+  "voice_transcript",
+  "hud_render",
+  "approval_gate",
+  "tool_call",
+  "memory_recall",
+  "payment_intent",
+  "email_draft",
+  "browser_session",
+  "agent_handoff",
+  "file_context",
+  "live_status",
+  "mock_demo",
+] as const;
+
+export type AgentSurfaceCapability = (typeof AGENT_SURFACE_CAPABILITIES)[number];
+
+export const USER_DECISION_KINDS = ["approval_decision", "dismiss", "details", "reply"] as const;
+
+export type UserDecisionKind = (typeof USER_DECISION_KINDS)[number];
+
+export const USER_DECISIONS = ["approve", "deny", "details", "dismiss", "reply"] as const;
+
+export type UserDecisionValue = (typeof USER_DECISIONS)[number];
+
+export const CONFIRMATION_LEVELS = ["voice", "tap", "voice_and_tap", "phone", "desktop"] as const;
+
+export type ConfirmationLevel = (typeof CONFIRMATION_LEVELS)[number];
+
+export const PROTOCOL_MESSAGE_KINDS = [
+  "surface_lease",
+  "surface_command",
+  "input_event",
+  "agent_event",
+  "user_decision",
+] as const;
+
+export type ProtocolMessageKind = (typeof PROTOCOL_MESSAGE_KINDS)[number];
+
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+export type SourceReference = {
+  label: string;
+  uri?: string;
+  kind?: "log" | "artifact" | "command" | "url" | "note";
+};
+
 export type PeripheralSource = {
   id: string;
   label: string;
-  kind: "agent_cli" | "sponsor" | "system" | "demo";
+  kind: PeripheralSourceKind;
   vendor?: string;
+  adapter_id?: string;
+  command?: string;
+  model?: string;
+  trust?: SourceTrustLevel;
   session_id?: string;
+  capabilities?: AgentSurfaceCapability[];
+  references?: SourceReference[];
+  metadata?: Record<string, JsonValue>;
 };
 
 export type SurfaceLease = {
@@ -146,6 +218,9 @@ export type SurfaceLease = {
   interruptible: boolean;
   reason: string;
   source?: PeripheralSource;
+  requested_capabilities?: AgentSurfaceCapability[];
+  agent_session_id?: string;
+  ttl_ms?: number;
   expires_at?: string;
   created_at?: string;
 };
@@ -159,6 +234,10 @@ export type SurfaceCommand = {
   widget?: PeripheralWidget;
   card?: PeripheralWidget;
   source?: PeripheralSource;
+  lease_id?: string;
+  sequence?: number;
+  decision_required?: boolean;
+  ttl_ms?: number;
   reason?: string;
   created_at?: string;
 };
@@ -168,6 +247,7 @@ export type InputEvent = {
   id: string;
   mode: AppMode;
   source?: PeripheralSource;
+  surface?: SurfaceKind;
   focused_card_id?: string;
   focused_widget_id?: string;
   text?: string;
@@ -177,6 +257,7 @@ export type InputEvent = {
     yaw?: number;
     roll?: number;
   };
+  metadata?: Record<string, JsonValue>;
   timestamp: string;
 };
 
@@ -189,19 +270,45 @@ export type AgentEvent = {
   summary?: string;
   status?: AgentStatus;
   risk?: ApprovalRiskLevel;
+  progress?: number;
+  capabilities?: AgentSurfaceCapability[];
+  references?: SourceReference[];
   choices?: Choice[];
   widget?: PeripheralWidget;
   created_at: string;
 };
 
 export type UserDecision = {
-  kind: "approval_decision" | "dismiss" | "details" | "reply";
+  kind: UserDecisionKind;
   event_id: string;
   session_id: string;
-  decision: "approve" | "deny" | "details" | "dismiss" | "reply";
-  confirmation_level: "voice" | "tap" | "voice_and_tap" | "phone" | "desktop";
+  decision: UserDecisionValue;
+  confirmation_level: ConfirmationLevel;
+  source?: PeripheralSource;
+  choice_id?: string;
+  reason?: string;
   text?: string;
+  metadata?: Record<string, JsonValue>;
   timestamp: string;
+};
+
+export type ProtocolPayloadByKind = {
+  surface_lease: SurfaceLease;
+  surface_command: SurfaceCommand;
+  input_event: InputEvent;
+  agent_event: AgentEvent;
+  user_decision: UserDecision;
+};
+
+export type PeripheralProtocolEnvelope<K extends ProtocolMessageKind = ProtocolMessageKind> = {
+  protocol: typeof PERIPHERAL_AGENT_MODE_PROTOCOL;
+  kind: K;
+  id: string;
+  source?: PeripheralSource;
+  trace_id?: string;
+  causation_id?: string;
+  payload: ProtocolPayloadByKind[K];
+  created_at: string;
 };
 
 export type Choice = {

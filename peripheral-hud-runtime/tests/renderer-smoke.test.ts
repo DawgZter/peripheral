@@ -3,7 +3,17 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { assertWidget } from "../packages/peripheral-protocol/src/index.js";
+import {
+  AGENT_EVENT_KINDS,
+  APP_MODES,
+  APPROVAL_RISK_LEVELS,
+  INPUT_EVENT_KINDS,
+  SURFACE_COMMAND_KINDS,
+  SURFACE_KINDS,
+  SURFACE_OWNERS,
+  SURFACE_PRIORITIES,
+  assertWidget,
+} from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
@@ -31,6 +41,15 @@ for (const file of readdirSync(fixtureDir).filter((name) => name.endsWith(".json
 assert.throws(() => {
   assertWidget(JSON.parse(readFileSync(join(fixtureDir, "invalid_unknown_type.json"), "utf8")) as unknown);
 }, /Unknown widget type/);
+
+assert.ok(APP_MODES.includes("agent_mode"));
+assert.ok(SURFACE_OWNERS.includes("broker"));
+assert.deepEqual([...SURFACE_PRIORITIES], ["ambient", "normal", "high", "urgent"]);
+assert.ok(SURFACE_KINDS.includes("tiny_hud"));
+assert.ok(SURFACE_COMMAND_KINDS.includes("update_widget"));
+assert.ok(INPUT_EVENT_KINDS.includes("voice_text"));
+assert.ok(AGENT_EVENT_KINDS.includes("approval_required"));
+assert.ok(APPROVAL_RISK_LEVELS.includes("high"));
 
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
 const defaultFullPanelSetupPolicy = {
