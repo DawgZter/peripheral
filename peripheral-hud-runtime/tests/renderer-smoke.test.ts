@@ -98,7 +98,7 @@ assert.equal(connectedState.phone.ownsBle, true);
 assert.equal(connectedState.broker.activeLease.owner, "broker");
 assert.ok(connectedState.surfaceCommands.some((command) => command.kind === "enter_agent_mode"));
 const runtimeProfileState = buildConnectedGlassesState(new Date("2026-05-17T00:00:00Z"));
-assert.equal(runtimeProfileState.glasses.connected, false);
+assert.equal(runtimeProfileState.glasses.connected, true);
 assert.equal(runtimeProfileState.glasses.batteryPercent, undefined);
 assert.equal(runtimeProfileState.glasses.rssi, undefined);
 assert.equal(runtimeProfileState.glasses.telemetry.source, "phone_gateway_runtime");
