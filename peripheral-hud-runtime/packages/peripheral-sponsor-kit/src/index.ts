@@ -85,7 +85,7 @@ export type SponsorEventDossier = {
 export type SponsorRuntimeAdapter = {
   id: SponsorId;
   name: string;
-  status: "live_ready";
+  status: "not_configured" | "credential_ready" | "endpoint_ready" | "live_ready";
   credentialNames: string[];
   configuredCredentials: string[];
   endpointEnv: string;
@@ -101,7 +101,7 @@ export type SponsorRuntimeRequest = {
   endpointEnv: string;
   endpointConfigured: boolean;
   method: "POST";
-  url: string;
+  url: string | null;
   headers: Record<string, string>;
   body: Record<string, unknown>;
 };
@@ -162,15 +162,16 @@ export function buildSponsorEventDossier(now = new Date()): SponsorEventDossier 
 export function buildSponsorRuntimeAdapters(env: Record<string, string | undefined> = process.env): SponsorRuntimeAdapter[] {
   return sponsorIntegrations.map((sponsor) => {
     const endpointEnv = endpointEnvForSponsor(sponsor.id);
-    void env;
+    const configuredCredentials = sponsor.env.filter((key) => Boolean(env[key]));
+    const endpointConfigured = Boolean(env[endpointEnv]);
     return {
       id: sponsor.id,
       name: sponsor.name,
-      status: "live_ready",
+      status: sponsorRuntimeStatus(configuredCredentials.length, endpointConfigured),
       credentialNames: sponsor.env,
-      configuredCredentials: sponsor.env,
+      configuredCredentials,
       endpointEnv,
-      endpointConfigured: true,
+      endpointConfigured,
       eventKinds: sponsor.agentEvents,
       output: "AgentEvent+PeripheralWidget+SurfaceCommand",
       safety: "phone_owned_surface_policy",
@@ -181,12 +182,12 @@ export function buildSponsorRuntimeAdapters(env: Record<string, string | undefin
 export function buildSponsorRuntimeRequest(input: SponsorEventInput, env: Record<string, string | undefined> = process.env): SponsorRuntimeRequest {
   const normalized = normalizeSponsorEvent(input);
   const endpointEnv = endpointEnvForSponsor(input.sponsorId);
-  const url = env[endpointEnv] || "peripheral://broker/" + input.sponsorId;
+  const url = env[endpointEnv] || null;
   return {
     sponsorId: input.sponsorId,
     event: input.event,
     endpointEnv,
-    endpointConfigured: true,
+    endpointConfigured: Boolean(url),
     method: "POST",
     url,
     headers: runtimeHeaders(input.sponsorId, env),
@@ -206,11 +207,11 @@ export async function dispatchSponsorEvent(
   fetchImpl: typeof fetch = fetch,
 ): Promise<SponsorRuntimeDispatchResult> {
   const request = buildSponsorRuntimeRequest(input, env);
-  if (request.url.startsWith("peripheral://")) {
+  if (!request.url) {
     return {
-      ok: true,
+      ok: false,
       request,
-      responseBody: { routed: "phone_owned_broker", sponsorId: input.sponsorId, event: input.event },
+      error: request.endpointEnv + " is required for live sponsor dispatch.",
     };
   }
   try {
@@ -233,6 +234,13 @@ export async function dispatchSponsorEvent(
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+function sponsorRuntimeStatus(credentialCount: number, endpointConfigured: boolean): SponsorRuntimeAdapter["status"] {
+  if (credentialCount > 0 && endpointConfigured) return "live_ready";
+  if (credentialCount > 0) return "credential_ready";
+  if (endpointConfigured) return "endpoint_ready";
+  return "not_configured";
 }
 
 export function sampleSponsorEvents(now = new Date()): SponsorEventInput[] {

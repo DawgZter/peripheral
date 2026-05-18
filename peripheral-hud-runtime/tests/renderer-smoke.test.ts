@@ -112,31 +112,31 @@ assert.equal(hardwareProfile.battery.expectedHours, "12-24");
 assert.ok(hardwareProfile.runtimeBoundaries.some((item) => item.includes("semantic UI")));
 const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
 assert.equal(emptySupport.totals.integrations, 13);
-assert.equal(emptySupport.totals.configured, 13);
-assert.equal(emptySupport.totals.connected, 13);
+assert.equal(emptySupport.totals.configured, 0);
+assert.equal(emptySupport.totals.connected, 0);
 assert.equal(emptySupport.totals.supported, 13);
-assert.equal(emptySupport.totals.liveReady, 13);
-assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
+assert.equal(emptySupport.totals.liveReady, 0);
+assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "not_configured");
 const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
 assert.equal(support.totals.integrations, 13);
-assert.equal(support.totals.configured, 13);
-assert.equal(support.totals.connected, 13);
+assert.equal(support.totals.configured, 1);
+assert.equal(support.totals.connected, 0);
 assert.equal(support.totals.supported, 13);
-assert.equal(support.totals.liveReady, 13);
+assert.equal(support.totals.liveReady, 0);
 assert.equal(support.totals.operations > 30, true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialNames.includes("STRIPE_SECRET_KEY"), true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialState, "configured");
-assert.equal(support.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
-assert.equal(support.note.includes("Secret values stay outside the repo"), true);
+assert.equal(support.integrations.find((item) => item.id === "stripe")?.adapterState, "credential_ready");
+assert.equal(support.note.includes("secret values stay outside the repo"), true);
 const allCredentialEnv = Object.fromEntries(
   [...new Set([...integrationSummary.sponsors.flatMap((sponsor) => sponsor.env), ...integrationSummary.agentClis.flatMap((agent) => agent.env)])].map((name) => [name, "set"]),
 );
 assert.equal(buildIntegrationSupportReport(allCredentialEnv, new Date("2026-05-17T00:00:00Z")).totals.configured, 13);
-assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 13);
+assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 1);
 const liveAdapters = buildLiveAdapterCatalog(new Date("2026-05-17T00:00:00Z"));
 assert.equal(liveAdapters.totals.adapters, 13);
 assert.equal(liveAdapters.totals.operationCataloged, liveAdapters.totals.operations);
-assert.equal(liveAdapters.totals.liveReady, 13);
+assert.equal(liveAdapters.totals.liveReady, 0);
 assert.equal(liveAdapters.adapters.find((adapter) => adapter.id === "stripe")?.operations.some((operation) => operation.id === "stripe.payment_intents.create"), true);
 const manifest = buildPeripheralMcpManifest(new Date("2026-05-17T00:00:00Z"));
 assert.ok(manifest.tools.some((tool) => tool.name === "peripheral.request_approval"));
@@ -208,7 +208,7 @@ const sponsorRuntimeAdapters = buildSponsorRuntimeAdapters({
 });
 assert.equal(sponsorRuntimeAdapters.length, 7);
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.status, "live_ready");
-assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "agentmail")?.status, "live_ready");
+assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "agentmail")?.status, "not_configured");
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.endpointConfigured, true);
 const sponsorRuntimeRequest = buildSponsorRuntimeRequest({
   sponsorId: "stripe",

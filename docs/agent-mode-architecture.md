@@ -72,7 +72,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime route --l
 
 `peripheralctl integrations connected-state --json` returns a glasses runtime object:
 
-- glasses use the `phone_gateway` transport path, with telemetry provenance carried through the runtime profile
+- glasses use the `phone_gateway` transport path, with telemetry details carried through the runtime profile
 - phone owns BLE and rendering
 - broker exposes a local MCP-style policy layer
 - sponsor and agent CLI widgets are queued as surface commands

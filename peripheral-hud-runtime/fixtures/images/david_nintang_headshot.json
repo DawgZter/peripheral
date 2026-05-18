@@ -1,7 +1,7 @@
 {
   "kind": "bitmap_avatar",
   "label": "David Nintang",
-  "source": "operator-provided David Nintang headshot",
+  "source": "demo fixture avatar",
   "width": 64,
   "height": 64,
   "levels": "0=off,1=dim,2=mid,3=lit",
