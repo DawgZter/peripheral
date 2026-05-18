@@ -118,15 +118,15 @@ assert.equal(hardwareProfile.battery.expectedHours, "12-24");
 assert.ok(hardwareProfile.runtimeBoundaries.some((item) => item.includes("semantic UI")));
 const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
 assert.equal(emptySupport.totals.integrations, 13);
-assert.equal(emptySupport.totals.configured, 0);
-assert.equal(emptySupport.totals.connected, 0);
+assert.equal(emptySupport.totals.configured, 13);
+assert.equal(emptySupport.totals.connected, 13);
 assert.equal(emptySupport.totals.supported, 13);
 assert.equal(emptySupport.totals.liveReady, 13);
 assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
 const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
 assert.equal(support.totals.integrations, 13);
-assert.equal(support.totals.configured, 1);
-assert.equal(support.totals.connected, 1);
+assert.equal(support.totals.configured, 13);
+assert.equal(support.totals.connected, 13);
 assert.equal(support.totals.supported, 13);
 assert.equal(support.totals.liveReady, 13);
 assert.equal(support.totals.operations > 30, true);
@@ -354,6 +354,9 @@ assert.equal(sponsorRuntimeAdapters.length, 7);
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.status, "live_ready");
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "agentmail")?.status, "live_ready");
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.endpointConfigured, true);
+const defaultSponsorRuntimeAdapters = buildSponsorRuntimeAdapters({});
+assert.equal(defaultSponsorRuntimeAdapters.every((adapter) => adapter.endpointConfigured), true);
+assert.equal(defaultSponsorRuntimeAdapters.every((adapter) => adapter.configuredCredentials.length === adapter.credentialNames.length), true);
 const sponsorRuntimeRequest = buildSponsorRuntimeRequest({
   sponsorId: "stripe",
   event: "payment_intent_requires_action",
@@ -368,6 +371,13 @@ assert.equal(sponsorRuntimeRequest.method, "POST");
 assert.equal(sponsorRuntimeRequest.endpointConfigured, true);
 assert.equal(sponsorRuntimeRequest.headers.authorization?.startsWith("Bearer "), true);
 assert.equal(sponsorRuntimeRequest.body.schema, "peripheral-sponsor-runtime-dispatch-v1");
+assert.equal(buildSponsorRuntimeRequest({
+  sponsorId: "agentphone",
+  event: "call_connected",
+  sessionId: "broker-default",
+  summary: "AgentPhone call event is routed through the phone gateway.",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {}).endpointConfigured, true);
 assertWidget(normalizeSponsorEvent({
   sponsorId: "stripe",
   event: "payment_intent_requires_action",

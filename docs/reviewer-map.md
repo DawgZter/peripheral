@@ -37,12 +37,14 @@ Expected artifacts:
 
 ```sh
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
-These are also embedded under `runtime` in `review-bundle --json`.
+The support and live-adapter reports expose 13 supported integrations, 13 live-ready adapters, and 48 cataloged operations; the connected count reflects credentials configured in the operator environment. The connected-state, phone-runtime, and agent-bridge route summaries are also embedded under `runtime` in `review-bundle --json`.
 
 ## Real Mode Env Surface
 
