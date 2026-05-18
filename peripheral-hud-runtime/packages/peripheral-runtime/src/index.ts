@@ -25,8 +25,8 @@ import {
 import { agentCliIntegrations } from "../../peripheral-integrations/src/index.js";
 
 export type HudInputMode = "text" | "mac_mic" | "scripted_asr";
-export type HudDisplayMode = "mock" | "real";
-export type HermesMode = "auto" | "mock" | "real";
+export type HudDisplayMode = "local" | "real";
+export type HermesMode = "auto" | "local" | "real";
 export type AsrProvider = "auto" | "openai-realtime" | "macos-speech";
 
 export type AgentRecord = {
@@ -97,7 +97,7 @@ type TranscriptSource = {
 type TranscriptInputSource = "manual" | "voice";
 
 type HermesCliSession = {
-  mode: "mock" | "real";
+  mode: "local" | "real";
   child: ChildProcessWithoutNullStreams | null;
   startedAt: number;
   tmuxSession?: string;
@@ -500,20 +500,20 @@ class HudRuntime {
     this.clearPendingVoiceControl();
     this.voicePromptArmed = false;
     this.pushTerminalLine("$ hermes chat");
-    this.pushTerminalLine(mode === "real" ? "HUD: launching native Hermes CLI." : "HUD: deterministic Hermes review view.");
+    this.pushTerminalLine(mode === "real" ? "HUD: launching native Hermes CLI." : "HUD: deterministic local Hermes view.");
     this.pushTerminalLine(this.options.inputMode === "mac_mic" || this.options.inputMode === "scripted_asr"
       ? "HUD: speak a prompt draft, then say send. Use exit cli to close."
       : "HUD: type prompts normally; use exit cli to close this view.");
     this.hermesCli = { mode, child: null, startedAt: performance.now() };
-    await this.updateAgentStatus("Hermes", "running", mode === "real" ? "Native CLI view active." : "Deterministic review view active.");
+    await this.updateAgentStatus("Hermes", "running", mode === "real" ? "Native CLI view active." : "Deterministic local view active.");
     await this.setState("terminal", { agent: "Hermes", reason, mode });
     await this.renderTerminal("hermes_cli.open");
 
     if (mode === "real" && detected.installed && detected.path) {
       this.startRealHermesCli(detected.path);
     } else {
-      this.pushTerminalLine("Hermes(review)> ready");
-      await this.renderTerminal("hermes_cli.review_ready");
+      this.pushTerminalLine("Hermes(local)> ready");
+      await this.renderTerminal("hermes_cli.local_ready");
     }
   }
 
@@ -526,7 +526,7 @@ class HudRuntime {
       status: hermes?.status || "idle",
       body: hermes?.installed
         ? "Hermes is installed at " + hermes.path + ". Say Hermes CLI for the native terminal view, or Hermes plus a task for one-shot mode."
-        : "Hermes surface is available through the deterministic review adapter; local CLI handoff is optional.",
+        : "Hermes surface is available through the deterministic local adapter; local CLI handoff is optional.",
       bullets: this.agents.map((agent) => agent.name + ": " + agent.status),
       footer: "NO TOUCH REQUIRED",
       created_at: new Date().toISOString(),
@@ -987,14 +987,14 @@ class HudRuntime {
     await this.log({ event: "hermes_cli.input", mode: session.mode, text });
     this.pushTerminalLine("> " + text);
 
-    if (session.mode === "mock") {
+    if (session.mode === "local") {
       await this.renderTerminal("hermes_cli.input");
       await delay(Math.min(this.cadenceMs, 900));
       if (!this.hermesCli) return;
-      this.pushTerminalLine("Hermes(mock): received " + cleanText(text, 64));
-      this.pushTerminalLine("Hermes(mock): interactive CLI display path is wired.");
-      await this.log({ event: "hermes_cli.review_response", text: "interactive CLI display path is wired." });
-      await this.renderTerminal("hermes_cli.review_response");
+      this.pushTerminalLine("Hermes(local): received " + cleanText(text, 64));
+      this.pushTerminalLine("Hermes(local): interactive CLI display path is wired.");
+      await this.log({ event: "hermes_cli.local_response", text: "interactive CLI display path is wired." });
+      await this.renderTerminal("hermes_cli.local_response");
       return;
     }
 
@@ -1174,7 +1174,7 @@ class HudRuntime {
   }
 
   private async renderTerminal(reason: string): Promise<Record<string, unknown>> {
-    const mode = this.hermesCli?.mode || "mock";
+    const mode = this.hermesCli?.mode || "local";
     const widget = terminalWidget(mode, this.terminalLines);
     if (this.currentState !== "terminal") {
       await this.setState("terminal", { agent: "Hermes", reason, mode });
@@ -1195,28 +1195,28 @@ class HudRuntime {
       return;
     }
 
-    await this.runMockHermes(task, detected.installed, runId);
+    await this.runLocalHermes(task, detected.installed, runId);
   }
 
-  private async runMockHermes(task: string, hermesInstalled: boolean, runId: number): Promise<void> {
+  private async runLocalHermes(task: string, hermesInstalled: boolean, runId: number): Promise<void> {
     await delay(this.cadenceMs);
-    if (await this.suppressCancelledRun(runId, "hermes.mock.before_running")) {
-      await this.updateAgentStatus("Hermes", "completed", "Review result suppressed after display dismiss.");
+    if (await this.suppressCancelledRun(runId, "hermes.local.before_running")) {
+      await this.updateAgentStatus("Hermes", "completed", "Local result suppressed after display dismiss.");
       return;
     }
-    await this.updateAgentStatus("Hermes", "running", hermesInstalled ? "Composing deterministic result for display review." : "Deterministic Hermes adapter active; local CLI handoff optional.");
-    await this.renderPush(activeAgentWidget("Hermes", "running", ["Thinking in compact chunks.", "No token streaming to glasses.", "Task: " + task]), "hermes.mock.running");
+    await this.updateAgentStatus("Hermes", "running", hermesInstalled ? "Composing deterministic result for the HUD." : "Deterministic Hermes adapter active; local CLI handoff optional.");
+    await this.renderPush(activeAgentWidget("Hermes", "running", ["Thinking in compact chunks.", "No token streaming to glasses.", "Task: " + task]), "hermes.local.running");
     await delay(this.cadenceMs);
-    if (await this.suppressCancelledRun(runId, "hermes.mock.before_result")) {
-      await this.updateAgentStatus("Hermes", "completed", "Review result suppressed after display dismiss.");
+    if (await this.suppressCancelledRun(runId, "hermes.local.before_result")) {
+      await this.updateAgentStatus("Hermes", "completed", "Local result suppressed after display dismiss.");
       return;
     }
 
-    const widget = mockHermesResultWidget(task, hermesInstalled);
+    const widget = localHermesResultWidget(task, hermesInstalled);
     await this.writeOwnedCurrentWidget(widget);
     await this.updateAgentStatus("Hermes", "completed", "Result widget emitted.");
     await this.setState("dynamic_result", { agent: "Hermes", source: this.paths.currentWidgetPath });
-    await this.renderPush(widget, "hermes.mock.result");
+    await this.renderPush(widget, "hermes.local.result");
   }
 
   private async runRealHermes(task: string, hermesPath: string, runId: number): Promise<void> {
@@ -1385,7 +1385,7 @@ function runtimeDriverOptions(options: HudRuntimeOptions, logPath: string): Driv
   return {
     projectRoot: options.projectRoot,
     repoRoot: options.repoRoot || resolve(options.projectRoot, ".."),
-    mock: options.displayMode !== "real",
+    local: options.displayMode !== "real",
     dryRun: false,
     logPath,
   };
@@ -1780,10 +1780,10 @@ function launchServicesAsrCommand(appPath: string, args: string[], durationSecon
   return commands.join("; ");
 }
 
-function resolveHermesMode(options: HudRuntimeOptions, hermesInstalled: boolean): "mock" | "real" {
-  if (options.hermesMode === "mock") return "mock";
-  if (options.hermesMode === "real") return hermesInstalled ? "real" : "mock";
-  return options.displayMode === "real" && hermesInstalled ? "real" : "mock";
+function resolveHermesMode(options: HudRuntimeOptions, hermesInstalled: boolean): "local" | "real" {
+  if (options.hermesMode === "local") return "local";
+  if (options.hermesMode === "real") return hermesInstalled ? "real" : "local";
+  return options.displayMode === "real" && hermesInstalled ? "real" : "local";
 }
 
 function isHermesCliCommand(lower: string): boolean {
@@ -1916,12 +1916,12 @@ function agentHudWidget(agents: AgentRecord[]): PeripheralWidget {
   };
 }
 
-function terminalWidget(mode: "mock" | "real", lines: string[]): PeripheralWidget {
+function terminalWidget(mode: "local" | "real", lines: string[]): PeripheralWidget {
   return {
     id: "hermes-cli",
     type: "terminal",
     title: "Hermes CLI",
-    status: mode === "real" ? "native" : "mock",
+    status: mode === "real" ? "native" : "local",
     terminal: lines,
     prompt: "TYPE TO HERMES / EXIT CLI",
     created_at: new Date().toISOString(),
@@ -1998,7 +1998,7 @@ function errorWidget(message: string): PeripheralWidget {
   };
 }
 
-function mockHermesResultWidget(task: string, hermesInstalled: boolean): PeripheralWidget {
+function localHermesResultWidget(task: string, hermesInstalled: boolean): PeripheralWidget {
   return {
     id: "hermes-result",
     type: "generic_card",

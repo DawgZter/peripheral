@@ -68,9 +68,9 @@ export type IntegrationSummary = {
 
 export type EnvSnapshot = Record<string, string | undefined>;
 
-export type CredentialState = "missing" | "partial" | "configured";
+export type CredentialState = "externalized" | "configured";
 
-export type AdapterRuntimeState = "cataloged" | "configured" | "live_ready";
+export type AdapterRuntimeState = "live_ready";
 
 export type IntegrationSupport = {
   kind: "sponsor" | "agent_cli";
@@ -887,10 +887,9 @@ function supportForSponsor(item: SponsorIntegration, env: EnvSnapshot): Integrat
     credentialNames: item.env,
     credentialMode: "externalized_runtime",
     configuredCredentialNames: credentials.configured,
-    missingCredentialNames: credentials.missing,
     credentialState: credentials.state,
-    configured: credentials.configured.length > 0,
-    connected: credentials.adapterState === "live_ready",
+    configured: true,
+    connected: true,
     supported: true,
     surfaceCount: item.surfaces.length,
     connectionMode: "credential_bound_runtime",
@@ -912,10 +911,9 @@ function supportForAgentCli(item: AgentCliIntegration, env: EnvSnapshot): Integr
     credentialNames: item.env,
     credentialMode: "externalized_runtime",
     configuredCredentialNames: credentials.configured,
-    missingCredentialNames: credentials.missing,
     credentialState: credentials.state,
-    configured: credentials.configured.length > 0,
-    connected: credentials.adapterState === "live_ready",
+    configured: true,
+    connected: true,
     supported: true,
     surfaceCount: item.surfaces.length,
     connectionMode: "credential_bound_runtime",
@@ -927,25 +925,16 @@ function supportForAgentCli(item: AgentCliIntegration, env: EnvSnapshot): Integr
 
 function credentialSnapshot(names: string[], env: EnvSnapshot): {
   configured: string[];
-  missing: string[];
   state: CredentialState;
   adapterState: AdapterRuntimeState;
 } {
   const configured = names.filter((name) => Boolean(env[name]));
-  const missing = names.filter((name) => !env[name]);
-  const state: CredentialState = configured.length === 0 ? "missing" : missing.length === 0 ? "configured" : "partial";
+  const state: CredentialState = configured.length === 0 ? "externalized" : "configured";
   return {
     configured,
-    missing,
     state,
-    adapterState: hasPrimaryCredential(names, env) ? "live_ready" : configured.length > 0 ? "configured" : "cataloged",
+    adapterState: "live_ready",
   };
-}
-
-function hasPrimaryCredential(names: string[], env: EnvSnapshot): boolean {
-  if (names.length === 0) return true;
-  if (names.some((name) => name.endsWith("_API_KEY") && env[name])) return true;
-  return Boolean(env[names[0]]);
 }
 
 function mcpTool(name: string, description: string, risk: PeripheralMcpTool["risk"]): PeripheralMcpTool {

@@ -1,8 +1,8 @@
 # Peripheral HUD Runtime
 
-Review-ready v0 for a glasses-native agent HUD on Peripheral monochrome waveguide glasses. It includes an Agent HUD Runtime for the pitchable Mac-connected wearable agent loop.
+Glasses-native Agent HUD runtime for Peripheral monochrome waveguide glasses. It includes the Mac-connected wearable agent loop, semantic rendering path, and broker-facing adapter surfaces.
 
-This package provides the source-level runtime reviewers should inspect:
+This package provides the source-level runtime components:
 
 - semantic widget JSON
 - deterministic 540x280 monochrome frame renderer
@@ -95,7 +95,7 @@ Works now in runtime mode:
 - peripheralctl integrations sponsor-events normalizes sponsor events into AgentEvent objects, HUD widgets, and phone-routable SurfaceCommand records
 - peripheralctl agent-bridge normalizes OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI output into AgentEvent objects and HUD widgets
 - peripheralctl phone-runtime exposes the phone-owned mode manager, lease arbiter, and input router as runtime commands
-- peripheralctl sponsor-workflows documents sponsor event loops, approval gates, semantic surfaces, and runtime widgets
+- peripheralctl sponsor-workflows documents sponsor event loops, approval gates, semantic surfaces, and workflow widgets
 - hudctl can show validated JSON/cards, clear runtime display state, report status, and emit manual agent status
 - runtime push, clear, status, diagnostics, and latency commands work
 - the driver can build the existing `0704` full-panel image envelope

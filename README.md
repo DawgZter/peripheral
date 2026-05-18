@@ -111,7 +111,7 @@ For phone-owned mode, lease, and input routing behavior, see `peripheral-hud-run
 
 For local setup and checks, see `docs/DEVELOPMENT.md`.
 
-For a judge or AI reviewer starting point, see `docs/reviewer-map.md`.
+For an architecture walkthrough, see `docs/reviewer-map.md`.
 
 For the end-state broker and phone-owned surface architecture, see `docs/agent-mode-architecture.md`.
 

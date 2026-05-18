@@ -291,7 +291,7 @@ for (const invalidWidget of [
 
 const runtimeRoot = mkdtempSync(join(tmpdir(), "peripheral-hud-runtime-"));
 try {
-  const options = { projectRoot: runtimeRoot, displayMode: "mock" as const, inputMode: "text" as const };
+  const options = { projectRoot: runtimeRoot, displayMode: "local" as const, inputMode: "text" as const };
   const paths = runtimePaths(runtimeRoot);
   await showHudCard("Hermes", "Visual result ready", options);
   assert.ok(existsSync(paths.currentWidgetPath), "showHudCard should write current-widget.json");
@@ -388,7 +388,7 @@ try {
   assert.match(asrReplayLog, /"event":"asr.voice_draft.update"/);
   assert.match(asrReplayLog, /"event":"asr.voice_command.send"/);
   assert.match(asrReplayLog, /"event":"hermes_cli.input"/);
-  assert.doesNotMatch(asrReplayLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
+  assert.doesNotMatch(asrReplayLog, /"event":"hermes_cli.input","mode":"local","text":"send"/);
   assert.match(asrReplayLog, /"event":"hermes_cli.review_response"/);
   assert.match(asrReplayLog, /asr_replay.awaiting_transcript/);
   assert.match(asrReplayLog, /"event":"asr_replay.complete"/);
@@ -434,14 +434,14 @@ try {
   assert.match(voiceHudLog, /"event":"input.voice_command.pending","command":"open"/);
   assert.match(voiceHudLog, /"event":"input.voice_command.alias","text":"Hear me","command":"hermes"/);
   assert.match(voiceHudLog, /"event":"asr.voice_gate.ignored","text":"ambient should be ignored","reason":"waiting_for_hermes"/);
-  assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"ambient should be ignored"/);
+  assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"local","text":"ambient should be ignored"/);
   assert.match(voiceHudLog, /"event":"asr.voice_gate.open","text":"Hermes voice test prompt","prompt":"voice test prompt"/);
   assert.match(voiceHudLog, /voice test prompt/);
   assert.match(voiceHudLog, /"event":"asr.voice_draft.update"/);
   assert.match(voiceHudLog, /"event":"asr.voice_command.send"/);
   assert.match(voiceHudLog, /"event":"hermes_cli.input"/);
-  assert.match(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"voice test prompt"/);
-  assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
+  assert.match(voiceHudLog, /"event":"hermes_cli.input","mode":"local","text":"voice test prompt"/);
+  assert.doesNotMatch(voiceHudLog, /"event":"hermes_cli.input","mode":"local","text":"send"/);
   assert.match(voiceHudLog, /"text":"close hermings"/);
   assert.match(voiceHudLog, /"event":"hermes_cli.close","reason":"input.dismiss"/);
 } finally {
@@ -492,7 +492,7 @@ try {
   assert.match(voiceAliasLog, /"text":"Close her"/);
   assert.match(voiceAliasLog, /"event":"input.voice_command.pending","command":"open"/);
   assert.match(voiceAliasLog, /"event":"asr.voice_gate.open","text":"Hear me say hello","prompt":"say hello"/);
-  assert.match(voiceAliasLog, /"event":"hermes_cli.input","mode":"mock","text":"say hello"/);
+  assert.match(voiceAliasLog, /"event":"hermes_cli.input","mode":"local","text":"say hello"/);
   assert.match(voiceAliasLog, /"event":"hermes_cli.close","reason":"input.dismiss"/);
   assert.doesNotMatch(voiceAliasLog, /Unknown HUD command/);
 } finally {

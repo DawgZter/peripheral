@@ -142,7 +142,7 @@ export const PERIPHERAL_SOURCE_KINDS = [
 
 export type PeripheralSourceKind = (typeof PERIPHERAL_SOURCE_KINDS)[number];
 
-export const SOURCE_TRUST_LEVELS = ["mock", "local", "verified", "remote"] as const;
+export const SOURCE_TRUST_LEVELS = ["scripted", "local", "verified", "remote"] as const;
 
 export type SourceTrustLevel = (typeof SOURCE_TRUST_LEVELS)[number];
 

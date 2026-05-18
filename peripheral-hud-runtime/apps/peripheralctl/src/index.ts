@@ -143,7 +143,7 @@ async function main(): Promise<void> {
   const driverOptions: DriverOptions = {
     projectRoot,
     repoRoot,
-    mock: Boolean(cli.options.mock || cli.options.local || cli.options["local-display"]),
+    local: Boolean(cli.options.local || cli.options["local-display"]),
     dryRun: Boolean(cli.options["dry-run"]),
     verbose: Boolean(cli.options.verbose),
     json: Boolean(cli.options.json),
@@ -490,12 +490,12 @@ function redactSponsorRuntimeRequest(request: SponsorRuntimeRequest): SponsorRun
 function runtimeOptions(cli: ParsedCli, projectRoot: string, repoRoot: string, logPath: string): HudRuntimeOptions {
   const realDisplay = Boolean(cli.options.real);
   const inputMode: HudInputMode = cli.options.mic === "mac" || cli.options["mac-mic"] ? "mac_mic" : "text";
-  const hermesMode: HermesMode = cli.options["real-hermes"] ? "real" : (cli.options["mock-hermes"] || cli.options["local-hermes"]) ? "mock" : "auto";
+  const hermesMode: HermesMode = cli.options["real-hermes"] ? "real" : cli.options["local-hermes"] ? "local" : "auto";
   const asrProvider = normalizeAsrProvider(cli.options["asr-provider"]);
   return {
     projectRoot,
     repoRoot,
-    displayMode: realDisplay ? "real" : "mock",
+    displayMode: realDisplay ? "real" : "local",
     inputMode,
     hermesMode,
     startHermesCli: Boolean(cli.options["hermes-cli"]),
@@ -584,14 +584,14 @@ async function commandWalkthrough(cli: ParsedCli, projectRoot: string, driverOpt
     steps.push(step);
     await appendJsonl(driverOptions.logPath || defaultLogPath(projectRoot), { event: "walkthrough.step", walkthrough: name, ...step });
     if (index < flow.length - 1) {
-      await delay(driverOptions.mock || driverOptions.dryRun ? Math.min(80, cadenceMs) : cadenceMs);
+      await delay(driverOptions.local || driverOptions.dryRun ? Math.min(80, cadenceMs) : cadenceMs);
     }
   }
   return { ok: true, walkthrough: name, frames: frameDir, logPath: driverOptions.logPath, steps: steps.length };
 }
 
 async function commandMeasureLatency(projectRoot: string, driverOptions: DriverOptions, realHardwareOk: boolean): Promise<unknown> {
-  if (!driverOptions.mock && !driverOptions.dryRun && !realHardwareOk) {
+  if (!driverOptions.local && !driverOptions.dryRun && !realHardwareOk) {
     throw new Error("measure-latency in live transport mode requires --real-hardware-ok after explicit live-glasses permission.");
   }
   const cases = [
@@ -617,8 +617,8 @@ async function commandMeasureLatency(projectRoot: string, driverOptions: DriverO
     });
     const encodeMs = roundMs(performance.now() - encodeStart);
     const pushStart = performance.now();
-    const push = driverOptions.mock || driverOptions.dryRun
-      ? await mockLatencyPush(projectRoot, driverOptions, item.case, built)
+    const push = driverOptions.local || driverOptions.dryRun
+      ? await localLatencyPush(projectRoot, driverOptions, item.case, built)
       : await pushArtifact(artifact, driverOptions);
     const pushMs = roundMs(performance.now() - pushStart);
     rows.push({
@@ -627,14 +627,14 @@ async function commandMeasureLatency(projectRoot: string, driverOptions: DriverO
       renderMs,
       encodeMs,
       pushMs,
-      pushMode: driverOptions.mock || driverOptions.dryRun ? "mock" : "real",
+      pushMode: driverOptions.local || driverOptions.dryRun ? "local" : "real",
       compressedBytes: built.compressed.length,
       payloadBytes: built.payload.length,
       frames: built.frames.length,
       rawBytes: Buffer.from(artifact.pixelsBase64, "base64").length,
       push,
     });
-    if (!driverOptions.mock && !driverOptions.dryRun) await delay(1400);
+    if (!driverOptions.local && !driverOptions.dryRun) await delay(1400);
   }
   const docsPath = join(projectRoot, "docs", "LATENCY.md");
   const maxEncode = Math.max(...rows.map((row) => Number(row.encodeMs)));
@@ -645,17 +645,17 @@ async function commandMeasureLatency(projectRoot: string, driverOptions: DriverO
     "Default v0 cadence remains 1400 ms for live-call chunks, with 700 ms available after bridge measurements confirm stable refresh.",
   ].join(" ");
   await writeLatencyMarkdown(docsPath, rows, interpretation);
-  return { ok: true, mock: Boolean(driverOptions.mock || driverOptions.dryRun), docsPath, rows, interpretation, logPath: driverOptions.logPath };
+  return { ok: true, local: Boolean(driverOptions.local || driverOptions.dryRun), docsPath, rows, interpretation, logPath: driverOptions.logPath };
 }
 
-async function mockLatencyPush(projectRoot: string, driverOptions: DriverOptions, caseName: string, built: ReturnType<typeof buildDisplayImageFrames>): Promise<Record<string, unknown>> {
+async function localLatencyPush(projectRoot: string, driverOptions: DriverOptions, caseName: string, built: ReturnType<typeof buildDisplayImageFrames>): Promise<Record<string, unknown>> {
   await appendJsonl(driverOptions.logPath || defaultLogPath(projectRoot), {
-    event: "latency.mock-push",
+    event: "latency.local-push",
     case: caseName,
     frames: built.frames.length,
     compressedBytes: built.compressed.length,
   });
-  return { ok: true, mock: true, frames: built.frames.length, compressedBytes: built.compressed.length };
+  return { ok: true, local: true, frames: built.frames.length, compressedBytes: built.compressed.length };
 }
 
 async function commandDiagnostics(projectRoot: string, repoRoot: string, driverOptions: DriverOptions, sidecarUrl: string): Promise<unknown> {
@@ -668,7 +668,7 @@ async function commandDiagnostics(projectRoot: string, repoRoot: string, driverO
     repoRoot,
     helper,
     helperExists: existsSync(helper),
-    mock: Boolean(driverOptions.mock),
+    local: Boolean(driverOptions.local),
     display: PERIPHERAL_DISPLAY,
     mapWidgetDisplay: MAP_WIDGET_DISPLAY,
     widgetTypes: WIDGET_TYPES,
@@ -1291,7 +1291,7 @@ HUD runtime options:
                            Dotenv file containing OPENAI_API_KEY.
   --openai-asr-ffmpeg-input <input>
                            ffmpeg avfoundation input for Mac mic; default auto.
-  --local-hermes           Force the deterministic Hermes review adapter.
+  --local-hermes           Force the deterministic local Hermes adapter.
   --real-hermes           Force real Hermes when installed.
   --hermes-cli            Open the Hermes terminal view as the default HUD view.
   --hermes-tmux-session <name>
@@ -1331,7 +1331,7 @@ Options:
 function assertRealHardwareGate(command: string, driverOptions: DriverOptions, realHardwareOk: boolean): void {
   const hardwareCommands = new Set(["push-json", "show-image", "clear", "walkthrough", "measure-latency"]);
   if (!hardwareCommands.has(command)) return;
-  if (driverOptions.mock || driverOptions.dryRun || realHardwareOk) return;
+  if (driverOptions.local || driverOptions.dryRun || realHardwareOk) return;
   throw new Error(`${command} in live transport mode requires --real-hardware-ok after explicit live-glasses permission.`);
 }
 

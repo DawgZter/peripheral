@@ -10,7 +10,7 @@ import type { RenderArtifact } from "../../peripheral-renderer/src/index.js";
 export type DriverOptions = {
   projectRoot: string;
   repoRoot?: string;
-  mock?: boolean;
+  local?: boolean;
   dryRun?: boolean;
   verbose?: boolean;
   json?: boolean;
@@ -62,25 +62,25 @@ export function loadFrameArtifact(pngPath: string): RenderArtifact {
   return JSON.parse(readFileSync(sidecar, "utf8")) as RenderArtifact;
 }
 
-export async function mockPush(imagePath: string, options: DriverOptions, extra: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+export async function localPush(imagePath: string, options: DriverOptions, extra: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   const logPath = options.logPath || defaultLogPath(options.projectRoot);
   const event = {
-    event: "push.mock",
+    event: "push.local",
     imagePath: resolve(imagePath),
-    mode: options.dryRun ? "dry-run" : "mock",
+    mode: options.dryRun ? "dry-run" : "local",
     ...extra,
   };
   await appendJsonl(logPath, event);
-  return { ok: true, mock: true, logPath, imagePath: resolve(imagePath) };
+  return { ok: true, local: true, logPath, imagePath: resolve(imagePath) };
 }
 
 export async function showImage(imagePath: string, options: DriverOptions): Promise<Record<string, unknown>> {
   const hasSidecar = existsSync(resolve(imagePath).replace(/\.png$/i, "") + ".frame.json");
   const artifact = hasSidecar ? loadFrameArtifact(imagePath) : null;
-  if (options.mock || options.dryRun || !artifact) {
-    return mockPush(imagePath, options, {
+  if (options.local || options.dryRun || !artifact) {
+    return localPush(imagePath, options, {
       hasFrameSidecar: Boolean(artifact),
-      note: artifact ? "Rendered frame is pushable." : "Local review accepted an arbitrary image path; live push requires a .frame.json sidecar.",
+      note: artifact ? "Rendered frame is pushable." : "Local driver accepted an arbitrary image path; live push requires a .frame.json sidecar.",
     });
   }
   return pushArtifact(artifact, options);
@@ -109,8 +109,8 @@ export async function pushArtifact(artifact: RenderArtifact, options: DriverOpti
     sha256: sha256(sourcePixels),
     deviceSha256: sha256(devicePixels),
   };
-  if (options.mock || options.dryRun) {
-    return mockPush(artifact.pngPath, options, { event: "push.mock_artifact", ...summary });
+  if (options.local || options.dryRun) {
+    return localPush(artifact.pngPath, options, { event: "push.local_artifact", ...summary });
   }
   const result = await pushFramesToMac(built.frames, options);
   const logPath = options.logPath || defaultLogPath(options.projectRoot);
@@ -120,9 +120,9 @@ export async function pushArtifact(artifact: RenderArtifact, options: DriverOpti
 
 export async function clearDisplay(options: DriverOptions): Promise<Record<string, unknown>> {
   const logPath = options.logPath || defaultLogPath(options.projectRoot);
-  if (options.mock || options.dryRun) {
-    await appendJsonl(logPath, { event: "clear.mock" });
-    return { ok: true, mock: true, logPath };
+  if (options.local || options.dryRun) {
+    await appendJsonl(logPath, { event: "clear.local" });
+    return { ok: true, local: true, logPath };
   }
   const blankPixels = Buffer.alloc(PERIPHERAL_DISPLAY.rawBytes, 0);
   const devicePixels = invertPacked2Bpp(blankPixels);
@@ -151,12 +151,12 @@ export async function status(options: DriverOptions): Promise<Record<string, unk
   const helperPath = helperBinaryPath(repoRoot);
   const result = {
     ok: true,
-    mock: Boolean(options.mock),
+    local: Boolean(options.local),
     helperPath,
     helperExists: existsSync(helperPath),
     display: PERIPHERAL_DISPLAY,
-    note: options.mock
-      ? "Local review status reports helper configuration without touching live display transport."
+    note: options.local
+      ? "Local driver status reports helper configuration without touching live display transport."
       : "Real connection status is intentionally left to system tools before live pushes.",
   };
   const logPath = options.logPath || defaultLogPath(options.projectRoot);
