@@ -68,9 +68,9 @@ export type IntegrationSummary = {
 
 export type EnvSnapshot = Record<string, string | undefined>;
 
-export type CredentialState = "externalized" | "configured";
+export type CredentialState = "not_configured" | "configured";
 
-export type AdapterRuntimeState = "live_ready";
+export type AdapterRuntimeState = "source_ready" | "credential_ready" | "endpoint_ready" | "live_ready";
 
 export type IntegrationSupport = {
   kind: "sponsor" | "agent_cli";
@@ -83,6 +83,8 @@ export type IntegrationSupport = {
   credentialMode: "externalized_runtime";
   configuredCredentialNames: string[];
   credentialState: CredentialState;
+  endpointEnv?: string;
+  endpointConfigured?: boolean;
   configured: boolean;
   connected: boolean;
   supported: true;
@@ -102,6 +104,7 @@ export type IntegrationSupportReport = {
     supported: number;
     configured: number;
     liveReady: number;
+    sourceReady: number;
     credentialNames: number;
     operations: number;
     surfaceCapabilities: number;
@@ -125,7 +128,7 @@ export type LiveAdapter = {
   kind: "sponsor" | "agent_cli";
   id: SponsorId | AgentCliId;
   name: string;
-  adapterStatus: "live_ready";
+  adapterStatus: AdapterRuntimeState;
   connection: "credential_bound";
   credentials: string[];
   runtime: "phone_owned_agent_mode";
@@ -149,7 +152,9 @@ export type LiveAdapterCatalog = {
     adapters: number;
     sponsorAdapters: number;
     agentCliAdapters: number;
+    sourceReady: number;
     liveReady: number;
+    operationCataloged: number;
     operations: number;
   };
   adapters: LiveAdapter[];
@@ -260,7 +265,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Coordinator and call-control plane for human-visible agent actions.",
     docs: "https://docs.agentphone.com/",
     env: ["AGENTPHONE_API_KEY", "AGENTPHONE_PHONE_NUMBER"],
-    status: "connected",
+    status: "supported",
     agentEvents: ["call_started", "call_connected", "call_summary", "human_takeover_requested"],
     surfaces: [
       capability("agentphone.call_status", "Live call HUD", "Shows calling, connected, and handoff state from an active phone agent.", "glance", "low"),
@@ -278,7 +283,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Payments, setup intents, card holds, receipts, and monetization checkpoints.",
     docs: "https://docs.stripe.com/",
     env: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_ID"],
-    status: "connected",
+    status: "supported",
     agentEvents: ["payment_intent_requires_action", "setup_intent_created", "receipt_available", "risk_review"],
     surfaces: [
       capability("stripe.card_hold", "Card-hold approval", "Shows refundable holds and requires explicit user confirmation.", "fullscreen", "medium"),
@@ -296,7 +301,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Persistent memory and retrieval layer for agent context on the glasses.",
     docs: "https://docs.supermemory.ai/",
     env: ["SUPERMEMORY_API_KEY", "SUPERMEMORY_CONTAINER"],
-    status: "connected",
+    status: "supported",
     agentEvents: ["memory_save_requested", "memory_search_result", "profile_updated"],
     surfaces: [
       capability("supermemory.recall", "Memory recall card", "Condenses retrieved context into a few wearer-safe bullets.", "glance", "low"),
@@ -314,7 +319,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Agent-readable email inboxes, outbound drafts, and verification loops.",
     docs: "https://docs.agentmail.to/",
     env: ["AGENTMAIL_API_KEY", "AGENTMAIL_INBOX"],
-    status: "connected",
+    status: "supported",
     agentEvents: ["mail_received", "draft_ready", "verification_code_found", "reply_sent"],
     surfaces: [
       capability("agentmail.inbox", "Inbox triage", "Shows a tiny count or top urgent thread for the active agent.", "tiny_hud", "low"),
@@ -332,7 +337,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Browser automation evidence and step-level website navigation telemetry.",
     docs: "https://docs.browser-use.com/",
     env: ["BROWSER_USE_API_KEY"],
-    status: "connected",
+    status: "supported",
     agentEvents: ["browser_step", "browser_waiting", "browser_submit_requested", "browser_result", "browser_error"],
     surfaces: [
       capability("browser_use.step", "Browser step HUD", "Shows the page title and current browser action in a glance card.", "glance", "low"),
@@ -350,7 +355,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Context compression and ambient signal sponge for agent working memory.",
     docs: "https://sponge.ai/docs",
     env: ["SPONGE_API_KEY", "SPONGE_PROJECT_ID"],
-    status: "connected",
+    status: "supported",
     agentEvents: ["context_absorbed", "context_clustered", "summary_ready"],
     surfaces: [
       capability("sponge.digest", "Context digest", "Turns noisy agent/browser/call state into a short HUD digest.", "glance", "low"),
@@ -368,7 +373,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Multimodal broker reasoning, summarization, and structured HUD generation.",
     docs: "https://ai.google.dev/gemini-api/docs",
     env: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-    status: "connected",
+    status: "supported",
     agentEvents: ["broker_summary", "visual_reasoning_result", "route_decision"],
     surfaces: [
       capability("gemini.broker", "Broker brain", "Ranks interruptions and selects a semantic HUD surface.", "glance", "low"),
@@ -383,22 +388,22 @@ export const sponsorIntegrations: SponsorIntegration[] = [
 ];
 
 export const agentCliIntegrations: AgentCliIntegration[] = [
-  agentCli("openclaw", "OpenClaw", "openclaw", ["claw"], "Command interface: openclaw on PATH; auth is handled by the local CLI/runtime environment.", "pty", ["OPENCLAW_API_KEY"], "connected", [
+  agentCli("openclaw", "OpenClaw", "openclaw", ["claw"], "Command interface: openclaw on PATH; auth is handled by the local CLI/runtime environment.", "pty", ["OPENCLAW_API_KEY"], "supported", [
     "Treats claw tasks as workspace sessions with terminal fallback and approval events.",
   ]),
-  agentCli("claude_code", "Claude Code CLI", "claude", ["claude-code"], "Command interface: claude on PATH; auth is handled by the local CLI/runtime environment.", "tmux", ["ANTHROPIC_API_KEY"], "connected", [
+  agentCli("claude_code", "Claude Code CLI", "claude", ["claude-code"], "Command interface: claude on PATH; auth is handled by the local CLI/runtime environment.", "tmux", ["ANTHROPIC_API_KEY"], "supported", [
     "PTY/tmux capture lets the phone app show normal terminal progress without owning the session.",
   ]),
-  agentCli("pi", "Pi", "pi", ["inflection", "pi-cli"], "Command interface: pi-compatible adapter; auth is handled by the local CLI/runtime environment.", "adapter", ["PI_API_KEY"], "connected", [
+  agentCli("pi", "Pi", "pi", ["inflection", "pi-cli"], "Command interface: pi-compatible adapter; auth is handled by the local CLI/runtime environment.", "adapter", ["PI_API_KEY"], "supported", [
     "Modeled as a conversational companion agent with voice-first reply surfaces.",
   ]),
-  agentCli("opencode", "OpenCode", "opencode", ["oc"], "Command interface: opencode workspace PTY; auth is handled by the local CLI/runtime environment.", "pty", ["OPENCODE_API_KEY"], "connected", [
+  agentCli("opencode", "OpenCode", "opencode", ["oc"], "Command interface: opencode workspace PTY; auth is handled by the local CLI/runtime environment.", "pty", ["OPENCODE_API_KEY"], "supported", [
     "Maps OpenCode plan/apply/waiting states into generic AgentEvent objects.",
   ]),
-  agentCli("gemini_cli", "Gemini CLI", "gemini", ["gemini-cli"], "Command interface: gemini stdio session; auth is handled by the local CLI/runtime environment.", "stdio", ["GEMINI_API_KEY", "GOOGLE_API_KEY"], "connected", [
+  agentCli("gemini_cli", "Gemini CLI", "gemini", ["gemini-cli"], "Command interface: gemini stdio session; auth is handled by the local CLI/runtime environment.", "stdio", ["GEMINI_API_KEY", "GOOGLE_API_KEY"], "supported", [
     "Used for broker summaries, multimodal notes, and low-risk routing suggestions.",
   ]),
-  agentCli("codex_cli", "Codex CLI", "codex", [], "Command interface: codex tmux session from the Mac broker workspace; auth is handled by the local CLI/runtime environment.", "tmux", ["OPENAI_API_KEY"], "connected", [
+  agentCli("codex_cli", "Codex CLI", "codex", [], "Command interface: codex tmux session from the Mac broker workspace; auth is handled by the local CLI/runtime environment.", "tmux", ["OPENAI_API_KEY"], "supported", [
     "Codex events become approval cards, progress cards, and raw terminal fallback panes.",
   ]),
 ];
@@ -430,12 +435,13 @@ export function buildIntegrationSupportReport(env: EnvSnapshot = {}, now = new D
       supported: integrations.filter((item) => item.supported).length,
       configured: integrations.filter((item) => item.configured).length,
       liveReady: integrations.filter((item) => item.adapterState === "live_ready").length,
+      sourceReady: integrations.filter((item) => item.adapterState === "source_ready").length,
       credentialNames: integrations.reduce((count, item) => count + item.credentialNames.length, 0),
       operations: integrations.reduce((count, item) => count + item.operationCount, 0),
       surfaceCapabilities: integrations.reduce((count, item) => count + item.surfaceCount, 0),
     },
     integrations,
-    note: "Every listed adapter has operation metadata, credential-bound routing, and phone-owned surface dispatch; live runtime state is derived from credentials and secret values stay outside the repo.",
+    note: "Every listed adapter has source-level operation metadata and phone-owned surface dispatch. configured/connected/liveReady are derived from the current environment; secret values stay outside the repo.",
   };
 }
 
@@ -451,11 +457,13 @@ export function buildLiveAdapterCatalog(now = new Date()): LiveAdapterCatalog {
       adapters: adapters.length,
       sponsorAdapters: adapters.filter((adapter) => adapter.kind === "sponsor").length,
       agentCliAdapters: adapters.filter((adapter) => adapter.kind === "agent_cli").length,
+      sourceReady: adapters.filter((adapter) => adapter.adapterStatus === "source_ready").length,
       liveReady: adapters.filter((adapter) => adapter.adapterStatus === "live_ready").length,
+      operationCataloged: adapters.reduce((count, adapter) => count + adapter.operations.length, 0),
       operations: adapters.reduce((count, adapter) => count + adapter.operations.length, 0),
     },
     adapters,
-    note: "Live-ready adapters expose credential-bound API or CLI operations that route through the broker and phone-owned Agent Mode surface.",
+    note: "This catalog is source-ready operation metadata. Use integrations support to see which adapters are configured or live in the current environment.",
   };
 }
 
@@ -812,6 +820,25 @@ function sponsorEndpoint(id: SponsorId): LiveAdapter["endpoint"] {
   }
 }
 
+function endpointEnvForSponsor(id: SponsorId): string {
+  switch (id) {
+    case "agentphone":
+      return "AGENTPHONE_PERIPHERAL_ENDPOINT";
+    case "stripe":
+      return "STRIPE_PERIPHERAL_ENDPOINT";
+    case "supermemory":
+      return "SUPERMEMORY_PERIPHERAL_ENDPOINT";
+    case "agentmail":
+      return "AGENTMAIL_PERIPHERAL_ENDPOINT";
+    case "browser_use":
+      return "BROWSER_USE_PERIPHERAL_ENDPOINT";
+    case "sponge":
+      return "SPONGE_PERIPHERAL_ENDPOINT";
+    case "gemini":
+      return "GEMINI_PERIPHERAL_ENDPOINT";
+  }
+}
+
 function sponsorOperations(item: SponsorIntegration): LiveAdapterOperation[] {
   switch (item.id) {
     case "agentphone":
@@ -877,19 +904,23 @@ function adapterOperation(
 
 function supportForSponsor(item: SponsorIntegration, env: EnvSnapshot): IntegrationSupport {
   const operations = sponsorOperations(item);
-  const credentials = credentialSnapshot(item.env, env);
+  const endpointEnv = endpointEnvForSponsor(item.id);
+  const credentials = credentialSnapshot(item.env, env, endpointEnv);
+  const status = statusForSnapshot(credentials);
   return {
     kind: "sponsor",
     id: item.id,
     name: item.name,
-    status: item.status,
+    status,
     docs: item.docs,
     credentialNames: item.env,
     credentialMode: "externalized_runtime",
     configuredCredentialNames: credentials.configured,
     credentialState: credentials.state,
-    configured: true,
-    connected: true,
+    endpointEnv,
+    endpointConfigured: credentials.endpointConfigured,
+    configured: status !== "supported",
+    connected: credentials.adapterState === "live_ready",
     supported: true,
     surfaceCount: item.surfaces.length,
     connectionMode: "credential_bound_runtime",
@@ -902,18 +933,19 @@ function supportForSponsor(item: SponsorIntegration, env: EnvSnapshot): Integrat
 function supportForAgentCli(item: AgentCliIntegration, env: EnvSnapshot): IntegrationSupport {
   const operationCount = 4;
   const credentials = credentialSnapshot(item.env, env);
+  const status = statusForSnapshot(credentials);
   return {
     kind: "agent_cli",
     id: item.id,
     name: item.name,
-    status: item.status,
+    status,
     command: item.command,
     credentialNames: item.env,
     credentialMode: "externalized_runtime",
     configuredCredentialNames: credentials.configured,
     credentialState: credentials.state,
-    configured: true,
-    connected: true,
+    configured: status !== "supported",
+    connected: credentials.adapterState === "live_ready",
     supported: true,
     surfaceCount: item.surfaces.length,
     connectionMode: "credential_bound_runtime",
@@ -923,18 +955,34 @@ function supportForAgentCli(item: AgentCliIntegration, env: EnvSnapshot): Integr
   };
 }
 
-function credentialSnapshot(names: string[], env: EnvSnapshot): {
+function credentialSnapshot(names: string[], env: EnvSnapshot, endpointEnv?: string): {
   configured: string[];
   state: CredentialState;
   adapterState: AdapterRuntimeState;
+  endpointConfigured: boolean;
 } {
   const configured = names.filter((name) => Boolean(env[name]));
-  const state: CredentialState = configured.length === 0 ? "externalized" : "configured";
+  const endpointConfigured = Boolean(endpointEnv && env[endpointEnv]);
+  const state: CredentialState = configured.length === 0 ? "not_configured" : "configured";
+  const adapterState: AdapterRuntimeState = endpointConfigured && configured.length > 0
+    ? "live_ready"
+    : endpointConfigured
+      ? "endpoint_ready"
+      : configured.length > 0
+        ? "credential_ready"
+        : "source_ready";
   return {
     configured,
     state,
-    adapterState: "live_ready",
+    adapterState,
+    endpointConfigured,
   };
+}
+
+function statusForSnapshot(snapshot: { configured: string[]; endpointConfigured: boolean; adapterState: AdapterRuntimeState }): IntegrationStatus {
+  if (snapshot.adapterState === "live_ready") return "connected";
+  if (snapshot.configured.length > 0 || snapshot.endpointConfigured) return "configured";
+  return "supported";
 }
 
 function mcpTool(name: string, description: string, risk: PeripheralMcpTool["risk"]): PeripheralMcpTool {

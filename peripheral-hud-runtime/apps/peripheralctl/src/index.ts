@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
-import { MAP_WIDGET_DISPLAY, PERIPHERAL_DISPLAY, WIDGET_TYPES, assertWidget, type PeripheralWidget } from "../../../packages/peripheral-protocol/src/index.js";
+import { MAP_WIDGET_DISPLAY, PERIPHERAL_DISPLAY, WIDGET_TYPES, assertWidget, type PeripheralWidget, type SurfaceKind, type UserDecision } from "../../../packages/peripheral-protocol/src/index.js";
 import { defaultFramePath, previewName, renderWidget, renderWidgetFile, renderWidgetToFile } from "../../../packages/peripheral-renderer/src/index.js";
 import {
   appendJsonl,
@@ -73,8 +73,10 @@ import {
   buildSponsorRuntimeAdapters,
   buildSponsorRuntimeRequest,
   dispatchSponsorEvent,
+  normalizeSponsorEvent,
   type SponsorRuntimeRequest,
 } from "../../../packages/peripheral-sponsor-kit/src/index.js";
+import { normalizeAgentPhoneEvent, runAgentPhoneDinnerBooking, type AgentPhoneDinnerRequest } from "../../../packages/peripheral-sponsor-kit/src/agentphone.js";
 
 type ParsedCli = {
   command: string;
@@ -122,6 +124,14 @@ const VALUE_FLAGS = new Set([
   "amount",
   "target",
   "code",
+  "choice",
+  "restaurant-name",
+  "restaurant-phone",
+  "party-size",
+  "neighborhood",
+  "booking-name",
+  "preferred-window",
+  "hold-amount",
 ]);
 
 async function main(): Promise<void> {
@@ -143,7 +153,7 @@ async function main(): Promise<void> {
   const driverOptions: DriverOptions = {
     projectRoot,
     repoRoot,
-    local: Boolean(cli.options.local || cli.options["local-display"]),
+    local: Boolean(cli.options.local || cli.options["local-display"] || (cli.command === "demo" && !cli.options.real)),
     dryRun: Boolean(cli.options["dry-run"]),
     verbose: Boolean(cli.options.verbose),
     json: Boolean(cli.options.json),
@@ -174,6 +184,9 @@ async function main(): Promise<void> {
     case "measure-latency":
       result = await commandMeasureLatency(projectRoot, driverOptions, realHardwareOk);
       break;
+    case "demo":
+      result = await commandDemo(cli, projectRoot, driverOptions);
+      break;
     case "walkthrough":
       result = await commandWalkthrough(cli, projectRoot, driverOptions);
       break;
@@ -199,7 +212,7 @@ async function main(): Promise<void> {
       result = await commandAgentBridge(cli, projectRoot);
       break;
     case "phone-runtime":
-      result = await commandPhoneRuntime(cli);
+      result = await commandPhoneRuntime(cli, projectRoot);
       break;
     case "sponsor-workflows":
       result = await commandSponsorWorkflows(cli, projectRoot);
@@ -375,7 +388,7 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<
   }
 }
 
-async function commandPhoneRuntime(cli: ParsedCli): Promise<unknown> {
+async function commandPhoneRuntime(cli: ParsedCli, projectRoot: string): Promise<unknown> {
   const view = cli.positionals[0] || "snapshot";
   const now = new Date();
   switch (view) {
@@ -407,9 +420,45 @@ async function commandPhoneRuntime(cli: ParsedCli): Promise<unknown> {
     }
     case "agent-mode-lease":
       return { ok: true, lease: agentModeLease(String(cli.options.line || "User entered Agent Mode."), now) };
+    case "decide": {
+      const decision = buildApprovalDecision(cli, now);
+      const decisionPath = writeApprovalDecision(projectRoot, decision);
+      const decisionLogPath = join(projectRoot, "out", "demo", "approval-decisions.jsonl");
+      await appendJsonl(decisionLogPath, { event: "phone_runtime.decision", decision, decisionPath });
+      return {
+        ok: true,
+        decision,
+        decisionPath,
+        decisionLogPath,
+        appliesTo: decision.event_id,
+      };
+    }
     default:
-      throw new Error("Unknown phone-runtime view. Use one of: snapshot, lease, route, agent-mode-lease");
+      throw new Error("Unknown phone-runtime view. Use one of: snapshot, lease, route, agent-mode-lease, decide");
   }
+}
+
+function buildApprovalDecision(cli: ParsedCli, now: Date): UserDecision {
+  const eventId = String(cli.options.event || cli.positionals[1] || "booking-approval-1");
+  const choice = String(cli.options.choice || cli.positionals[2] || "approve");
+  const decision = choice === "deny" ? "deny" : choice === "details" ? "details" : "approve";
+  return {
+    kind: "approval_decision",
+    event_id: eventId,
+    session_id: String(cli.options["session-id"] || "dinner-booking"),
+    decision,
+    choice_id: decision,
+    confirmation_level: cli.options.phone ? "phone" : "voice_and_tap",
+    reason: String(cli.options.summary || "Decision captured by phone runtime."),
+    source: {
+      id: "phone-runtime",
+      label: "Phone Runtime",
+      kind: "system",
+      vendor: "Peripheral",
+      trust: "local",
+    },
+    timestamp: now.toISOString(),
+  };
 }
 
 async function commandSponsorWorkflows(cli: ParsedCli, projectRoot: string): Promise<unknown> {
@@ -565,6 +614,329 @@ async function commandRenderCard(cli: ParsedCli, projectRoot: string): Promise<u
   const out = resolve(String(cli.options.out || join(projectRoot, "out", "frames", "render-card.png")));
   const artifact = renderWidgetToFile(widget, out, { assetRoot: join(projectRoot, "fixtures", "images") });
   return { ok: true, artifact };
+}
+
+async function commandDemo(cli: ParsedCli, projectRoot: string, driverOptions: DriverOptions): Promise<unknown> {
+  const name = cli.positionals[0];
+  if (name !== "dinner-booking") {
+    throw new Error("demo requires dinner-booking.");
+  }
+  return commandDinnerBookingDemo(cli, projectRoot, driverOptions);
+}
+
+async function commandDinnerBookingDemo(cli: ParsedCli, projectRoot: string, driverOptions: DriverOptions): Promise<unknown> {
+  const now = new Date();
+  const fixturePath = join(projectRoot, "fixtures", "dinner_booking_walkthrough.json");
+  const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as Record<string, unknown>;
+  const restaurant = asRecord(fixture.restaurant);
+  const approval = asRecord(fixture.approval);
+  const requestText = typeof fixture.request === "string"
+    ? fixture.request
+    : stringValue(asRecord(fixture.request).text) || "Book dinner for two tonight near Mission, under Karim.";
+  const dinnerRequest: AgentPhoneDinnerRequest = {
+    restaurantName: String(cli.options["restaurant-name"] || stringValue(restaurant.name) || "Sato Table"),
+    restaurantPhoneNumber: String(cli.options["restaurant-phone"] || stringValue(restaurant.phone) || ""),
+    partySize: Math.max(1, Number(cli.options["party-size"] || numberValue(restaurant.party_size) || 2)),
+    neighborhood: String(cli.options.neighborhood || stringValue(restaurant.neighborhood) || "Mission"),
+    bookingName: String(cli.options["booking-name"] || stringValue(approval.confirmation_name) || "Karim"),
+    preferredWindow: String(cli.options["preferred-window"] || stringValue(approval.booking_time) || "7:45"),
+    prompt: requestText,
+    now,
+  };
+  const frameDir = join(projectRoot, "out", "frames", "dinner-booking");
+  const demoDir = join(projectRoot, "out", "demo");
+  const logPath = typeof cli.options.log === "string" ? resolve(cli.options.log) : join(projectRoot, "out", "logs", "dinner-booking.jsonl");
+  rmSync(frameDir, { recursive: true, force: true });
+  mkdirSync(frameDir, { recursive: true });
+  mkdirSync(demoDir, { recursive: true });
+  if (typeof cli.options.log !== "string") {
+    mkdirSync(dirname(logPath), { recursive: true });
+    writeFileSync(logPath, "", "utf8");
+  }
+  const displayOptions: DriverOptions = {
+    ...driverOptions,
+    local: driverOptions.local || Boolean(cli.options.local || cli.options["local-display"] || !cli.options.real),
+    logPath,
+  };
+  const sessionId = "dinner-booking";
+  const timeline: Array<Record<string, unknown>> = [];
+  const artifacts: Array<Record<string, unknown>> = [];
+
+  await recordDinnerStep({
+    step: "user_request",
+    surface: "tiny_hud",
+    text: requestText,
+    widget: widget("dinner-user-request", "generic_card", "Dinner Request", {
+      status: "USER REQUEST",
+      body: requestText,
+      bullets: ["AgentPhone call", "AgentMail confirmation", "Supermemory preference"],
+      source: "Peripheral",
+    }),
+  }, timeline, artifacts, frameDir, displayOptions);
+
+  const callSession = await runAgentPhoneDinnerBooking(dinnerRequest, {
+    forceReal: Boolean(cli.options["real-agentphone"]),
+  });
+  for (const item of callSession.events.map((event) => normalizeAgentPhoneEvent(event))) {
+    await recordDinnerStep({
+      step: dinnerStepName(item.event.id, item.event.kind),
+      surface: item.command.surface,
+      text: String(item.event.summary || item.event.title || "AgentPhone call update."),
+      event: item.event,
+      command: item.command,
+      widget: item.widget,
+    }, timeline, artifacts, frameDir, displayOptions);
+  }
+
+  const approvalEventId = String(approval.event_id || "booking-approval-1");
+  if (cli.options["wait-for-approval"] && !cli.options["auto-approve"]) {
+    timeline.push({
+      step: "approval_pause",
+      eventId: approvalEventId,
+      status: "WAITING_FOR_APPROVAL",
+      nextCommand: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event " + approvalEventId + " --choice approve",
+      createdAt: now.toISOString(),
+    });
+    await appendJsonl(logPath, { event: "dinner-booking.waiting_for_approval", eventId: approvalEventId });
+    const result = writeDinnerTimeline(projectRoot, timeline, artifacts, frameDir, logPath, "WAITING_FOR_APPROVAL");
+    return {
+      ok: true,
+      demo: "dinner-booking",
+      status: "WAITING_FOR_APPROVAL",
+      approvalCommand: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event " + approvalEventId + " --choice approve",
+      ...result,
+    };
+  }
+
+  const decision = dinnerApprovalDecision(projectRoot, cli, now);
+  timeline.push({
+    step: "approval_decision",
+    eventId: decision.event_id,
+    choice: decision.choice,
+    source: decision.source,
+    status: decision.choice === "approve" ? "APPROVED" : "WAITING_FOR_APPROVAL",
+    createdAt: now.toISOString(),
+  });
+  await appendJsonl(logPath, { event: "dinner-booking.approval_decision", decision });
+
+  if (decision.choice !== "approve") {
+    const result = writeDinnerTimeline(projectRoot, timeline, artifacts, frameDir, logPath, "WAITING_FOR_APPROVAL");
+    return {
+      ok: true,
+      demo: "dinner-booking",
+      status: "WAITING_FOR_APPROVAL",
+      approvalCommand: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event " + decision.event_id + " --choice approve",
+      ...result,
+    };
+  }
+
+  const mail = normalizeSponsorEvent({
+    sponsorId: "agentmail",
+    event: "reply_sent",
+    sessionId: "dinner-confirmation-email",
+    title: "Confirmation Sent",
+    summary: "Confirmation email sent for " + dinnerRequest.preferredWindow + " dinner at " + dinnerRequest.restaurantName + ".",
+    risk: "low",
+    now,
+  });
+  const mailDispatch = cli.options["real-agentmail"] ? await dispatchSponsorEvent({
+    sponsorId: "agentmail",
+    event: "reply_sent",
+    sessionId: "dinner-confirmation-email",
+    title: "Confirmation Sent",
+    summary: "Confirmation email sent for " + dinnerRequest.preferredWindow + " dinner at " + dinnerRequest.restaurantName + ".",
+    risk: "low",
+    now,
+  }, process.env) : { ok: true, skipped: true, reason: "AgentMail live dispatch was not requested." };
+  await recordDinnerStep({
+    step: "agentmail_confirmation",
+    surface: mail.command.surface,
+    text: String(mail.event.summary || "Confirmation email sent."),
+    event: mail.event,
+    command: mail.command,
+    dispatch: mailDispatch,
+    widget: mail.widget,
+  }, timeline, artifacts, frameDir, displayOptions);
+
+  const memory = normalizeSponsorEvent({
+    sponsorId: "supermemory",
+    event: "memory_saved",
+    sessionId: "dinner-preference",
+    title: "Preference Saved",
+    summary: "Saved preference: prefers 7-8pm dinner slots.",
+    risk: "low",
+    now,
+  });
+  await recordDinnerStep({
+    step: "supermemory_saved",
+    surface: "tiny_hud",
+    text: String(memory.event.summary || "Dinner preference saved."),
+    event: memory.event,
+    command: memory.command,
+    widget: memory.widget,
+  }, timeline, artifacts, frameDir, displayOptions);
+
+  const result = writeDinnerTimeline(projectRoot, timeline, artifacts, frameDir, logPath, "COMPLETED");
+  return {
+    ok: true,
+    demo: "dinner-booking",
+    status: "COMPLETED",
+    agentPhonePath: callSession.mode,
+    agentPhoneEndpoint: callSession.endpoint || undefined,
+    agentPhoneRunState: callSession.mode === "real" ? "dispatched" : "local_review",
+    realAgentPhoneRequested: Boolean(cli.options["real-agentphone"]),
+    realAgentMailRequested: Boolean(cli.options["real-agentmail"]),
+    summary: "Dinner booked for " + dinnerRequest.preferredWindow + ". Confirmation sent. Preference saved.",
+    ...result,
+  };
+}
+
+type DinnerStep = {
+  step: string;
+  surface: SurfaceKind;
+  text: string;
+  widget: PeripheralWidget;
+  state?: string;
+  event?: unknown;
+  command?: unknown;
+  dispatch?: unknown;
+};
+
+type DinnerApprovalDecision = UserDecision & {
+  choice: UserDecision["decision"];
+};
+
+async function recordDinnerStep(
+  step: DinnerStep,
+  timeline: Array<Record<string, unknown>>,
+  artifacts: Array<Record<string, unknown>>,
+  frameDir: string,
+  driverOptions: DriverOptions,
+): Promise<void> {
+  const index = artifacts.length + 1;
+  const artifact = renderWidgetToFile(step.widget, join(frameDir, String(index).padStart(2, "0") + "-" + slug(step.step) + ".png"), {
+    assetRoot: join(driverOptions.projectRoot, "fixtures", "images"),
+  });
+  const push = await pushArtifact(artifact, driverOptions);
+  const artifactSummary = {
+    pngPath: artifact.pngPath,
+    sidecarPath: artifact.sidecarPath,
+    width: artifact.width,
+    height: artifact.height,
+    litPixels: artifact.stats.litPixels,
+    rawBytes: artifact.stats.rawBytes,
+  };
+  const entry = {
+    index,
+    step: step.step,
+    surface: step.surface,
+    text: step.text,
+    state: step.state || (step.step === "approval_required" ? "WAITING_FOR_APPROVAL" : undefined),
+    widgetId: step.widget.id,
+    widgetType: step.widget.type,
+    agentEvent: step.event,
+    command: step.command,
+    dispatch: step.dispatch,
+    artifact: artifactSummary,
+    push,
+  };
+  timeline.push(entry);
+  artifacts.push({ step: step.step, artifact: artifactSummary, push });
+  await appendJsonl(driverOptions.logPath || defaultLogPath(driverOptions.projectRoot, "dinner-booking"), {
+    event: "dinner-booking.step",
+    ...entry,
+  });
+}
+
+function dinnerStepName(id: string, kind: string): string {
+  const normalized = id.replace(/_/g, "-");
+  if (kind === "approval_required" || normalized.includes("time-offered") || normalized.includes("takeover") || normalized.includes("approval")) return "approval_required";
+  if (normalized.includes("call-started")) return "agentphone_call_started";
+  if (normalized.includes("transcript") || normalized.includes("time")) return "agentphone_transcript";
+  if (normalized.includes("connected")) return "agentphone_transcript";
+  return "agentphone_" + slug(id || kind || "event").replace(/-/g, "_");
+}
+
+function dinnerApprovalDecision(projectRoot: string, cli: ParsedCli, now: Date): DinnerApprovalDecision {
+  const decision = buildApprovalDecision(cli, now);
+  writeApprovalDecision(projectRoot, decision);
+  return { ...decision, choice: decision.decision };
+}
+
+function writeApprovalDecision(projectRoot: string, decision: UserDecision): string {
+  const approvalPath = join(projectRoot, "out", "demo", "dinner-booking-approval.json");
+  mkdirSync(dirname(approvalPath), { recursive: true });
+  writeFileSync(approvalPath, JSON.stringify(decision, null, 2) + "\n", "utf8");
+  return approvalPath;
+}
+
+function readApprovalDecision(projectRoot: string, eventId: string): UserDecision | null {
+  const approvalPath = join(projectRoot, "out", "demo", "dinner-booking-approval.json");
+  if (!existsSync(approvalPath)) return null;
+  try {
+    const decision = JSON.parse(readFileSync(approvalPath, "utf8")) as UserDecision;
+    return decision.event_id === eventId ? decision : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDinnerTimeline(
+  projectRoot: string,
+  timeline: Array<Record<string, unknown>>,
+  artifacts: Array<Record<string, unknown>>,
+  frameDir: string,
+  logPath: string,
+  statusValue: "COMPLETED" | "WAITING_FOR_APPROVAL",
+): Record<string, unknown> {
+  const timelinePath = join(projectRoot, "out", "demo", "dinner-booking-timeline.json");
+  const summaryPath = join(projectRoot, "out", "demo", "dinner-booking-summary.md");
+  const payload = {
+    schema: "peripheral-dinner-booking-timeline-v1",
+    generatedAt: new Date().toISOString(),
+    demo: "dinner-booking",
+    status: statusValue,
+    approvalEventId: "booking-approval-1",
+    artifacts: {
+      frames: frameDir,
+      log: logPath,
+      summary: summaryPath,
+    },
+    steps: timeline,
+    renderedArtifacts: artifacts,
+    nextCommand: statusValue === "WAITING_FOR_APPROVAL"
+      ? "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event booking-approval-1 --choice approve"
+      : undefined,
+  };
+  mkdirSync(dirname(timelinePath), { recursive: true });
+  writeFileSync(timelinePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  writeFileSync(summaryPath, [
+    "# Dinner Booking Timeline",
+    "",
+    "Status: " + statusValue,
+    "Frames: " + frameDir,
+    "Timeline: " + timelinePath,
+    "Log: " + logPath,
+    "",
+    "Steps:",
+    ...timeline.map((step) => "- " + String(step.step) + ": " + String(step.text || step.status || "")),
+    "",
+  ].join("\n"), "utf8");
+  return {
+    timelinePath,
+    summaryPath,
+    frameDir,
+    frames: frameDir,
+    logPath,
+    steps: timeline.length,
+    artifacts: artifacts.length,
+    timeline,
+    renderedArtifacts: artifacts,
+  };
+}
+
+function slug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "step";
 }
 
 async function commandWalkthrough(cli: ParsedCli, projectRoot: string, driverOptions: DriverOptions): Promise<unknown> {
@@ -971,6 +1343,7 @@ function capabilities(): unknown {
       "clear",
       "status",
       "measure-latency",
+      "demo dinner-booking",
       "hud --local-display --text",
       "hud --local-display --mic mac",
       "hud --local-display --mic mac --asr-provider openai-realtime",
@@ -1202,6 +1575,7 @@ Usage:
   peripheralctl clear [--local]
   peripheralctl status [--local]
   peripheralctl measure-latency [--local]
+  peripheralctl demo dinner-booking [--local] [--json]
   peripheralctl hud --local-display --text
   peripheralctl hud --local-display --text --hermes-cli
   peripheralctl hud --local-display --mic mac
@@ -1241,6 +1615,9 @@ Usage:
   peripheralctl sponsor-runtime adapters
   peripheralctl sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold"
   peripheralctl sponsor-runtime dispatch --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
+  peripheralctl demo dinner-booking --local
+  peripheralctl demo dinner-booking --real-agentphone --real-agentmail --local-display
+  peripheralctl phone-runtime decide --event booking-approval-1 --choice approve
   peripheralctl walkthrough live-call [--local]
   peripheralctl walkthrough blackjack [--local]
   peripheralctl walkthrough conference [--local]
@@ -1329,7 +1706,7 @@ Options:
 }
 
 function assertRealHardwareGate(command: string, driverOptions: DriverOptions, realHardwareOk: boolean): void {
-  const hardwareCommands = new Set(["push-json", "show-image", "clear", "walkthrough", "measure-latency"]);
+  const hardwareCommands = new Set(["push-json", "show-image", "clear", "walkthrough", "measure-latency", "demo"]);
   if (!hardwareCommands.has(command)) return;
   if (driverOptions.local || driverOptions.dryRun || realHardwareOk) return;
   throw new Error(`${command} in live transport mode requires --real-hardware-ok after explicit live-glasses permission.`);

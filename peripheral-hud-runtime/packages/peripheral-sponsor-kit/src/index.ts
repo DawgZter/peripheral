@@ -7,15 +7,27 @@ import {
   type SurfaceCommand,
 } from "../../peripheral-protocol/src/index.js";
 import { sponsorIntegrations, sourceFor, type SponsorId } from "../../peripheral-integrations/src/index.js";
+export {
+  callRestaurant,
+  normalizeAgentPhoneEvent,
+  pollCallEvents,
+  type AgentPhoneCallEvent,
+  type AgentPhoneCallResult,
+} from "./agentphone.js";
+export * from "./agentphone.js";
 
 export type SponsorEventKind =
   | "call_started"
   | "call_connected"
+  | "call_summary"
+  | "human_takeover_requested"
   | "payment_intent_requires_action"
   | "receipt_available"
   | "memory_search_result"
+  | "memory_saved"
   | "memory_save_requested"
   | "draft_ready"
+  | "reply_sent"
   | "verification_code_found"
   | "browser_step"
   | "browser_submit_requested"
@@ -59,7 +71,7 @@ export type SponsorEventDossier = {
 export type SponsorRuntimeAdapter = {
   id: SponsorId;
   name: string;
-  status: "live_ready";
+  status: "source_ready" | "credential_ready" | "endpoint_ready" | "live_ready";
   credentialNames: string[];
   configuredCredentials: string[];
   endpointEnv: string;
@@ -136,19 +148,28 @@ export function buildSponsorEventDossier(now = new Date()): SponsorEventDossier 
 export function buildSponsorRuntimeAdapters(env: Record<string, string | undefined> = process.env): SponsorRuntimeAdapter[] {
   return sponsorIntegrations.map((sponsor) => {
     const endpointEnv = endpointEnvForSponsor(sponsor.id);
+    const configuredCredentials = sponsor.env.filter((key) => Boolean(env[key]));
+    const endpointConfigured = Boolean(env[endpointEnv]);
     return {
       id: sponsor.id,
       name: sponsor.name,
-      status: "live_ready",
+      status: sponsorRuntimeStatus(configuredCredentials.length, endpointConfigured),
       credentialNames: sponsor.env,
-      configuredCredentials: sponsor.env.filter((key) => Boolean(env[key])),
+      configuredCredentials,
       endpointEnv,
-      endpointConfigured: Boolean(env[endpointEnv]),
+      endpointConfigured,
       eventKinds: sponsor.agentEvents,
       output: "AgentEvent+PeripheralWidget+SurfaceCommand",
       safety: "phone_owned_surface_policy",
     };
   });
+}
+
+function sponsorRuntimeStatus(credentialCount: number, endpointConfigured: boolean): SponsorRuntimeAdapter["status"] {
+  if (credentialCount > 0 && endpointConfigured) return "live_ready";
+  if (credentialCount > 0) return "credential_ready";
+  if (endpointConfigured) return "endpoint_ready";
+  return "source_ready";
 }
 
 export function buildSponsorRuntimeRequest(input: SponsorEventInput, env: Record<string, string | undefined> = process.env): SponsorRuntimeRequest {
@@ -272,7 +293,7 @@ export function sampleSponsorEvents(now = new Date()): SponsorEventInput[] {
 
 function sponsorWidget(input: SponsorEventInput, now: Date): PeripheralWidget {
   const title = input.title || titleForEvent(input.event, sponsorName(input.sponsorId));
-  if (input.event === "payment_intent_requires_action" || input.event === "memory_save_requested" || input.event === "draft_ready" || input.event === "browser_submit_requested") {
+  if (input.event === "payment_intent_requires_action" || input.event === "memory_save_requested" || input.event === "draft_ready" || input.event === "browser_submit_requested" || input.event === "human_takeover_requested") {
     return assertWidget({
       id: "sponsor-" + slug(input.sponsorId + "-" + input.sessionId),
       type: "approval_card",
@@ -281,6 +302,20 @@ function sponsorWidget(input: SponsorEventInput, now: Date): PeripheralWidget {
       body: cleanText(input.summary, 180),
       choices: approvalChoices(),
       footer: input.amount ? "Amount " + input.amount : input.sessionId,
+      source: sponsorName(input.sponsorId),
+      created_at: now.toISOString(),
+    });
+  }
+  if (input.event === "call_started") {
+    return assertWidget({
+      id: "sponsor-" + slug(input.sponsorId + "-" + input.sessionId),
+      type: "live_call",
+      title,
+      status: "CALLING",
+      transcript: [
+        { speaker: "agent", text: cleanText(input.summary, 90) },
+      ],
+      facts: ["AgentPhone outbound call", "No raw call audio on HUD", "Handoff remains gated"],
       source: sponsorName(input.sponsorId),
       created_at: now.toISOString(),
     });
@@ -296,6 +331,18 @@ function sponsorWidget(input: SponsorEventInput, now: Date): PeripheralWidget {
         { speaker: "other", text: cleanText(input.summary, 90) },
       ],
       facts: ["Human takeover available", "Transcript is summarized", "Approval gates stay focused"],
+      source: sponsorName(input.sponsorId),
+      created_at: now.toISOString(),
+    });
+  }
+  if (input.event === "call_summary") {
+    return assertWidget({
+      id: "sponsor-" + slug(input.sponsorId + "-" + input.sessionId),
+      type: "generic_card",
+      title,
+      status: "CALL SUMMARY",
+      body: cleanText(input.summary, 180),
+      bullets: [input.target || "AgentPhone", input.sessionId, "audit-ready"],
       source: sponsorName(input.sponsorId),
       created_at: now.toISOString(),
     });
@@ -318,7 +365,7 @@ function sponsorSurfaceCommand(input: SponsorEventInput, widget: PeripheralWidge
     kind: decisionRequired ? "show_card" : "show_widget",
     id: "sponsor-command-" + slug(input.sponsorId + "-" + input.sessionId),
     mode: "agent_mode",
-    surface: risk === "high" ? "pinned" : decisionRequired ? "fullscreen" : "glance",
+    surface: sponsorSurfaceForEvent(input.event, risk, decisionRequired),
     widget: decisionRequired ? undefined : widget,
     card: decisionRequired ? widget : undefined,
     source: sourceFor(input.sponsorId, input.sessionId),
@@ -326,6 +373,13 @@ function sponsorSurfaceCommand(input: SponsorEventInput, widget: PeripheralWidge
     reason: sponsorName(input.sponsorId) + " emitted " + input.event + ".",
     created_at: now.toISOString(),
   };
+}
+
+function sponsorSurfaceForEvent(event: SponsorEventKind, risk: ApprovalRiskLevel, decisionRequired: boolean): SurfaceCommand["surface"] {
+  if (event === "call_started" || event === "memory_saved") return "tiny_hud";
+  if (risk === "high") return "pinned";
+  if (decisionRequired) return "fullscreen";
+  return "glance";
 }
 
 function endpointEnvForSponsor(id: SponsorId): string {
@@ -410,12 +464,22 @@ function riskForEvent(event: SponsorEventKind): ApprovalRiskLevel {
 
 function titleForEvent(event: SponsorEventKind, sponsor: string): string {
   const labels: Partial<Record<SponsorEventKind, string>> = {
+    call_started: "Call Started",
     call_connected: "Call Connected",
+    call_summary: "Call Summary",
+    human_takeover_requested: "Take Over Call?",
     payment_intent_requires_action: "Approve Payment Step?",
+    receipt_available: "Receipt Ready",
+    memory_search_result: "Memory Result",
     memory_save_requested: "Save Memory?",
+    memory_saved: "Preference Saved",
     draft_ready: "Approve Draft?",
+    reply_sent: "Confirmation Sent",
+    verification_code_found: "Verification Code",
+    browser_step: "Browser Step",
     browser_submit_requested: "Submit Browser Action?",
     context_clustered: "Context Digest",
+    redaction_warning: "Redaction Warning",
     broker_summary: "Broker Summary",
     route_decision: "Route Decision",
   };

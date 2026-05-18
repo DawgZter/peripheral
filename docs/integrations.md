@@ -1,6 +1,6 @@
 # Integrations
 
-The integration layer is implementation-oriented and live-adapter ready. It describes what each sponsor or agent CLI contributes to Agent Mode, which credential names each runtime connector understands, which API or CLI operations are routed, and which Peripheral surface is rendered.
+The integration layer is implementation-oriented and adapter-ready. It describes what each sponsor or agent CLI contributes to Agent Mode, which credential names each runtime connector understands, which API or CLI operations are routed, and which Peripheral surface is rendered.
 
 ## Sponsor Coverage
 

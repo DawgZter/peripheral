@@ -22,7 +22,7 @@ import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesSt
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
-import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, normalizeSponsorEvent } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, normalizeAgentPhoneEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking } from "../packages/peripheral-sponsor-kit/src/index.js";
 import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
@@ -87,27 +87,32 @@ assert.equal(connectedState.broker.activeLease.owner, "broker");
 assert.ok(connectedState.surfaceCommands.some((command) => command.kind === "enter_agent_mode"));
 const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
 assert.equal(emptySupport.totals.integrations, 13);
-assert.equal(emptySupport.totals.configured, 13);
-assert.equal(emptySupport.totals.connected, 13);
+assert.equal(emptySupport.totals.configured, 0);
+assert.equal(emptySupport.totals.connected, 0);
 assert.equal(emptySupport.totals.supported, 13);
-assert.equal(emptySupport.totals.liveReady, 13);
-assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
+assert.equal(emptySupport.totals.liveReady, 0);
+assert.equal(emptySupport.totals.sourceReady, 13);
+assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "source_ready");
 const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
 assert.equal(support.totals.integrations, 13);
-assert.equal(support.totals.configured, 13);
-assert.equal(support.totals.connected, 13);
+assert.equal(support.totals.configured, 1);
+assert.equal(support.totals.connected, 0);
 assert.equal(support.totals.supported, 13);
-assert.equal(support.totals.liveReady, 13);
+assert.equal(support.totals.liveReady, 0);
 assert.equal(support.totals.operations > 30, true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialNames.includes("STRIPE_SECRET_KEY"), true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialState, "configured");
+assert.equal(support.integrations.find((item) => item.id === "stripe")?.adapterState, "credential_ready");
 assert.equal(support.note.includes("secret values stay outside the repo"), true);
 const allCredentialEnv = Object.fromEntries(
   [...new Set([...integrationSummary.sponsors.flatMap((sponsor) => sponsor.env), ...integrationSummary.agentClis.flatMap((agent) => agent.env)])].map((name) => [name, "set"]),
 );
-assert.equal(buildIntegrationSupportReport(allCredentialEnv, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 13);
+assert.equal(buildIntegrationSupportReport(allCredentialEnv, new Date("2026-05-17T00:00:00Z")).totals.configured, 13);
+assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 1);
 const liveAdapters = buildLiveAdapterCatalog(new Date("2026-05-17T00:00:00Z"));
 assert.equal(liveAdapters.totals.adapters, 13);
+assert.equal(liveAdapters.totals.operationCataloged, liveAdapters.totals.operations);
+assert.equal(liveAdapters.totals.sourceReady, 0);
 assert.equal(liveAdapters.totals.liveReady, 13);
 assert.equal(liveAdapters.adapters.find((adapter) => adapter.id === "stripe")?.operations.some((operation) => operation.id === "stripe.payment_intents.create"), true);
 const manifest = buildPeripheralMcpManifest(new Date("2026-05-17T00:00:00Z"));
@@ -201,6 +206,63 @@ assertWidget(normalizeSponsorEvent({
   summary: "Approval needed for a refundable card hold.",
   now: new Date("2026-05-17T00:00:00Z"),
 }).widget);
+const agentPhoneDinner = await runAgentPhoneDinnerBooking({
+  restaurantName: "Sato Table",
+  restaurantPhoneNumber: "+14155550137",
+  partySize: 2,
+  neighborhood: "Mission",
+  bookingName: "Karim",
+  preferredWindow: "7:45",
+  prompt: "Book dinner for two tonight near Mission, under Karim.",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(agentPhoneDinner.mode, "local_review");
+assert.ok(agentPhoneDinner.events.some((event) => event.kind === "approval_required"));
+const offeredTimeEvent = agentPhoneDinner.events.find((event) => event.kind === "approval_required");
+assert.ok(offeredTimeEvent);
+const normalizedOffer = normalizeAgentPhoneEvent(offeredTimeEvent!);
+assert.equal(normalizedOffer.event.kind, "approval_required");
+assert.equal(normalizedOffer.event.id, "booking-approval-1");
+assert.equal(normalizedOffer.command.surface, "fullscreen");
+assert.equal(normalizedOffer.command.decision_required, true);
+const dinnerDemoRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "demo",
+  "dinner-booking",
+  "--local",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 20_000,
+});
+assert.equal(dinnerDemoRun.status, 0, dinnerDemoRun.stderr);
+const dinnerDemoResult = JSON.parse(dinnerDemoRun.stdout.slice(dinnerDemoRun.stdout.indexOf("{"))) as { status: string; timelinePath: string; frameDir: string; logPath: string; steps: number };
+assert.equal(dinnerDemoResult.status, "COMPLETED");
+assert.ok(dinnerDemoResult.steps >= 6);
+assert.ok(existsSync(dinnerDemoResult.timelinePath));
+assert.ok(existsSync(join(dinnerDemoResult.frameDir, "01-user-request.png")));
+assert.ok(existsSync(join(dinnerDemoResult.frameDir, "04-approval-required.png")));
+assert.match(readFileSync(dinnerDemoResult.timelinePath, "utf8"), /WAITING_FOR_APPROVAL/);
+assert.ok(existsSync(dinnerDemoResult.logPath));
+const dinnerDecisionRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "phone-runtime",
+  "decide",
+  "--event",
+  "booking-approval-1",
+  "--choice",
+  "approve",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(dinnerDecisionRun.status, 0, dinnerDecisionRun.stderr);
+const dinnerDecisionResult = JSON.parse(dinnerDecisionRun.stdout.slice(dinnerDecisionRun.stdout.indexOf("{"))) as { appliesTo: string; decision: { decision: string } };
+assert.equal(dinnerDecisionResult.appliesTo, "booking-approval-1");
+assert.equal(dinnerDecisionResult.decision.decision, "approve");
 
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
 const defaultFullPanelSetupPolicy = {

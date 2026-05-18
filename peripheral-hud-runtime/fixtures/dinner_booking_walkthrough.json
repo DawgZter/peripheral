@@ -1,0 +1,57 @@
+{
+  "schema": "peripheral-dinner-booking-walkthrough-v1",
+  "title": "Dinner Booking",
+  "request": {
+    "text": "Book dinner for two tonight near Mission, under Karim.",
+    "restaurantName": "Sato Table",
+    "restaurantPhoneNumber": "+14155550137",
+    "guestName": "Karim",
+    "partySize": 2,
+    "requestedWindow": "7:45",
+    "prompt": "Book dinner for two tonight near Mission, under Karim."
+  },
+  "restaurant": {
+    "name": "Sato Table",
+    "phone": "+14155550137",
+    "neighborhood": "Mission",
+    "party_size": 2
+  },
+  "approval": {
+    "event_id": "booking-approval-1",
+    "choice": "approve",
+    "booking_time": "7:45",
+    "confirmation_name": "Karim"
+  },
+  "steps": [
+    {
+      "step": "user_request",
+      "surface": "glance",
+      "text": "Book dinner for two tonight near Mission, under Karim."
+    },
+    {
+      "step": "agentphone_call_started",
+      "surface": "tiny_hud",
+      "text": "Calling Sato Table..."
+    },
+    {
+      "step": "agentphone_transcript",
+      "surface": "glance",
+      "text": "Restaurant: We have 7:45 or 8:15."
+    },
+    {
+      "step": "approval_required",
+      "surface": "fullscreen",
+      "text": "Approve booking 7:45 for 2?"
+    },
+    {
+      "step": "agentmail_confirmation",
+      "surface": "glance",
+      "text": "Confirmation email sent."
+    },
+    {
+      "step": "supermemory_saved",
+      "surface": "tiny_hud",
+      "text": "Saved preference: prefers 7-8pm dinner slots."
+    }
+  ]
+}
