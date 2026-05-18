@@ -4,6 +4,10 @@
 
 Smart-glasses control surface for real-world AI agents.
 
+Peripheral is both the glasses and the runtime around them. The hardware was built in Shenzhen as an agent-first pair of display smart glasses: 28g, microLED, binocular waveguide displays, 12-24 hours of battery life depending on operating mode, and an optical stack designed for extremely low light leakage. At 28g, Peripheral is built to be the lightest display smart-glasses form factor in the world.
+
+The point is not to make another phone screen. Peripheral is a lightweight display peripheral for agents that can call, browse, email, pay, remember, ask for approval, and keep the wearer in control while work happens in the real world. In our view, that is the best shape for smart glasses in an agent-native world: barely there until an agent needs your eyes, your context, or your consent.
+
 Peripheral makes an agent's work visible, interruptible, and approval-gated on glasses. The core proof is a dinner-booking workflow: an agent starts a restaurant call through AgentPhone, the glasses show call status and transcript, a reservation time pauses behind a wearer approval card, then AgentMail and Supermemory follow-up surfaces appear after approval.
 
 ## 60 Second Demo
@@ -73,4 +77,3 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --r
 ## Safety Boundary
 
 Agents and sponsors emit semantic events. The broker and phone runtime decide whether those become tiny HUDs, glance cards, fullscreen approvals, pinned status, or blocked requests. Real display transport remains operator-gated.
-
