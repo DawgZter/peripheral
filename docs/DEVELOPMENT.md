@@ -22,6 +22,17 @@ npm run check
 
 That command runs the public-source guard, browser JavaScript syntax checks, compiles the HUD runtime, and runs the mock renderer/runtime smoke tests.
 
+For integration review without hardware:
+
+```sh
+npm --prefix peripheral-hud-runtime run build
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations summary --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- demo integrations --mock
+```
+
+Those commands exercise sponsor descriptors, agent CLI descriptors, mock connected-glasses state, and rendered Agent Mode widgets without BLE writes.
+
 ## Optional macOS Helper Build
 
 ```sh
