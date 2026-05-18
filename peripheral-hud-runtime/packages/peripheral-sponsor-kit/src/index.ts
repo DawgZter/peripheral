@@ -15,6 +15,20 @@ export {
   type AgentPhoneCallResult,
 } from "./agentphone.js";
 export * from "./agentphone.js";
+export {
+  buildAgentMailConfirmationBody,
+  sendAgentMailConfirmation,
+  type AgentMailConfirmationRequest,
+  type AgentMailSendResult,
+} from "./agentmail.js";
+export * from "./agentmail.js";
+export {
+  buildSupermemoryPreferenceBody,
+  saveDinnerPreference,
+  type SupermemoryPreferenceRequest,
+  type SupermemorySaveResult,
+} from "./supermemory.js";
+export * from "./supermemory.js";
 
 export type SponsorEventKind =
   | "call_started"

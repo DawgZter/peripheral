@@ -22,7 +22,7 @@ import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesSt
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
-import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, normalizeAgentPhoneEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildAgentMailConfirmationBody, buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, buildSupermemoryPreferenceBody, normalizeAgentPhoneEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking, saveDinnerPreference, sendAgentMailConfirmation } from "../packages/peripheral-sponsor-kit/src/index.js";
 import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
@@ -225,6 +225,58 @@ assert.equal(normalizedOffer.event.kind, "approval_required");
 assert.equal(normalizedOffer.event.id, "booking-approval-1");
 assert.equal(normalizedOffer.command.surface, "fullscreen");
 assert.equal(normalizedOffer.command.decision_required, true);
+const agentMailBody = buildAgentMailConfirmationBody({
+  sessionId: "dinner-confirmation-email",
+  restaurantName: "Sato Table",
+  bookingTime: "7:45",
+  partySize: 2,
+  bookingName: "Karim",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  AGENTMAIL_TO: "wearer@example.test",
+});
+assert.equal(agentMailBody.schema, "peripheral-agentmail-confirmation-v1");
+assert.equal(agentMailBody.to, "wearer@example.test");
+assert.match(String(agentMailBody.text), /Sato Table/);
+const agentMailReview = await sendAgentMailConfirmation({
+  sessionId: "dinner-confirmation-email",
+  restaurantName: "Sato Table",
+  bookingTime: "7:45",
+  partySize: 2,
+  bookingName: "Karim",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  env: {},
+});
+assert.equal(agentMailReview.mode, "local_review");
+assert.equal(agentMailReview.ok, true);
+assert.equal(agentMailReview.requestBody.schema, "peripheral-agentmail-confirmation-v1");
+const supermemoryBody = buildSupermemoryPreferenceBody({
+  sessionId: "dinner-preference",
+  wearerName: "Karim",
+  preference: "Prefers 7-8pm dinner slots.",
+  restaurantName: "Sato Table",
+  bookingTime: "7:45",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  SUPERMEMORY_CONTAINER: "dinner-preferences",
+});
+assert.equal(supermemoryBody.schema, "peripheral-supermemory-save-v1");
+assert.equal(supermemoryBody.container, "dinner-preferences");
+assert.deepEqual(supermemoryBody.tags, ["peripheral", "dinner-booking", "preference"]);
+const supermemoryReview = await saveDinnerPreference({
+  sessionId: "dinner-preference",
+  wearerName: "Karim",
+  preference: "Prefers 7-8pm dinner slots.",
+  restaurantName: "Sato Table",
+  bookingTime: "7:45",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  env: {},
+});
+assert.equal(supermemoryReview.mode, "local_review");
+assert.equal(supermemoryReview.ok, true);
+assert.equal(supermemoryReview.requestBody.schema, "peripheral-supermemory-save-v1");
 const dinnerDemoRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "demo",
@@ -237,8 +289,10 @@ const dinnerDemoRun = spawnSync(process.execPath, [
   timeout: 20_000,
 });
 assert.equal(dinnerDemoRun.status, 0, dinnerDemoRun.stderr);
-const dinnerDemoResult = JSON.parse(dinnerDemoRun.stdout.slice(dinnerDemoRun.stdout.indexOf("{"))) as { status: string; timelinePath: string; frameDir: string; logPath: string; steps: number };
+const dinnerDemoResult = JSON.parse(dinnerDemoRun.stdout.slice(dinnerDemoRun.stdout.indexOf("{"))) as { status: string; timelinePath: string; frameDir: string; logPath: string; steps: number; agentMailRunState: string; supermemoryRunState: string };
 assert.equal(dinnerDemoResult.status, "COMPLETED");
+assert.equal(dinnerDemoResult.agentMailRunState, "local_review");
+assert.equal(dinnerDemoResult.supermemoryRunState, "local_review");
 assert.ok(dinnerDemoResult.steps >= 6);
 assert.ok(existsSync(dinnerDemoResult.timelinePath));
 assert.ok(existsSync(join(dinnerDemoResult.frameDir, "01-user-request.png")));

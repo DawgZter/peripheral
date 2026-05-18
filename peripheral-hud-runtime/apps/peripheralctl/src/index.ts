@@ -74,6 +74,8 @@ import {
   buildSponsorRuntimeRequest,
   dispatchSponsorEvent,
   normalizeSponsorEvent,
+  saveDinnerPreference,
+  sendAgentMailConfirmation,
   type SponsorRuntimeRequest,
 } from "../../../packages/peripheral-sponsor-kit/src/index.js";
 import { normalizeAgentPhoneEvent, runAgentPhoneDinnerBooking, type AgentPhoneDinnerRequest } from "../../../packages/peripheral-sponsor-kit/src/agentphone.js";
@@ -132,6 +134,9 @@ const VALUE_FLAGS = new Set([
   "booking-name",
   "preferred-window",
   "hold-amount",
+  "email-to",
+  "email-from",
+  "memory-container",
 ]);
 
 async function main(): Promise<void> {
@@ -739,15 +744,19 @@ async function commandDinnerBookingDemo(cli: ParsedCli, projectRoot: string, dri
     risk: "low",
     now,
   });
-  const mailDispatch = cli.options["real-agentmail"] ? await dispatchSponsorEvent({
-    sponsorId: "agentmail",
-    event: "reply_sent",
+  const mailDispatch = await sendAgentMailConfirmation({
     sessionId: "dinner-confirmation-email",
-    title: "Confirmation Sent",
-    summary: "Confirmation email sent for " + dinnerRequest.preferredWindow + " dinner at " + dinnerRequest.restaurantName + ".",
-    risk: "low",
+    restaurantName: dinnerRequest.restaurantName,
+    bookingTime: dinnerRequest.preferredWindow,
+    partySize: dinnerRequest.partySize,
+    bookingName: dinnerRequest.bookingName,
+    to: typeof cli.options["email-to"] === "string" ? cli.options["email-to"] : undefined,
+    from: typeof cli.options["email-from"] === "string" ? cli.options["email-from"] : undefined,
     now,
-  }, process.env) : { ok: true, skipped: true, reason: "AgentMail live dispatch was not requested." };
+  }, {
+    forceReal: Boolean(cli.options["real-agentmail"]),
+    env: process.env,
+  });
   await recordDinnerStep({
     step: "agentmail_confirmation",
     surface: mail.command.surface,
@@ -767,12 +776,27 @@ async function commandDinnerBookingDemo(cli: ParsedCli, projectRoot: string, dri
     risk: "low",
     now,
   });
+  const memoryDispatch = await saveDinnerPreference({
+    sessionId: "dinner-preference",
+    wearerName: dinnerRequest.bookingName,
+    preference: "Saved preference: prefers 7-8pm dinner slots.",
+    restaurantName: dinnerRequest.restaurantName,
+    bookingTime: dinnerRequest.preferredWindow,
+    now,
+  }, {
+    forceReal: Boolean(cli.options["real-supermemory"]),
+    env: {
+      ...process.env,
+      ...(typeof cli.options["memory-container"] === "string" ? { SUPERMEMORY_CONTAINER: cli.options["memory-container"] } : {}),
+    },
+  });
   await recordDinnerStep({
     step: "supermemory_saved",
     surface: "tiny_hud",
     text: String(memory.event.summary || "Dinner preference saved."),
     event: memory.event,
     command: memory.command,
+    dispatch: memoryDispatch,
     widget: memory.widget,
   }, timeline, artifacts, frameDir, displayOptions);
 
@@ -784,8 +808,11 @@ async function commandDinnerBookingDemo(cli: ParsedCli, projectRoot: string, dri
     agentPhonePath: callSession.mode,
     agentPhoneEndpoint: callSession.endpoint || undefined,
     agentPhoneRunState: callSession.mode === "real" ? "dispatched" : "local_review",
+    agentMailRunState: mailDispatch.mode,
+    supermemoryRunState: memoryDispatch.mode,
     realAgentPhoneRequested: Boolean(cli.options["real-agentphone"]),
     realAgentMailRequested: Boolean(cli.options["real-agentmail"]),
+    realSupermemoryRequested: Boolean(cli.options["real-supermemory"]),
     summary: "Dinner booked for " + dinnerRequest.preferredWindow + ". Confirmation sent. Preference saved.",
     ...result,
   };
@@ -1344,6 +1371,7 @@ function capabilities(): unknown {
       "status",
       "measure-latency",
       "demo dinner-booking",
+      "demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display",
       "hud --local-display --text",
       "hud --local-display --mic mac",
       "hud --local-display --mic mac --asr-provider openai-realtime",
@@ -1616,7 +1644,7 @@ Usage:
   peripheralctl sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold"
   peripheralctl sponsor-runtime dispatch --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
   peripheralctl demo dinner-booking --local
-  peripheralctl demo dinner-booking --real-agentphone --real-agentmail --local-display
+  peripheralctl demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
   peripheralctl phone-runtime decide --event booking-approval-1 --choice approve
   peripheralctl walkthrough live-call [--local]
   peripheralctl walkthrough blackjack [--local]
@@ -1647,6 +1675,9 @@ Global options:
   --session-id <id>       Stable session id for the normalized event.
   --line <text>           Bounded CLI transcript, input line, or fallback sponsor summary to normalize.
   --summary <text>        For sponsor-runtime: event summary sent through the broker payload.
+  --email-to <addr>       For dinner-booking: override AgentMail recipient.
+  --email-from <addr>     For dinner-booking: override AgentMail sender.
+  --memory-container <id> For dinner-booking: override Supermemory container.
 
 HUD runtime options:
   --local-display          Use the runtime display driver without touching live display transport.

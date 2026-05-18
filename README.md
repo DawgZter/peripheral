@@ -48,21 +48,26 @@ Set credentials outside the repo:
 export AGENTPHONE_API_KEY=...
 export AGENTMAIL_API_KEY=...
 export SUPERMEMORY_API_KEY=...
+# optional endpoint/target overrides:
+# export AGENTMAIL_API_URL=...
+# export AGENTMAIL_TO=...
+# export SUPERMEMORY_API_URL=...
+# export SUPERMEMORY_CONTAINER=...
 ```
 
-Then run the same flow with the AgentPhone path enabled while keeping display output local unless the operator explicitly chooses real glasses transport:
+Then run the same flow with the AgentPhone, AgentMail, and Supermemory adapter paths enabled while keeping display output local unless the operator explicitly chooses real glasses transport:
 
 ```sh
-npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --local-display
+npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
 ```
 
 ## Sponsor Status
 
 | Sponsor | Status |
 | --- | --- |
-| AgentPhone | Real adapter path plus local fallback for dinner booking |
-| AgentMail | Confirmation approval surface plus optional configured dispatch path |
-| Supermemory | Save-memory surface for dinner preference |
+| AgentPhone | Real adapter path plus local review path for dinner booking |
+| AgentMail | Credential-bound confirmation-send adapter path with local review transport |
+| Supermemory | Credential-bound preference-save adapter path with local review transport |
 | Stripe | Approval/risk surface for card holds and payment checkpoints |
 | Browser Use | Evidence and sensitive-action surface |
 | Sponge | Context and redaction surface |
