@@ -23,6 +23,8 @@ Expected artifacts:
 - `peripheral-hud-runtime/out/logs/dinner-booking.jsonl`
 - `peripheral-hud-runtime/out/frames/sponsor-followup/`
 - `peripheral-hud-runtime/out/sponsor-runtime/followup-pack.json`
+- `peripheral-hud-runtime/out/frames/sponsor-runtime-evidence/`
+- `peripheral-hud-runtime/out/sponsor-runtime/evidence-pack.json`
 - `peripheral-hud-runtime/out/review/evidence-index.json`
 - `peripheral-hud-runtime/out/demo/dinner-booking-live-proof.json`
 - `docs/media/peripheral-demo-dinner-booking.mp4`
@@ -57,6 +59,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentph
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime evidence-pack --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
@@ -88,6 +91,7 @@ The support and live-adapter reports expose 13 supported integration records, 13
 | Supermemory save adapter | `peripheralctl sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json` |
 | Follow-up sponsor frames | `peripheralctl sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json` |
 | Live proof path | `peripheralctl live-proof dinner-booking --real-hardware-ok --json` |
+| All sponsor runtime frames | `peripheralctl sponsor-runtime evidence-pack --json` |
 | Peripheral hardware profile | `docs/peripheral-glasses.md` and `peripheralctl integrations hardware-profile --json` |
 | Agent Mode protocol | `peripheral-hud-runtime/packages/peripheral-protocol/src/index.ts` |
 | Sponsor registry | `peripheral-hud-runtime/packages/peripheral-integrations/src/index.ts` |

@@ -995,6 +995,27 @@ assert.equal(supermemoryCommand.mode, "phone_gateway");
 assert.equal(supermemoryCommand.providerCallRequested, false);
 assert.equal(supermemoryCommand.command.decision_required, true);
 assert.equal(supermemoryCommand.supermemory.requestBody.schema, "peripheral-supermemory-save-v1");
+const sponsorEvidencePackRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "evidence-pack",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 20_000,
+});
+assert.equal(sponsorEvidencePackRun.status, 0, sponsorEvidencePackRun.stderr);
+const sponsorEvidencePackResult = JSON.parse(sponsorEvidencePackRun.stdout.slice(sponsorEvidencePackRun.stdout.indexOf("{"))) as { pack: { schema: string; sponsors: string[]; commands: unknown[]; dispatches: Array<{ request: { endpointConfigured: boolean; headers: Record<string, string> } }> }; artifacts: unknown[]; frameDir: string; packPath: string };
+assert.equal(sponsorEvidencePackResult.pack.schema, "peripheral-sponsor-runtime-evidence-pack-v1");
+assert.equal(sponsorEvidencePackResult.pack.sponsors.length, 7);
+assert.equal(sponsorEvidencePackResult.pack.sponsors.includes("browser_use"), true);
+assert.equal(sponsorEvidencePackResult.pack.commands.length, 7);
+assert.equal(sponsorEvidencePackResult.pack.dispatches.every((item) => item.request.endpointConfigured === true), true);
+assert.equal(sponsorEvidencePackResult.pack.dispatches.every((item) => item.request.headers.authorization === "Bearer [configured]"), true);
+assert.equal(sponsorEvidencePackResult.artifacts.length, 7);
+assert.ok(existsSync(sponsorEvidencePackResult.frameDir));
+assert.ok(existsSync(sponsorEvidencePackResult.packPath));
 const dinnerDemoRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "demo",
@@ -1028,9 +1049,9 @@ assert.equal(reviewBundleRun.status, 0, reviewBundleRun.stderr);
 const reviewBundle = JSON.parse(reviewBundleRun.stdout.slice(reviewBundleRun.stdout.indexOf("{"))) as {
   ok: boolean;
   schema: string;
-  artifacts: { frameCount: number; video: { exists: boolean; sha256?: string } };
+  artifacts: { frameCount: number; sponsorEvidence: { frameCount: number; pack: { exists: boolean } }; video: { exists: boolean; sha256?: string } };
   experience: { primarySurface: string; browserPreviewSurface: boolean; reviewSurface: string; accessSurface: string };
-  commands: { reviewRun: string; connectedState: string; phoneRuntime: string; agentRoute: string; support: string; liveAdapters: string; liveProof: string };
+  commands: { reviewRun: string; connectedState: string; phoneRuntime: string; agentRoute: string; support: string; liveAdapters: string; liveProof: string; sponsorEvidence: string };
   timeline: { stepCount: number; approvalSteps: number };
   runtime: {
     hardwareAccessRequired: boolean;
@@ -1084,6 +1105,7 @@ assert.match(reviewBundle.commands.agentRoute, /agent-bridge route/);
 assert.match(reviewBundle.commands.support, /integrations support/);
 assert.match(reviewBundle.commands.liveAdapters, /integrations live-adapters/);
 assert.match(reviewBundle.commands.liveProof, /live-proof dinner-booking/);
+assert.match(reviewBundle.commands.sponsorEvidence, /sponsor-runtime evidence-pack/);
 assert.equal(reviewBundle.timeline.stepCount, dinnerDemoResult.steps);
 assert.equal(reviewBundle.timeline.approvalSteps >= 1, true);
 assert.equal(reviewBundle.runtime.hardwareAccessRequired, false);
@@ -1121,6 +1143,8 @@ assert.equal(reviewBundle.runtime.agentBridge.decisionRequired, true);
 assert.equal(reviewBundle.runtime.agentBridge.phoneDecision.accepted, true);
 assert.ok(reviewBundle.runtime.agentBridge.phoneDecision.focusedCardId);
 assert.equal(reviewBundle.artifacts.frameCount >= 5, true);
+assert.equal(reviewBundle.artifacts.sponsorEvidence.frameCount, 7);
+assert.equal(reviewBundle.artifacts.sponsorEvidence.pack.exists, true);
 assert.equal(reviewBundle.artifacts.video.exists, true);
 assert.equal(typeof reviewBundle.artifacts.video.sha256, "string");
 const reviewRun = spawnSync(process.execPath, [
@@ -1133,12 +1157,13 @@ const reviewRun = spawnSync(process.execPath, [
   timeout: 20_000,
 });
 assert.equal(reviewRun.status, 0, reviewRun.stderr);
-const reviewRunResult = JSON.parse(reviewRun.stdout.slice(reviewRun.stdout.indexOf("{"))) as { schema: string; evidencePath: string; agentBridgeFrameDir: string; sponsorFollowupFrameDir: string; reviewBundle: { ok: boolean } };
+const reviewRunResult = JSON.parse(reviewRun.stdout.slice(reviewRun.stdout.indexOf("{"))) as { schema: string; evidencePath: string; agentBridgeFrameDir: string; sponsorFollowupFrameDir: string; sponsorEvidenceFrameDir: string; reviewBundle: { ok: boolean } };
 assert.equal(reviewRunResult.schema, "peripheral-review-run-evidence-v1");
 assert.equal(reviewRunResult.reviewBundle.ok, true);
 assert.ok(existsSync(reviewRunResult.evidencePath));
 assert.ok(existsSync(reviewRunResult.agentBridgeFrameDir));
 assert.ok(existsSync(reviewRunResult.sponsorFollowupFrameDir));
+assert.ok(existsSync(reviewRunResult.sponsorEvidenceFrameDir));
 assert.match(readFileSync(reviewRunResult.evidencePath, "utf8"), /peripheral-review-run-evidence-v1/);
 const dinnerDecisionRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",

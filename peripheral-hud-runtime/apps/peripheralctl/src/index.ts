@@ -377,11 +377,16 @@ async function commandAsrReplay(cli: ParsedCli, projectRoot: string, repoRoot: s
 function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
   const now = new Date();
   const frameDir = join(projectRoot, "out", "frames", "dinner-booking");
+  const sponsorEvidenceFrameDir = join(projectRoot, "out", "frames", "sponsor-runtime-evidence");
+  const sponsorEvidencePackPath = join(projectRoot, "out", "sponsor-runtime", "evidence-pack.json");
   const timelinePath = join(projectRoot, "out", "demo", "dinner-booking-timeline.json");
   const logPath = join(projectRoot, "out", "logs", "dinner-booking.jsonl");
   const videoPath = join(repoRoot, "docs", "media", "peripheral-demo-dinner-booking.mp4");
   const frames = existsSync(frameDir)
     ? readdirSync(frameDir).filter((name) => name.endsWith(".png")).sort()
+    : [];
+  const sponsorEvidenceFrames = existsSync(sponsorEvidenceFrameDir)
+    ? readdirSync(sponsorEvidenceFrameDir).filter((name) => name.endsWith(".png")).sort()
     : [];
   const timeline = readJsonIfPresent(timelinePath);
   const timelineRecords = Array.isArray(timeline)
@@ -424,6 +429,12 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     frameDir,
     frameCount: frames.length,
     frames,
+    sponsorEvidence: {
+      frameDir: sponsorEvidenceFrameDir,
+      frameCount: sponsorEvidenceFrames.length,
+      frames: sponsorEvidenceFrames,
+      pack: artifactMeta(sponsorEvidencePackPath, "json"),
+    },
     timeline: artifactMeta(timelinePath, "json"),
     log: { ...artifactMeta(logPath, "jsonl"), lineCount: logLineCount },
     video: artifactMeta(videoPath, "mp4"),
@@ -434,6 +445,7 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     { id: "approval_gate_recorded", ok: /approval_required|WAITING_FOR_APPROVAL/.test(timelineText), detail: "approval card appears in timeline" },
     { id: "followup_recorded", ok: /agentmail_confirmation/.test(timelineText) && /supermemory_saved/.test(timelineText), detail: "email and memory follow-up events present" },
     { id: "log_present", ok: logLineCount > 0, detail: logLineCount + " JSONL records" },
+    { id: "sponsor_evidence_recorded", ok: sponsorEvidenceFrames.length === 7 && Boolean(artifacts.sponsorEvidence.pack.exists), detail: sponsorEvidenceFrames.length + " sponsor runtime PNG frames" },
     { id: "video_present", ok: Boolean(artifacts.video.exists), detail: videoPath },
     { id: "connected_state_included", ok: connectedState.schema === "peripheral-connected-state-v1", detail: "phone-gateway glasses state is embedded" },
     { id: "phone_runtime_included", ok: phoneRuntime.schema === "peripheral-phone-runtime-snapshot-v1", detail: "phone surface runtime is embedded" },
@@ -469,6 +481,7 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
       agentPhoneCall: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt \"Book dinner for two and pause before confirming\" --json",
       agentMailSend: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name \"Sato Table\" --preferred-window 7:45 --booking-name Karim --json",
       supermemorySave: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference \"Prefers 7-8pm dinner slots\" --memory-container dinner-preferences --json",
+      sponsorEvidence: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime evidence-pack --json",
       agentRoute: "npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line \"Codex needs approval to run npm test.\" --json",
       support: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json",
       liveAdapters: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json",
@@ -565,6 +578,11 @@ async function commandReviewRun(cli: ParsedCli, projectRoot: string, repoRoot: s
     positionals: ["followup-pack"],
     options: localOptions,
   }, projectRoot);
+  const sponsorEvidence = await commandSponsorRuntime({
+    command: "sponsor-runtime",
+    positionals: ["evidence-pack"],
+    options: localOptions,
+  }, projectRoot);
   const reviewBundle = commandReviewBundle(projectRoot, repoRoot);
   const evidencePath = join(projectRoot, "out", "review", "evidence-index.json");
   const evidence = {
@@ -575,22 +593,25 @@ async function commandReviewRun(cli: ParsedCli, projectRoot: string, repoRoot: s
       dinnerBooking: "npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json",
       agentSessionPack: "npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge session-pack --session-prefix " + sessionPrefix + " --json",
       sponsorFollowup: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime followup-pack --json",
+      sponsorEvidence: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime evidence-pack --json",
       reviewBundle: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json",
     },
     dinner,
     agentBridge,
     sponsorFollowup,
+    sponsorEvidence,
     reviewBundle,
   };
   mkdirSync(dirname(evidencePath), { recursive: true });
   writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
   return {
-    ok: Boolean(asRecord(dinner).ok) && Boolean(asRecord(sponsorFollowup).ok) && Boolean(asRecord(reviewBundle).ok),
+    ok: Boolean(asRecord(dinner).ok) && Boolean(asRecord(sponsorFollowup).ok) && Boolean(asRecord(sponsorEvidence).ok) && Boolean(asRecord(reviewBundle).ok),
     schema: evidence.schema,
     evidencePath,
     dinnerFrameDir: asRecord(dinner).frameDir,
     agentBridgeFrameDir: agentBridge.frameDir,
     sponsorFollowupFrameDir: asRecord(sponsorFollowup).frameDir,
+    sponsorEvidenceFrameDir: asRecord(sponsorEvidence).frameDir,
     reviewBundle,
   };
 }
@@ -1313,6 +1334,36 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
       return commandAgentMailConfirmation(cli, now);
     case "supermemory-preference":
       return commandSupermemoryPreference(cli, now);
+    case "evidence-pack": {
+      const inputs = sponsorRuntimeEvidenceInputs(now);
+      const evidenceEnv = sponsorRuntimeEvidenceEnv();
+      const dispatches = [];
+      for (const input of inputs) {
+        const dispatch = await dispatchSponsorEvent(input, evidenceEnv, fetch, sponsorRuntimeForceReal(cli, input.sponsorId));
+        dispatches.push({
+          ...dispatch,
+          request: redactSponsorRuntimeRequest(dispatch.request),
+        });
+      }
+      const events = dispatches.map((dispatch, index) => dispatch.normalized || normalizeSponsorEvent(inputs[index]!));
+      const frameDir = join(projectRoot, "out", "frames", "sponsor-runtime-evidence");
+      const artifacts = events.map((item, index) => renderWidgetToFile(item.widget, join(frameDir, String(index + 1).padStart(2, "0") + "-" + item.event.source.id + "-" + item.widget.id + ".png"), {
+        assetRoot: join(projectRoot, "fixtures", "images"),
+      }));
+      const packPath = join(projectRoot, "out", "sponsor-runtime", "evidence-pack.json");
+      const pack = {
+        schema: "peripheral-sponsor-runtime-evidence-pack-v1",
+        generatedAt: now.toISOString(),
+        sponsors: inputs.map((input) => input.sponsorId),
+        dispatches,
+        events: events.map((item) => item.event),
+        commands: events.map((item) => item.command),
+        artifacts,
+      };
+      mkdirSync(dirname(packPath), { recursive: true });
+      writeFileSync(packPath, JSON.stringify(pack, null, 2));
+      return { ok: dispatches.every((dispatch) => dispatch.ok), pack, frameDir, packPath, artifacts };
+    }
     case "stripe-hold": {
       const sessionId = String(cli.options["session-id"] || "stripe-card-hold");
       const amountCents = parseMoneyCents(cli.options["hold-amount"] || cli.options.amount || "25.00", "--hold-amount");
@@ -1438,8 +1489,91 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
       return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command, decision: normalized.decision };
     }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, followup-pack, dinner-followups, agentmail-confirmation, supermemory-preference, stripe-hold, browser-task, sponge-context, gemini-route");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, followup-pack, dinner-followups, agentmail-confirmation, supermemory-preference, evidence-pack, stripe-hold, browser-task, sponge-context, gemini-route");
   }
+}
+
+function sponsorRuntimeEvidenceInputs(now: Date): SponsorEventInput[] {
+  return [
+    {
+      sponsorId: "agentphone",
+      event: "call_connected",
+      sessionId: "agentphone-dinner-call",
+      title: "Restaurant Call",
+      summary: "Restaurant has 7:45 or 8:15 available; pause for wearer approval before confirming.",
+      target: "Sato Table",
+      now,
+    },
+    {
+      sponsorId: "stripe",
+      event: "payment_intent_requires_action",
+      sessionId: "stripe-card-hold",
+      title: "Approve Card Hold?",
+      summary: "Refundable dinner reservation hold needs wearer approval.",
+      amount: "$25",
+      risk: "medium",
+      now,
+    },
+    {
+      sponsorId: "supermemory",
+      event: "memory_saved",
+      sessionId: "supermemory-dinner-preference",
+      title: "Preference Saved",
+      summary: "Saved preference: prefers 7-8pm dinner slots.",
+      target: "Sato Table",
+      risk: "low",
+      now,
+    },
+    {
+      sponsorId: "agentmail",
+      event: "reply_sent",
+      sessionId: "agentmail-dinner-confirmation",
+      title: "Confirmation Sent",
+      summary: "Confirmation email sent for 7:45 dinner at Sato Table.",
+      target: "Sato Table",
+      risk: "low",
+      now,
+    },
+    {
+      sponsorId: "browser_use",
+      event: "browser_submit_requested",
+      sessionId: "browser-use-reservation",
+      title: "Approve Browser Submit?",
+      summary: "Browser agent reached the final reservation submit action.",
+      target: "https://example.com/reservations",
+      risk: "high",
+      now,
+    },
+    {
+      sponsorId: "sponge",
+      event: "context_clustered",
+      sessionId: "sponge-context-digest",
+      title: "Context Digest",
+      summary: "Compressed restaurant, payment, email, and preference signals into a wearer-safe digest.",
+      risk: "low",
+      now,
+    },
+    {
+      sponsorId: "gemini",
+      event: "route_decision",
+      sessionId: "gemini-surface-router",
+      title: "Route Decision",
+      summary: "Route the approval response to the focused card before default agent routing.",
+      risk: "low",
+      now,
+    },
+  ];
+}
+
+function sponsorRuntimeEvidenceEnv(): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...process.env };
+  for (const adapter of buildSponsorRuntimeAdapters(env)) {
+    env[adapter.endpointEnv] = env[adapter.endpointEnv] || "peripheral://broker/" + adapter.id;
+    for (const name of adapter.credentialNames) {
+      env[name] = env[name] || "configured";
+    }
+  }
+  return env;
 }
 
 function agentMailConfirmationInput(cli: ParsedCli, now: Date): AgentMailConfirmationRequest {
@@ -2549,6 +2683,7 @@ function capabilities(): unknown {
       "sponsor-runtime dinner-followups",
       "sponsor-runtime agentmail-confirmation",
       "sponsor-runtime supermemory-preference",
+      "sponsor-runtime evidence-pack",
       "sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd",
       "sponsor-runtime browser-task --task <text> --start-url <url>",
       "sponsor-runtime browser-task --goal \"Check restaurant availability\"",
@@ -2808,6 +2943,7 @@ Usage:
   peripheralctl sponsor-runtime dinner-followups --json
   peripheralctl sponsor-runtime agentmail-confirmation --json
   peripheralctl sponsor-runtime supermemory-preference --json
+  peripheralctl sponsor-runtime evidence-pack
   peripheralctl sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold"
   peripheralctl sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com
   peripheralctl sponsor-runtime browser-task --goal "Check restaurant availability" --url https://example.com

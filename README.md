@@ -23,7 +23,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booki
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge session-pack --session-prefix reviewer --json
 ```
 
-`review-run` generates the dinner-booking frames, the six-agent CLI frame pack, the post-approval sponsor follow-up frames, and a single evidence index. `review-bundle` checks the rendered frames, timeline, log, MP4, adapter catalog, and support report, then embeds connected-state, phone-runtime, agent-bridge, and `liveProof` summaries for operator-driven glasses access.
+`review-run` generates the dinner-booking frames, the six-agent CLI frame pack, all-sponsor runtime frames, post-approval sponsor follow-up frames, and a single evidence index. `review-bundle` checks the rendered frames, timeline, log, MP4, adapter catalog, and support report, then embeds connected-state, phone-runtime, agent-bridge, and `liveProof` summaries for operator-driven glasses access.
 
 Artifacts:
 
@@ -35,6 +35,8 @@ Artifacts:
 - `peripheral-hud-runtime/out/agent-bridge/session-pack.json`
 - `peripheral-hud-runtime/out/frames/sponsor-followup/`
 - `peripheral-hud-runtime/out/sponsor-runtime/followup-pack.json`
+- `peripheral-hud-runtime/out/frames/sponsor-runtime-evidence/`
+- `peripheral-hud-runtime/out/sponsor-runtime/evidence-pack.json`
 - `peripheral-hud-runtime/out/review/evidence-index.json`
 - `docs/media/peripheral-demo-dinner-booking.mp4`
 
@@ -61,6 +63,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentph
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime evidence-pack --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
