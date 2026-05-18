@@ -36,9 +36,12 @@ import type { AgentStatus } from "../../../packages/peripheral-protocol/src/inde
 import {
   buildAgentCliMatrixWidget,
   buildAgentCockpitWidget,
+  buildBrokerTimeline,
   buildHackathonDossier,
   buildIntegrationSummary,
   buildMockConnectedState,
+  buildPeripheralMcpManifest,
+  buildReadinessReport,
   buildSponsorMatrixWidget,
 } from "../../../packages/peripheral-integrations/src/index.js";
 
@@ -252,6 +255,12 @@ async function commandIntegrations(cli: ParsedCli, projectRoot: string): Promise
       return { ok: true, agentClis: buildIntegrationSummary().agentClis };
     case "connected-state":
       return { ok: true, connectedState: buildMockConnectedState(now) };
+    case "readiness":
+      return { ok: true, readiness: buildReadinessReport(process.env, now) };
+    case "mcp-manifest":
+      return { ok: true, manifest: buildPeripheralMcpManifest(now) };
+    case "broker-timeline":
+      return { ok: true, timeline: buildBrokerTimeline(now) };
     case "dossier":
       return { ok: true, dossier: buildHackathonDossier(now) };
     case "widgets": {
@@ -267,7 +276,7 @@ async function commandIntegrations(cli: ParsedCli, projectRoot: string): Promise
       return { ok: true, view, frames: frameDir, widgets: widgets.map((widget) => widget.id), artifacts };
     }
     default:
-      throw new Error("Unknown integrations view. Use one of: summary, sponsors, agent-clis, connected-state, dossier, widgets");
+      throw new Error("Unknown integrations view. Use one of: summary, sponsors, agent-clis, connected-state, readiness, mcp-manifest, broker-timeline, dossier, widgets");
   }
 }
 
@@ -771,6 +780,9 @@ function capabilities(): unknown {
       "integrations sponsors",
       "integrations agent-clis",
       "integrations connected-state",
+      "integrations readiness",
+      "integrations mcp-manifest",
+      "integrations broker-timeline",
       "integrations dossier",
       "integrations widgets",
       "hudctl show-json",
@@ -977,6 +989,9 @@ Usage:
   peripheralctl integrations sponsors
   peripheralctl integrations agent-clis
   peripheralctl integrations connected-state
+  peripheralctl integrations readiness
+  peripheralctl integrations mcp-manifest
+  peripheralctl integrations broker-timeline
   peripheralctl integrations dossier
   peripheralctl integrations widgets
   peripheralctl demo live-call [--mock]
