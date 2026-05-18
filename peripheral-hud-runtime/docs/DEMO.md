@@ -72,6 +72,9 @@ Sponsor and agent CLI matrix:
 ```sh
 npm run peripheralctl -- integrations summary --json
 npm run peripheralctl -- integrations connected-state --json
+npm run peripheralctl -- integrations readiness --json
+npm run peripheralctl -- integrations mcp-manifest --json
+npm run peripheralctl -- integrations broker-timeline --json
 npm run peripheralctl -- integrations dossier --json
 npm run peripheralctl -- integrations widgets --json
 npm run peripheralctl -- demo integrations --mock
