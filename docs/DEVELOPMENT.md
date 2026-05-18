@@ -21,7 +21,7 @@ npm run check
 npm test
 ```
 
-Those commands run the public-source guard, review-posture guard, sponsor tooling validation, package archive guard, HUD runtime compile, and renderer/runtime smoke tests. `npm pack` also runs the same check chain before creating an archive; `check:pack` dry-runs the archive and rejects local dependencies, build output, runtime logs, and generated display state.
+Those commands run the public-source guard, review-posture guard, sponsor tooling validation, package archive guard, HUD runtime compile, and renderer/runtime smoke tests. CI also runs `check:public-source:commits` against the fetched commit history. `npm pack` runs the same check chain before creating an archive; `check:pack` dry-runs the archive and rejects local dependencies, build output, runtime logs, and generated display state.
 
 For glasses runtime inspection and adapter coverage:
 
