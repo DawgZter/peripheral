@@ -790,6 +790,69 @@ assert.equal(dinnerDecisionRun.status, 0, dinnerDecisionRun.stderr);
 const dinnerDecisionResult = JSON.parse(dinnerDecisionRun.stdout.slice(dinnerDecisionRun.stdout.indexOf("{"))) as { appliesTo: string; decision: { decision: string } };
 assert.equal(dinnerDecisionResult.appliesTo, "booking-approval-1");
 assert.equal(dinnerDecisionResult.decision.decision, "approve");
+const sponsorIngestRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "phone-runtime",
+  "ingest",
+  "--sponsor",
+  "agentphone",
+  "--event",
+  "call_connected",
+  "--session-id",
+  "call-ingest",
+  "--summary",
+  "Restaurant connected and the transcript is ready.",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(sponsorIngestRun.status, 0, sponsorIngestRun.stderr);
+const sponsorIngest = JSON.parse(sponsorIngestRun.stdout.slice(sponsorIngestRun.stdout.indexOf("{"))) as {
+  schema: string;
+  event: { source: { id: string }; kind: string };
+  command: { surface: string; decision_required?: boolean };
+  decision: { accepted: boolean };
+  artifact: { pngPath: string };
+  logPath: string;
+};
+assert.equal(sponsorIngest.schema, "peripheral-phone-runtime-ingest-v1");
+assert.equal(sponsorIngest.event.source.id, "agentphone");
+assert.equal(sponsorIngest.event.kind, "session_progress");
+assert.equal(sponsorIngest.command.surface, "glance");
+assert.equal(sponsorIngest.decision.accepted, true);
+assert.ok(existsSync(sponsorIngest.artifact.pngPath));
+assert.ok(existsSync(sponsorIngest.logPath));
+const agentIngestRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "phone-runtime",
+  "ingest",
+  "--payload-json",
+  JSON.stringify({
+    source: "agent",
+    agentId: "codex_cli",
+    sessionId: "codex-ingest",
+    line: "Codex needs approval to run npm test.",
+  }),
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(agentIngestRun.status, 0, agentIngestRun.stderr);
+const agentIngest = JSON.parse(agentIngestRun.stdout.slice(agentIngestRun.stdout.indexOf("{"))) as {
+  event: { kind: string; metadata: { adapter_id: string } };
+  command: { surface: string; decision_required?: boolean };
+  decision: { accepted: boolean; state: { focusedCardId: string | null } };
+};
+assert.equal(agentIngest.event.kind, "approval_required");
+assert.equal(agentIngest.event.metadata.adapter_id, "codex_cli");
+assert.equal(agentIngest.command.surface, "fullscreen");
+assert.equal(agentIngest.command.decision_required, true);
+assert.equal(agentIngest.decision.accepted, true);
+assert.ok(agentIngest.decision.state.focusedCardId);
 
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
 const defaultFullPanelSetupPolicy = {

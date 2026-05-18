@@ -41,6 +41,7 @@ For direct runtime inspection, the same bundle points at these commands:
 ```sh
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
@@ -49,6 +50,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --ag
 For hardware context, see `docs/peripheral-glasses.md`; the same profile is exposed by `peripheralctl integrations hardware-profile --json`.
 
 - AgentPhone call events become glasses HUD updates.
+- Inbound sponsor and agent events can be ingested, rendered, lease-checked, and logged by the phone runtime.
 - Human approval gates a consequential real-world action.
 - AgentMail and Supermemory follow-up events are rendered on glasses.
 - Agents never write pixels or BLE packets directly.

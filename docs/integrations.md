@@ -73,6 +73,17 @@ Routing is intentionally small: progress, start, and completion events become gl
 
 Each workflow declares the event trigger, target surface, risk level, phone runtime rule, and whether the user must approve before the broker continues. This makes sponsor support concrete while keeping credential values externalized and display transport behind operator/runtime gates.
 
+## Runtime Ingest
+
+`peripheralctl phone-runtime ingest` accepts inbound sponsor and agent payloads, normalizes them into the same `AgentEvent`, `PeripheralWidget`, and `SurfaceCommand` records used by the rest of Agent Mode, applies the phone lease arbiter, renders a glasses frame under `out/frames/phone-runtime-ingest/`, and writes an audit record.
+
+Examples:
+
+```sh
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --payload-json '{"source":"agent","agentId":"codex_cli","sessionId":"codex-check","line":"Codex needs approval to run npm test."}' --json
+```
+
 ## Sponsor Event Kit
 
 `peripheral-hud-runtime/packages/peripheral-sponsor-kit` is the lower-level event normalizer. It maps sponsor events into three runtime objects:
@@ -114,6 +125,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge event --ag
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge widget --agent opencode --line "OpenCode is waiting on user input"
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime route --line "hey codex show status" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows dossier --json
