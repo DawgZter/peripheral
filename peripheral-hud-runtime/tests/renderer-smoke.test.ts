@@ -855,6 +855,32 @@ assert.equal(supermemoryRunResult.supermemory.requestBody.schema, "peripheral-su
 assert.equal(supermemoryRunResult.supermemory.requestBody.container, "dinner-preferences");
 assert.equal(supermemoryRunResult.command.surface, "tiny_hud");
 assert.equal(supermemoryRunResult.command.decision_required, false);
+const followupPackRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "followup-pack",
+  "--restaurant-name",
+  "Sato Table",
+  "--preferred-window",
+  "7:45",
+  "--booking-name",
+  "Karim",
+  "--memory-container",
+  "dinner-preferences",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(followupPackRun.status, 0, followupPackRun.stderr);
+const followupPackResult = JSON.parse(followupPackRun.stdout.slice(followupPackRun.stdout.indexOf("{"))) as { pack: { schema: string; events: unknown[]; commands: unknown[] }; artifacts: unknown[]; frameDir: string; packPath: string };
+assert.equal(followupPackResult.pack.schema, "peripheral-sponsor-followup-pack-v1");
+assert.equal(followupPackResult.pack.events.length, 2);
+assert.equal(followupPackResult.pack.commands.length, 2);
+assert.equal(followupPackResult.artifacts.length, 2);
+assert.ok(existsSync(followupPackResult.frameDir));
+assert.ok(existsSync(followupPackResult.packPath));
 const dinnerDemoRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "demo",

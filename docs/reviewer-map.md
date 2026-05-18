@@ -19,6 +19,8 @@ Expected artifacts:
 - `peripheral-hud-runtime/out/frames/dinner-booking/`
 - `peripheral-hud-runtime/out/demo/dinner-booking-timeline.json`
 - `peripheral-hud-runtime/out/logs/dinner-booking.jsonl`
+- `peripheral-hud-runtime/out/frames/sponsor-followup/`
+- `peripheral-hud-runtime/out/sponsor-runtime/followup-pack.json`
 - `docs/media/peripheral-demo-dinner-booking.mp4`
 
 ## Single Flow
@@ -44,6 +46,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
@@ -71,6 +74,7 @@ The support and live-adapter reports expose 13 supported integration records, 13
 | AgentPhone call adapter | `peripheralctl sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json` |
 | AgentMail send adapter | `peripheralctl sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json` |
 | Supermemory save adapter | `peripheralctl sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json` |
+| Follow-up sponsor frames | `peripheralctl sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json` |
 | Peripheral hardware profile | `docs/peripheral-glasses.md` and `peripheralctl integrations hardware-profile --json` |
 | Agent Mode protocol | `peripheral-hud-runtime/packages/peripheral-protocol/src/index.ts` |
 | Sponsor registry | `peripheral-hud-runtime/packages/peripheral-integrations/src/index.ts` |

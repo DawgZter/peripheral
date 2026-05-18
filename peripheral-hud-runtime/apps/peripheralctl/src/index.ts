@@ -89,8 +89,10 @@ import {
   saveDinnerPreference,
   sendAgentMailConfirmation,
   submitSpongeContext,
+  type AgentMailConfirmationRequest,
   type SponsorEventInput,
   type SponsorRuntimeRequest,
+  type SupermemoryPreferenceRequest,
 } from "../../../packages/peripheral-sponsor-kit/src/index.js";
 import { normalizeAgentPhoneEvent, runAgentPhoneDinnerBooking, type AgentPhoneDinnerRequest } from "../../../packages/peripheral-sponsor-kit/src/agentphone.js";
 
@@ -135,6 +137,7 @@ const VALUE_FLAGS = new Set([
   "sponsor",
   "event",
   "session-id",
+  "memory-session-id",
   "session-prefix",
   "line",
   "transcript-uri",
@@ -276,7 +279,7 @@ async function main(): Promise<void> {
       result = await commandSponsorWorkflows(cli, projectRoot);
       break;
     case "sponsor-runtime":
-      result = await commandSponsorRuntime(cli);
+      result = await commandSponsorRuntime(cli, projectRoot);
       break;
     case "render-card":
       result = await commandRenderCard(cli, projectRoot);
@@ -858,7 +861,7 @@ async function commandSponsorWorkflows(cli: ParsedCli, projectRoot: string): Pro
   }
 }
 
-async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
+async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promise<unknown> {
   const view = cli.positionals[0] || "adapters";
   const now = new Date();
   switch (view) {
@@ -907,31 +910,16 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
       };
     }
     case "agentmail-send": {
-      const sessionId = String(cli.options["session-id"] || "dinner-confirmation-email");
-      const restaurantName = String(cli.options["restaurant-name"] || cli.options.target || process.env.PERIPHERAL_RESTAURANT_NAME || "Sato Table");
-      const bookingTime = String(cli.options["booking-time"] || cli.options["preferred-window"] || process.env.PERIPHERAL_PREFERRED_WINDOW || "7:45");
-      const partySize = Math.max(1, Number(cli.options["party-size"] || process.env.PERIPHERAL_PARTY_SIZE || 2));
-      const bookingName = String(cli.options["booking-name"] || process.env.PERIPHERAL_BOOKING_NAME || process.env.PERIPHERAL_WEARER_NAME || "Wearer");
-      const result = await sendAgentMailConfirmation({
-        sessionId,
-        restaurantName,
-        bookingTime,
-        partySize,
-        bookingName,
-        to: typeof cli.options["email-to"] === "string" ? cli.options["email-to"] : undefined,
-        from: typeof cli.options["email-from"] === "string" ? cli.options["email-from"] : undefined,
-        subject: typeof cli.options.title === "string" ? cli.options.title : undefined,
-        text: typeof cli.options.body === "string" ? cli.options.body : typeof cli.options.summary === "string" ? cli.options.summary : undefined,
-        now,
-      }, {
+      const input = agentMailConfirmationInput(cli, now);
+      const result = await sendAgentMailConfirmation(input, {
         forceReal: Boolean(cli.options["real-agentmail"] || cli.options.real),
         env: process.env,
       });
-      const summary = String(result.requestBody.text || "Confirmation email sent for " + bookingTime + " dinner at " + restaurantName + ".");
+      const summary = String(result.requestBody.text || "Confirmation email sent for " + input.bookingTime + " dinner at " + input.restaurantName + ".");
       const normalized = normalizeSponsorEvent({
         sponsorId: "agentmail",
         event: "reply_sent",
-        sessionId,
+        sessionId: input.sessionId,
         title: "Confirmation Sent",
         summary,
         risk: "low",
@@ -940,35 +928,69 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
       return { ok: result.ok, mode: result.mode, agentMail: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
     }
     case "supermemory-save": {
-      const sessionId = String(cli.options["session-id"] || "dinner-preference");
-      const restaurantName = typeof cli.options["restaurant-name"] === "string" ? cli.options["restaurant-name"] : typeof cli.options.target === "string" ? cli.options.target : process.env.PERIPHERAL_RESTAURANT_NAME;
-      const bookingTime = String(cli.options["booking-time"] || cli.options["preferred-window"] || process.env.PERIPHERAL_PREFERRED_WINDOW || "7:45");
-      const wearerName = String(cli.options["wearer-name"] || cli.options["booking-name"] || process.env.PERIPHERAL_WEARER_NAME || process.env.PERIPHERAL_BOOKING_NAME || "Wearer");
-      const preference = String(cli.options.preference || cli.options["context-text"] || cli.options.summary || cli.options.body || "Saved preference: prefers 7-8pm dinner slots.");
-      const result = await saveDinnerPreference({
-        sessionId,
-        wearerName,
-        preference,
-        restaurantName,
-        bookingTime,
-        now,
-      }, {
+      const input = supermemoryPreferenceInput(cli, now);
+      const result = await saveDinnerPreference(input, {
         forceReal: Boolean(cli.options["real-supermemory"] || cli.options.real),
-        env: {
-          ...process.env,
-          ...(typeof cli.options["memory-container"] === "string" ? { SUPERMEMORY_CONTAINER: cli.options["memory-container"] } : {}),
-        },
+        env: supermemoryRuntimeEnv(cli),
       });
       const normalized = normalizeSponsorEvent({
         sponsorId: "supermemory",
         event: "memory_saved",
-        sessionId,
+        sessionId: input.sessionId,
         title: "Preference Saved",
-        summary: preference,
+        summary: input.preference,
         risk: "low",
         now,
       });
       return { ok: result.ok, mode: result.mode, supermemory: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
+    }
+    case "followup-pack": {
+      const mailInput = agentMailConfirmationInput(cli, now);
+      const memoryInput = supermemoryPreferenceInput(cli, now);
+      const mailResult = await sendAgentMailConfirmation(mailInput, {
+        forceReal: Boolean(cli.options["real-agentmail"] || cli.options.real),
+        env: process.env,
+      });
+      const memoryResult = await saveDinnerPreference(memoryInput, {
+        forceReal: Boolean(cli.options["real-supermemory"] || cli.options.real),
+        env: supermemoryRuntimeEnv(cli),
+      });
+      const mail = normalizeSponsorEvent({
+        sponsorId: "agentmail",
+        event: "reply_sent",
+        sessionId: mailInput.sessionId,
+        title: "Confirmation Sent",
+        summary: String(mailResult.requestBody.text || "Confirmation email sent for " + mailInput.bookingTime + " dinner at " + mailInput.restaurantName + "."),
+        risk: "low",
+        now,
+      });
+      const memory = normalizeSponsorEvent({
+        sponsorId: "supermemory",
+        event: "memory_saved",
+        sessionId: memoryInput.sessionId,
+        title: "Preference Saved",
+        summary: memoryInput.preference,
+        risk: "low",
+        now,
+      });
+      const widgets = [mail.widget, memory.widget];
+      const frameDir = join(projectRoot, "out", "frames", "sponsor-followup");
+      const artifacts = widgets.map((widget, index) => renderWidgetToFile(widget, join(frameDir, String(index + 1).padStart(2, "0") + "-" + widget.id + ".png"), {
+        assetRoot: join(projectRoot, "fixtures", "images"),
+      }));
+      const packPath = join(projectRoot, "out", "sponsor-runtime", "followup-pack.json");
+      const pack = {
+        schema: "peripheral-sponsor-followup-pack-v1",
+        generatedAt: now.toISOString(),
+        workflow: "dinner-booking-post-approval",
+        dispatches: { agentMail: mailResult, supermemory: memoryResult },
+        events: [mail.event, memory.event],
+        commands: [mail.command, memory.command],
+        artifacts,
+      };
+      mkdirSync(dirname(packPath), { recursive: true });
+      writeFileSync(packPath, JSON.stringify(pack, null, 2));
+      return { ok: mailResult.ok && memoryResult.ok, mode: { agentMail: mailResult.mode, supermemory: memoryResult.mode }, pack, frameDir, packPath, artifacts };
     }
     case "stripe-hold": {
       const sessionId = String(cli.options["session-id"] || "stripe-card-hold");
@@ -1093,8 +1115,41 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
       return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command, decision: normalized.decision };
     }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, stripe-hold, browser-task, sponge-context, gemini-route");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, followup-pack, stripe-hold, browser-task, sponge-context, gemini-route");
   }
+}
+
+function agentMailConfirmationInput(cli: ParsedCli, now: Date): AgentMailConfirmationRequest {
+  return {
+    sessionId: String(cli.options["session-id"] || "dinner-confirmation-email"),
+    restaurantName: String(cli.options["restaurant-name"] || cli.options.target || process.env.PERIPHERAL_RESTAURANT_NAME || "Sato Table"),
+    bookingTime: String(cli.options["booking-time"] || cli.options["preferred-window"] || process.env.PERIPHERAL_PREFERRED_WINDOW || "7:45"),
+    partySize: Math.max(1, Number(cli.options["party-size"] || process.env.PERIPHERAL_PARTY_SIZE || 2)),
+    bookingName: String(cli.options["booking-name"] || process.env.PERIPHERAL_BOOKING_NAME || process.env.PERIPHERAL_WEARER_NAME || "Wearer"),
+    to: typeof cli.options["email-to"] === "string" ? cli.options["email-to"] : undefined,
+    from: typeof cli.options["email-from"] === "string" ? cli.options["email-from"] : undefined,
+    subject: typeof cli.options.title === "string" ? cli.options.title : undefined,
+    text: typeof cli.options.body === "string" ? cli.options.body : typeof cli.options.summary === "string" ? cli.options.summary : undefined,
+    now,
+  };
+}
+
+function supermemoryPreferenceInput(cli: ParsedCli, now: Date): SupermemoryPreferenceRequest {
+  return {
+    sessionId: String(cli.options["memory-session-id"] || cli.options["session-id"] || "dinner-preference"),
+    wearerName: String(cli.options["wearer-name"] || cli.options["booking-name"] || process.env.PERIPHERAL_WEARER_NAME || process.env.PERIPHERAL_BOOKING_NAME || "Wearer"),
+    preference: String(cli.options.preference || cli.options["context-text"] || cli.options.summary || cli.options.body || "Saved preference: prefers 7-8pm dinner slots."),
+    restaurantName: typeof cli.options["restaurant-name"] === "string" ? cli.options["restaurant-name"] : typeof cli.options.target === "string" ? cli.options.target : process.env.PERIPHERAL_RESTAURANT_NAME,
+    bookingTime: String(cli.options["booking-time"] || cli.options["preferred-window"] || process.env.PERIPHERAL_PREFERRED_WINDOW || "7:45"),
+    now,
+  };
+}
+
+function supermemoryRuntimeEnv(cli: ParsedCli): Record<string, string | undefined> {
+  return {
+    ...process.env,
+    ...(typeof cli.options["memory-container"] === "string" ? { SUPERMEMORY_CONTAINER: cli.options["memory-container"] } : {}),
+  };
 }
 
 function sponsorRuntimeInput(cli: ParsedCli, now: Date): SponsorEventInput {
@@ -2017,6 +2072,7 @@ function capabilities(): unknown {
       "sponsor-runtime agentphone-call --restaurant-phone <number> --prompt <text>",
       "sponsor-runtime agentmail-send --restaurant-name <name> --preferred-window <time>",
       "sponsor-runtime supermemory-save --preference <text>",
+      "sponsor-runtime followup-pack --restaurant-name <name> --preferred-window <time>",
       "sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd",
       "sponsor-runtime browser-task --task <text> --start-url <url>",
       "sponsor-runtime browser-task --goal \"Check restaurant availability\"",
@@ -2268,6 +2324,7 @@ Usage:
   peripheralctl sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming"
   peripheralctl sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim
   peripheralctl sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences
+  peripheralctl sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim
   peripheralctl sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold"
   peripheralctl sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com
   peripheralctl sponsor-runtime browser-task --goal "Check restaurant availability" --url https://example.com
