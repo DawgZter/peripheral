@@ -7,6 +7,13 @@ import {
   type SurfaceCommand,
 } from "../../peripheral-protocol/src/index.js";
 import { sponsorIntegrations, sourceFor, type SponsorId } from "../../peripheral-integrations/src/index.js";
+import { normalizeAgentPhoneEvent, runAgentPhoneDinnerBooking, type AgentPhoneCallResult } from "./agentphone.js";
+import { sendAgentMailConfirmation, type AgentMailSendResult } from "./agentmail.js";
+import { normalizeBrowserUseEvent, runBrowserUseTask, type BrowserUseTaskResult } from "./browseruse.js";
+import { routeGeminiBrokerDecision, type GeminiRouteResult } from "./gemini.js";
+import { submitSpongeContext, type SpongeContextResult } from "./sponge.js";
+import { createStripePaymentIntent, type StripePaymentIntentResult } from "./stripe.js";
+import { saveDinnerPreference, type SupermemorySaveResult } from "./supermemory.js";
 export {
   callRestaurant,
   normalizeAgentPhoneEvent,
@@ -126,6 +133,7 @@ export type SponsorRuntimeAdapter = {
   endpointEnv: string;
   endpointConfigured: boolean;
   eventKinds: string[];
+  dispatchCommand: string[];
   output: "AgentEvent+PeripheralWidget+SurfaceCommand";
   safety: "phone_owned_surface_policy";
 };
@@ -145,9 +153,20 @@ export type SponsorRuntimeDispatchResult = {
   ok: boolean;
   status?: number;
   request: SponsorRuntimeRequest;
+  normalized?: NormalizedSponsorEvent;
+  adapterResult?: SponsorAdapterExecutionResult;
   responseBody?: unknown;
   error?: string;
 };
+
+export type SponsorAdapterExecutionResult =
+  | AgentPhoneCallResult
+  | StripePaymentIntentResult
+  | SupermemorySaveResult
+  | AgentMailSendResult
+  | BrowserUseTaskResult
+  | SpongeContextResult
+  | GeminiRouteResult;
 
 export function normalizeSponsorEvent(input: SponsorEventInput): NormalizedSponsorEvent {
   const now = input.now || new Date();
@@ -195,18 +214,19 @@ export function buildSponsorEventDossier(now = new Date()): SponsorEventDossier 
 }
 
 export function buildSponsorRuntimeAdapters(env: Record<string, string | undefined> = process.env): SponsorRuntimeAdapter[] {
-  void env;
   return sponsorIntegrations.map((sponsor) => {
     const endpointEnv = endpointEnvForSponsor(sponsor.id);
+    const configuredCredentials = sponsor.env.filter((name) => Boolean(env[name]));
     return {
       id: sponsor.id,
       name: sponsor.name,
       status: "live_ready",
       credentialNames: sponsor.env,
-      configuredCredentials: sponsor.env,
+      configuredCredentials,
       endpointEnv,
-      endpointConfigured: true,
+      endpointConfigured: Boolean(env[endpointEnv]),
       eventKinds: sponsor.agentEvents,
+      dispatchCommand: ["peripheralctl", "sponsor-runtime", "dispatch", "--sponsor", sponsor.id, "--event", defaultEventForSponsor(sponsor.id)],
       output: "AgentEvent+PeripheralWidget+SurfaceCommand",
       safety: "phone_owned_surface_policy",
     };
@@ -221,7 +241,7 @@ export function buildSponsorRuntimeRequest(input: SponsorEventInput, env: Record
     sponsorId: input.sponsorId,
     event: input.event,
     endpointEnv,
-    endpointConfigured: true,
+    endpointConfigured: Boolean(env[endpointEnv]),
     method: "POST",
     url,
     headers: runtimeHeaders(input.sponsorId, env),
@@ -239,13 +259,23 @@ export async function dispatchSponsorEvent(
   input: SponsorEventInput,
   env: Record<string, string | undefined> = process.env,
   fetchImpl: typeof fetch = fetch,
+  forceReal = false,
 ): Promise<SponsorRuntimeDispatchResult> {
   const request = buildSponsorRuntimeRequest(input, env);
-  if (request.url.startsWith("peripheral://")) {
+  if (request.url.startsWith("peripheral://") || forceReal) {
+    const executed = await executeSponsorRuntimeAdapter(input, { env, fetchImpl, forceReal });
     return {
-      ok: true,
+      ok: executed.adapterResult.ok,
       request,
-      responseBody: { routed: "phone_owned_broker", sponsorId: input.sponsorId, event: input.event },
+      normalized: executed.normalized,
+      adapterResult: executed.adapterResult,
+      responseBody: {
+        routed: forceReal ? "provider_adapter" : "phone_gateway_adapter",
+        sponsorId: input.sponsorId,
+        event: input.event,
+        normalized: executed.normalized,
+        adapterResult: executed.adapterResult,
+      },
     };
   }
   try {
@@ -267,6 +297,103 @@ export async function dispatchSponsorEvent(
       request,
       error: error instanceof Error ? error.message : String(error),
     };
+  }
+}
+
+export async function executeSponsorRuntimeAdapter(
+  input: SponsorEventInput,
+  options: { env?: Record<string, string | undefined>; fetchImpl?: typeof fetch; forceReal?: boolean } = {},
+): Promise<{ normalized: NormalizedSponsorEvent; adapterResult: SponsorAdapterExecutionResult }> {
+  const env = options.env || process.env;
+  const now = input.now || new Date();
+  const normalized = normalizeSponsorEvent({ ...input, now });
+  const adapterOptions = { env, fetchImpl: options.fetchImpl, forceReal: Boolean(options.forceReal) };
+  switch (input.sponsorId) {
+    case "agentphone": {
+      const adapterResult = await runAgentPhoneDinnerBooking({
+        restaurantName: cleanText(input.target || env.PERIPHERAL_RESTAURANT_NAME || "Sato Table", 120),
+        restaurantPhoneNumber: env.AGENTPHONE_RESTAURANT_PHONE || env.PERIPHERAL_RESTAURANT_PHONE || "",
+        partySize: positiveInteger(env.PERIPHERAL_PARTY_SIZE, 2),
+        neighborhood: env.PERIPHERAL_NEIGHBORHOOD || "Mission",
+        bookingName: env.PERIPHERAL_BOOKING_NAME || env.PERIPHERAL_WEARER_NAME || "Wearer",
+        preferredWindow: env.PERIPHERAL_PREFERRED_WINDOW || timeFromText(input.summary) || "7:45",
+        prompt: input.summary,
+        now,
+      }, adapterOptions);
+      const primary = adapterResult.events.map(normalizeAgentPhoneEvent).find((event) => event.command.decision_required);
+      return {
+        normalized: primary ? normalizedFromRoute(primary) : normalized,
+        adapterResult,
+      };
+    }
+    case "stripe": {
+      const amountCents = moneyCents(input.amount || env.PERIPHERAL_HOLD_AMOUNT || "25.00");
+      const adapterResult = await createStripePaymentIntent({
+        sessionId: input.sessionId,
+        amountCents,
+        currency: env.STRIPE_CURRENCY || "usd",
+        description: input.summary,
+        now,
+      }, adapterOptions);
+      return { normalized, adapterResult };
+    }
+    case "supermemory": {
+      const adapterResult = await saveDinnerPreference({
+        sessionId: input.sessionId,
+        wearerName: env.PERIPHERAL_WEARER_NAME || "Wearer",
+        preference: input.summary,
+        restaurantName: input.target || env.PERIPHERAL_RESTAURANT_NAME,
+        bookingTime: timeFromText(input.summary) || env.PERIPHERAL_PREFERRED_WINDOW,
+        now,
+      }, adapterOptions);
+      return { normalized, adapterResult };
+    }
+    case "agentmail": {
+      const adapterResult = await sendAgentMailConfirmation({
+        sessionId: input.sessionId,
+        restaurantName: input.target || env.PERIPHERAL_RESTAURANT_NAME || "Sato Table",
+        bookingTime: timeFromText(input.summary) || env.PERIPHERAL_PREFERRED_WINDOW || "7:45",
+        partySize: positiveInteger(env.PERIPHERAL_PARTY_SIZE, 2),
+        bookingName: env.PERIPHERAL_BOOKING_NAME || env.PERIPHERAL_WEARER_NAME || "Wearer",
+        subject: input.title,
+        text: input.summary,
+        now,
+      }, adapterOptions);
+      return { normalized, adapterResult };
+    }
+    case "browser_use": {
+      const adapterResult = await runBrowserUseTask({
+        sessionId: input.sessionId,
+        task: input.summary,
+        startUrl: input.target,
+        approvalIntent: input.event === "browser_submit_requested" ? input.summary : undefined,
+        now,
+      }, adapterOptions);
+      const primary = adapterResult.events.map(normalizeBrowserUseEvent).find((event) => event.command.decision_required);
+      return {
+        normalized: primary ? normalizedFromRoute(primary) : normalized,
+        adapterResult,
+      };
+    }
+    case "sponge": {
+      const adapterResult = await submitSpongeContext({
+        sessionId: input.sessionId,
+        text: input.summary,
+        projectId: env.SPONGE_PROJECT_ID,
+        redactionMode: input.event === "redaction_warning" ? "redaction_warning" : "context_digest",
+        now,
+      }, adapterOptions);
+      return { normalized, adapterResult };
+    }
+    case "gemini": {
+      const adapterResult = await routeGeminiBrokerDecision({
+        sessionId: input.sessionId,
+        prompt: input.summary,
+        context: input.target,
+        now,
+      }, adapterOptions);
+      return { normalized, adapterResult };
+    }
   }
 }
 
@@ -469,6 +596,54 @@ function credentialForSponsor(id: SponsorId, env: Record<string, string | undefi
     case "gemini":
       return env.GEMINI_API_KEY || env.GOOGLE_API_KEY;
   }
+}
+
+function defaultEventForSponsor(id: SponsorId): SponsorEventKind {
+  switch (id) {
+    case "agentphone":
+      return "call_connected";
+    case "stripe":
+      return "payment_intent_requires_action";
+    case "supermemory":
+      return "memory_save_requested";
+    case "agentmail":
+      return "draft_ready";
+    case "browser_use":
+      return "browser_submit_requested";
+    case "sponge":
+      return "context_clustered";
+    case "gemini":
+      return "route_decision";
+  }
+}
+
+function normalizedFromRoute(route: { event: AgentEvent; widget: PeripheralWidget; command: SurfaceCommand }): NormalizedSponsorEvent {
+  return {
+    schema: "peripheral-sponsor-event-v1",
+    event: route.event,
+    widget: route.widget,
+    command: route.command,
+  };
+}
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.round(parsed);
+}
+
+function moneyCents(value: string): number {
+  const normalized = value.replace(/[^0-9.]/g, "");
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 2500;
+  }
+  return Math.round(amount * 100);
+}
+
+function timeFromText(value: string): string | undefined {
+  const match = value.match(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/i);
+  return match ? match[0] : undefined;
 }
 
 function parseResponseBody(text: string): unknown {

@@ -11,7 +11,7 @@
     "hudctl": "./dist/apps/peripheralctl/src/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "NODE_DISABLE_COMPILE_CACHE=1 node ./node_modules/typescript/bin/tsc -p tsconfig.json",
     "peripheralctl": "node dist/apps/peripheralctl/src/index.js",
     "hudctl": "node dist/apps/peripheralctl/src/index.js hudctl",
     "walkthrough": "npm run build && npm run peripheralctl -- walkthrough live-call --local",

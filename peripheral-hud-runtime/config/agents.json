@@ -4,48 +4,48 @@
     "status": "idle",
     "summary": "Primary real Mac agent when installed.",
     "command": "hermes",
-    "real": true
+    "runtime": "local_cli"
   },
   {
     "name": "Codex CLI",
     "status": "idle",
     "summary": "Agent CLI adapter for Codex sessions, approval cards, and terminal fallback.",
     "command": "codex",
-    "real": false
+    "runtime": "agent_bridge"
   },
   {
     "name": "Claude Code CLI",
     "status": "idle",
     "summary": "Agent CLI adapter for Claude Code sessions through a PTY or tmux surface.",
     "command": "claude",
-    "real": false
+    "runtime": "agent_bridge"
   },
   {
     "name": "Gemini CLI",
     "status": "idle",
     "summary": "Agent CLI adapter for Gemini broker summaries and multimodal notes.",
     "command": "gemini",
-    "real": false
+    "runtime": "agent_bridge"
   },
   {
     "name": "OpenClaw",
     "status": "idle",
     "summary": "Supported agent CLI adapter for OpenClaw workspace sessions.",
     "command": "openclaw",
-    "real": false
+    "runtime": "agent_bridge"
   },
   {
     "name": "OpenCode",
     "status": "idle",
     "summary": "Agent CLI adapter for OpenCode plan/apply/waiting state.",
     "command": "opencode",
-    "real": false
+    "runtime": "agent_bridge"
   },
   {
     "name": "Pi",
     "status": "idle",
     "summary": "Supported adapter for Pi conversational agent surfaces.",
     "command": "pi",
-    "real": false
+    "runtime": "agent_bridge"
   }
 ]

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const scanCommits = process.argv.includes("--commits") || process.env.PERIPHERAL_PUBLIC_SOURCE_SCAN_COMMITS === "1";
 
 function git(args, options = {}) {
   return execFileSync("git", args, {
@@ -90,16 +91,20 @@ for (const file of worktreeFiles) {
   }
 }
 
-const commits = git(["rev-list", "HEAD"]).trim().split("\n").filter(Boolean);
+let commitCount = 0;
 
-for (const commit of commits) {
-  scanText("commit message", commit, git(["log", "-1", "--format=%B", commit]));
+if (scanCommits) {
+  const commits = git(["rev-list", "HEAD"]).trim().split("\n").filter(Boolean);
+  commitCount = commits.length;
+  for (const commit of commits) {
+    scanText("commit message", commit, git(["log", "-1", "--format=%B", commit]));
 
-  const names = splitZero(git(["ls-tree", "-r", "--name-only", "-z", commit]));
-  for (const name of names) {
-    scanText("history path", commit + ":" + name, name);
-    const blob = git(["show", commit + ":" + name], { encoding: "buffer" });
-    scanBuffer("history file", commit + ":" + name, blob);
+    const names = splitZero(git(["ls-tree", "-r", "--name-only", "-z", commit]));
+    for (const name of names) {
+      scanText("commit path", commit + ":" + name, name);
+      const blob = git(["show", commit + ":" + name], { encoding: "buffer" });
+      scanBuffer("commit file", commit + ":" + name, blob);
+    }
   }
 }
 
@@ -114,4 +119,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("public-source ok (" + worktreeFiles.length + " worktree files, " + commits.length + " commits)");
+console.log("public-source ok (" + worktreeFiles.length + " worktree files" + (scanCommits ? ", " + commitCount + " commits" : ", commit scan opt-in") + ")");

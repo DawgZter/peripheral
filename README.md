@@ -17,7 +17,10 @@ npm --prefix peripheral-hud-runtime ci
 npm run check
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
 ```
+
+`review-bundle` is the quickest judge-facing JSON: it checks the rendered frames, timeline, log, and MP4, then embeds the connected-state, phone-runtime, and agent-bridge route summaries that can be inspected without glasses attached.
 
 Artifacts:
 
@@ -31,6 +34,14 @@ Use manual approval mode when you want the run to stop at the card:
 ```sh
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --wait-for-approval
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event booking-approval-1 --choice approve
+```
+
+For direct runtime inspection, the same bundle points at these commands:
+
+```sh
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
 ## What It Proves

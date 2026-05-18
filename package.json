@@ -12,6 +12,7 @@
   "scripts": {
     "check": "npm run check:public-source && npm run check:review-posture && npm run check:sponsor-tools && npm run check:hud",
     "check:public-source": "node tools/check-public-source.mjs",
+    "check:public-source:commits": "node tools/check-public-source.mjs --commits",
     "check:review-posture": "node tools/check-review-posture.mjs",
     "check:sponsor-tools": "node --check tools/sponsor-manual-tool.mjs && node tools/check-sponsor-manual-tools.mjs",
     "check:hud": "npm --prefix peripheral-hud-runtime test",

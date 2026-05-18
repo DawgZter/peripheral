@@ -9,7 +9,10 @@ npm --prefix peripheral-hud-runtime ci
 npm run check
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
 ```
+
+The review bundle returns both artifact checks and runtime evidence: connected-state, phone-runtime, and agent-bridge route summaries are embedded in the same JSON, so reviewers can inspect the phone-gateway contract before any operator-driven glasses access.
 
 Expected artifacts:
 
@@ -28,6 +31,17 @@ Expected artifacts:
 | Booking pauses for approval | Implemented | `out/frames/dinner-booking/04-approval-required.png` |
 | User decision changes flow | Implemented | `phone-runtime decide --event booking-approval-1 --choice approve` |
 | Follow-up adapters dispatch | Adapter path | AgentMail and Supermemory dispatch records in `dinner-booking-timeline.json` |
+| Proof bundle verifies artifacts and runtime evidence | Implemented | `peripheralctl review-bundle --json` |
+
+## Runtime Evidence
+
+```sh
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
+```
+
+These are also embedded under `runtime` in `review-bundle --json`.
 
 ## Real Mode Env Surface
 
@@ -54,6 +68,7 @@ Expected artifacts:
 | Browser/Sponge/Gemini adapters | `peripheral-hud-runtime/packages/peripheral-sponsor-kit/src/browseruse.ts`, `sponge.ts`, `gemini.ts` |
 | CLI transcript normalization | `peripheral-hud-runtime/packages/peripheral-agent-bridge/src/index.ts` |
 | Agent CLI runtime plan | `peripheralctl agent-bridge runtime-plan --agent codex_cli --session-id codex-check --json` |
+| Agent CLI executable route | `peripheralctl agent-bridge launch --agent codex_cli --session-id codex-check --task "Run checks" --json` |
 | Smoke coverage | `peripheral-hud-runtime/tests/renderer-smoke.test.ts` |
 
 ## Safety Boundary

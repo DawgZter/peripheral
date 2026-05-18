@@ -68,7 +68,7 @@ export type IntegrationSummary = {
 
 export type EnvSnapshot = Record<string, string | undefined>;
 
-export type CredentialState = "configured";
+export type CredentialState = "configured" | "externalized_runtime";
 
 export type AdapterRuntimeState = "live_ready";
 
@@ -690,10 +690,11 @@ export function buildConnectedGlassesEvidence(env: EnvSnapshot = {}, now = new D
   const rssi = optionalNumber(env.PERIPHERAL_GLASSES_RSSI);
   const connectedDeviceCount = optionalNumber(env.PERIPHERAL_CONNECTED_DEVICE_COUNT);
   const explicitConnected = optionalBoolean(env.PERIPHERAL_GLASSES_CONNECTED);
-  const hasOperatorTelemetry = batteryPercent !== undefined || rssi !== undefined || connectedDeviceCount !== undefined || explicitConnected !== undefined;
+  const gatewayConnected = optionalBoolean(env.PERIPHERAL_PHONE_GATEWAY_CONNECTED);
+  const hasOperatorTelemetry = batteryPercent !== undefined || rssi !== undefined || connectedDeviceCount !== undefined || explicitConnected !== undefined || gatewayConnected !== undefined;
   return {
     source: hasOperatorTelemetry ? "operator_env" : "phone_gateway_runtime",
-    connected: explicitConnected ?? (connectedDeviceCount !== undefined ? connectedDeviceCount > 0 : true),
+    connected: explicitConnected ?? (connectedDeviceCount !== undefined ? connectedDeviceCount > 0 : gatewayConnected ?? false),
     observedAt: now.toISOString(),
     sidecarUrl: env.PERIPHERAL_SIDECAR_URL || env.PERIPHERAL_HUD_SIDECAR_URL,
     connectedDeviceCount,
@@ -1026,7 +1027,7 @@ function supportForSponsor(item: SponsorIntegration, env: EnvSnapshot): Integrat
     endpointEnv,
     endpointConfigured: credentials.endpointConfigured,
     configured: status !== "supported",
-    connected: credentials.adapterState === "live_ready",
+    connected: status === "connected",
     supported: true,
     surfaceCount: item.surfaces.length,
     connectionMode: "credential_bound_runtime",
@@ -1051,7 +1052,7 @@ function supportForAgentCli(item: AgentCliIntegration, env: EnvSnapshot): Integr
     configuredCredentialNames: credentials.configured,
     credentialState: credentials.state,
     configured: status !== "supported",
-    connected: credentials.adapterState === "live_ready",
+    connected: status === "connected",
     supported: true,
     surfaceCount: item.surfaces.length,
     connectionMode: "credential_bound_runtime",
@@ -1067,21 +1068,20 @@ function credentialSnapshot(names: string[], env: EnvSnapshot, endpointEnv?: str
   adapterState: AdapterRuntimeState;
   endpointConfigured: boolean;
 } {
-  void env;
-  void endpointEnv;
-  const configured = names;
-  const endpointConfigured = true;
+  const configured = names.filter((name) => Boolean(env[name]));
+  const endpointConfigured = endpointEnv ? Boolean(env[endpointEnv]) : false;
   return {
     configured,
-    state: "configured",
+    state: configured.length > 0 ? "configured" : "externalized_runtime",
     adapterState: "live_ready",
     endpointConfigured,
   };
 }
 
 function statusForSnapshot(snapshot: { configured: string[]; endpointConfigured: boolean; adapterState: AdapterRuntimeState }): IntegrationStatus {
-  void snapshot;
-  return "connected";
+  if (snapshot.configured.length > 0 && snapshot.adapterState === "live_ready") return "connected";
+  if (snapshot.endpointConfigured) return "configured";
+  return "supported";
 }
 
 function mcpTool(name: string, description: string, risk: PeripheralMcpTool["risk"]): PeripheralMcpTool {

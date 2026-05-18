@@ -50,11 +50,13 @@ import {
 import {
   buildAgentBridgeAdapters,
   buildAgentBridgeDossier,
+  buildAgentBridgeRuntimeHandshake,
   buildAgentRuntimePlan,
   buildAgentBridgeTranscript,
   buildAgentLaunchSpecs,
   normalizeAgentCliId,
   routeAgentBridgeLine,
+  runAgentCliLaunch,
   normalizeAgentCliLine,
   surfaceCommandForAgentEvent,
   widgetForAgentEvent,
@@ -86,6 +88,7 @@ import {
   saveDinnerPreference,
   sendAgentMailConfirmation,
   submitSpongeContext,
+  type SponsorEventInput,
   type SponsorRuntimeRequest,
 } from "../../../packages/peripheral-sponsor-kit/src/index.js";
 import { normalizeAgentPhoneEvent, runAgentPhoneDinnerBooking, type AgentPhoneDinnerRequest } from "../../../packages/peripheral-sponsor-kit/src/agentphone.js";
@@ -126,11 +129,13 @@ const VALUE_FLAGS = new Set([
   "hermes-model",
   "hermes-reasoning",
   "timeout-seconds",
+  "timeout-ms",
   "agent",
   "sponsor",
   "event",
   "session-id",
   "line",
+  "transcript-uri",
   "summary",
   "task",
   "start-url",
@@ -157,9 +162,12 @@ const VALUE_FLAGS = new Set([
   "prompt",
   "context",
   "context-text",
+  "cwd",
   "model",
   "project-id",
   "mode",
+  "process-command",
+  "process-args-json",
   "code",
   "choice",
   "restaurant-name",
@@ -227,6 +235,9 @@ async function main(): Promise<void> {
     case "demo":
       result = await commandDemo(cli, projectRoot, driverOptions);
       break;
+    case "review-bundle":
+      result = commandReviewBundle(projectRoot, repoRoot);
+      break;
     case "walkthrough":
       result = await commandWalkthrough(cli, projectRoot, driverOptions);
       break;
@@ -249,7 +260,7 @@ async function main(): Promise<void> {
       result = await commandIntegrations(cli, projectRoot);
       break;
     case "agent-bridge":
-      result = await commandAgentBridge(cli, projectRoot);
+      result = await commandAgentBridge(cli, projectRoot, repoRoot, logPath);
       break;
     case "phone-runtime":
       result = await commandPhoneRuntime(cli, projectRoot);
@@ -344,6 +355,115 @@ async function commandAsrReplay(cli: ParsedCli, projectRoot: string, repoRoot: s
   return { ...result, script, framebufferProof };
 }
 
+function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
+  const now = new Date();
+  const frameDir = join(projectRoot, "out", "frames", "dinner-booking");
+  const timelinePath = join(projectRoot, "out", "demo", "dinner-booking-timeline.json");
+  const logPath = join(projectRoot, "out", "logs", "dinner-booking.jsonl");
+  const videoPath = join(repoRoot, "docs", "media", "peripheral-demo-dinner-booking.mp4");
+  const frames = existsSync(frameDir)
+    ? readdirSync(frameDir).filter((name) => name.endsWith(".png")).sort()
+    : [];
+  const timeline = readJsonIfPresent(timelinePath);
+  const timelineRecords = Array.isArray(timeline)
+    ? timeline
+    : isRecord(timeline) && Array.isArray(timeline.steps) ? timeline.steps
+      : isRecord(timeline) && Array.isArray(timeline.timeline) ? timeline.timeline : [];
+  const timelineText = timeline ? JSON.stringify(timeline) : "";
+  const logLineCount = existsSync(logPath) ? readFileSync(logPath, "utf8").trim().split(/\r?\n/).filter(Boolean).length : 0;
+  const connectedState = buildConnectedGlassesState(now, buildConnectedGlassesEvidence(process.env, now));
+  const phoneRuntime = buildPhoneRuntimeSnapshot(now);
+  const agentRoute = routeAgentBridgeLine({
+    agentId: "codex_cli",
+    sessionId: "review-bundle",
+    line: "Codex needs approval to run npm test.",
+    now,
+  });
+  const agentPhoneDecision = applySurfaceCommand(createPhoneSurfaceRuntime(now), agentRoute.command, now);
+  const artifacts = {
+    frameDir,
+    frameCount: frames.length,
+    frames,
+    timeline: artifactMeta(timelinePath, "json"),
+    log: { ...artifactMeta(logPath, "jsonl"), lineCount: logLineCount },
+    video: artifactMeta(videoPath, "mp4"),
+  };
+  const checks = [
+    { id: "frames_generated", ok: frames.length >= 5, detail: frames.length + " PNG frames" },
+    { id: "timeline_present", ok: Boolean(artifacts.timeline.exists), detail: timelinePath },
+    { id: "approval_gate_recorded", ok: /approval_required|WAITING_FOR_APPROVAL/.test(timelineText), detail: "approval card appears in timeline" },
+    { id: "followup_recorded", ok: /agentmail_confirmation/.test(timelineText) && /supermemory_saved/.test(timelineText), detail: "email and memory follow-up events present" },
+    { id: "log_present", ok: logLineCount > 0, detail: logLineCount + " JSONL records" },
+    { id: "video_present", ok: Boolean(artifacts.video.exists), detail: videoPath },
+    { id: "connected_state_included", ok: connectedState.schema === "peripheral-connected-state-v1", detail: "phone-gateway glasses state is embedded" },
+    { id: "phone_runtime_included", ok: phoneRuntime.schema === "peripheral-phone-runtime-snapshot-v1", detail: "phone surface runtime is embedded" },
+    { id: "agent_route_included", ok: agentPhoneDecision.accepted, detail: "agent CLI route passes through the phone lease arbiter" },
+  ];
+  return {
+    ok: checks.every((check) => check.ok),
+    schema: "peripheral-review-bundle-v1",
+    generatedAt: now.toISOString(),
+    flow: "dinner-booking",
+    experience: {
+      primarySurface: "Peripheral glasses",
+      browserPreviewSurface: false,
+      displayOwnership: "phone_runtime_surface_lease",
+      agentOutput: "semantic_surface_commands",
+      liveTransportPolicy: "explicit_operator_choice_only",
+    },
+    commands: {
+      generate: "npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json",
+      inspect: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json",
+      approve: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event booking-approval-1 --choice approve",
+      connectedState: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json",
+      phoneRuntime: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json",
+      agentRoute: "npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line \"Codex needs approval to run npm test.\" --json",
+    },
+    artifacts,
+    timeline: {
+      stepCount: timelineRecords.length,
+      approvalSteps: timelineRecords.filter((item) => JSON.stringify(item).includes("approval_required")).length,
+    },
+    runtime: {
+      hardwareAccessRequired: false,
+      connectedState: {
+        schema: connectedState.schema,
+        mode: connectedState.mode,
+        glasses: connectedState.glasses,
+        phone: connectedState.phone,
+        broker: {
+          connected: connectedState.broker.connected,
+          policy: connectedState.broker.policy,
+          activeLeaseId: connectedState.broker.activeLease.id,
+        },
+        surfaceCommandCount: connectedState.surfaceCommands.length,
+        widgetIds: connectedState.widgets.map((widget) => widget.id),
+      },
+      phoneRuntime: {
+        schema: phoneRuntime.schema,
+        mode: phoneRuntime.state.mode,
+        activeLeaseId: phoneRuntime.state.activeLease.id,
+        routingOrder: phoneRuntime.routingOrder,
+      },
+      agentBridge: {
+        schema: agentRoute.schema,
+        eventKind: agentRoute.event.kind,
+        commandKind: agentRoute.command.kind,
+        surface: agentRoute.command.surface,
+        decisionRequired: Boolean(agentRoute.command.decision_required),
+        widgetId: agentRoute.widget.id,
+        phoneDecision: {
+          accepted: agentPhoneDecision.accepted,
+          nextLeaseId: agentPhoneDecision.nextLeaseId,
+          focusedCardId: agentPhoneDecision.state.focusedCardId,
+          focusedWidgetId: agentPhoneDecision.state.focusedWidgetId,
+        },
+      },
+    },
+    checks,
+  };
+}
+
 async function commandAgents(cli: ParsedCli, projectRoot: string, repoRoot: string, logPath: string): Promise<unknown> {
   const options = runtimeOptions(cli, projectRoot, repoRoot, logPath);
   return listAgents(options);
@@ -394,7 +514,7 @@ async function commandIntegrations(cli: ParsedCli, projectRoot: string): Promise
   }
 }
 
-async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<unknown> {
+async function commandAgentBridge(cli: ParsedCli, projectRoot: string, repoRoot: string, logPath: string): Promise<unknown> {
   const view = cli.positionals[0] || "dossier";
   const now = new Date();
   switch (view) {
@@ -408,6 +528,37 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<
         : undefined;
       const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "agent-session");
       return { ok: true, runtimePlan: buildAgentRuntimePlan(now, agentId, sessionId) };
+    }
+    case "launch": {
+      const agentId = normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli"));
+      const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "agent-session");
+      const task = String(cli.options.task || cli.options.line || cli.positionals.slice(3).join(" ") || "Start an agent task and route progress to the glasses.");
+      const timeoutMs = Number(cli.options["timeout-ms"] || 15_000);
+      const launchLogPath = resolve(String(cli.options.log || logPath));
+      const result = runAgentCliLaunch({
+        agentId,
+        sessionId,
+        task,
+        cwd: typeof cli.options.cwd === "string" ? resolve(cli.options.cwd) : repoRoot,
+        now,
+      }, {
+        execute: Boolean(cli.options.execute),
+        commandOverride: typeof cli.options["process-command"] === "string" ? cli.options["process-command"] : undefined,
+        argsOverride: typeof cli.options["process-args-json"] === "string" ? parseStringArray(cli.options["process-args-json"], "--process-args-json") : undefined,
+        env: process.env,
+        timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15_000,
+        transcriptUri: launchLogPath,
+      });
+      await appendJsonl(launchLogPath, { event: "agent-bridge.launch", result });
+      for (const route of result.routes) {
+        await appendJsonl(launchLogPath, {
+          event: "agent-bridge.launch.route",
+          sessionId,
+          agentId,
+          route,
+        });
+      }
+      return { ok: result.ok, launch: { ...result, logPath: launchLogPath } };
     }
     case "transcript":
       return { ok: true, transcript: buildAgentBridgeTranscript(now) };
@@ -427,6 +578,40 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<
       const decision = applySurfaceCommand(initialState, route.command, now);
       return { ok: true, route, initialState, decision };
     }
+    case "session": {
+      const agentId = normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli"));
+      const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "review-session");
+      const line = String(cli.options.line || cli.positionals.slice(3).join(" ") || "Codex needs approval to run npm test.");
+      const handshake = buildAgentBridgeRuntimeHandshake({
+        agentId,
+        sessionId,
+        line,
+        transcriptUri: typeof cli.options["transcript-uri"] === "string" ? cli.options["transcript-uri"] : undefined,
+        choice: agentBridgeChoice(cli),
+        now,
+      });
+      const initialState = createPhoneSurfaceRuntime(now);
+      const phoneRuntime = applySurfaceCommand(initialState, handshake.route.command, now);
+      const frameDir = join(projectRoot, "out", "frames", "agent-bridge", slug(sessionId));
+      const artifact = renderWidgetToFile(handshake.route.widget, join(frameDir, "01-" + slug(handshake.route.event.kind) + ".png"), {
+        assetRoot: join(projectRoot, "fixtures", "images"),
+      });
+      const runtimePath = join(projectRoot, "out", "agent-bridge", slug(sessionId) + "-runtime.json");
+      mkdirSync(dirname(runtimePath), { recursive: true });
+      const payload = {
+        ok: true,
+        sessionId,
+        agentId,
+        handshake,
+        phoneRuntime,
+        artifact,
+        runtimePath,
+        logPath: join(projectRoot, "out", "logs", "agent-bridge.jsonl"),
+      };
+      writeFileSync(runtimePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+      await appendJsonl(payload.logPath, { event: "agent-bridge.session", sessionId, agentId, handshake, phoneRuntime, artifact });
+      return payload;
+    }
     case "widget": {
       const agentId = normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli"));
       const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "review-session");
@@ -442,7 +627,7 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<
     case "dossier":
       return { ok: true, bridge: buildAgentBridgeDossier(now) };
     default:
-      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, runtime-plan, transcript, event, route, widget");
+      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, runtime-plan, launch, transcript, event, route, session, widget");
   }
 }
 
@@ -519,6 +704,11 @@ function buildApprovalDecision(cli: ParsedCli, now: Date): UserDecision {
   };
 }
 
+function agentBridgeChoice(cli: ParsedCli): "approve" | "deny" | "details" {
+  const choice = String(cli.options.choice || "approve").toLowerCase();
+  return choice === "deny" ? "deny" : choice === "details" ? "details" : "approve";
+}
+
 async function commandSponsorWorkflows(cli: ParsedCli, projectRoot: string): Promise<unknown> {
   const view = cli.positionals[0] || "dossier";
   const now = new Date();
@@ -556,7 +746,8 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
       return { ok: true, request: redactSponsorRuntimeRequest(request) };
     }
     case "dispatch": {
-      const result = await dispatchSponsorEvent(sponsorRuntimeInput(cli, now), process.env);
+      const input = sponsorRuntimeInput(cli, now);
+      const result = await dispatchSponsorEvent(input, process.env, fetch, sponsorRuntimeForceReal(cli, input.sponsorId));
       return {
         ...result,
         request: redactSponsorRuntimeRequest(result.request),
@@ -689,16 +880,16 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
   }
 }
 
-function sponsorRuntimeInput(cli: ParsedCli, now: Date) {
+function sponsorRuntimeInput(cli: ParsedCli, now: Date): SponsorEventInput {
   const sponsorId = String(cli.options.sponsor || cli.positionals[1] || "stripe");
   const event = String(cli.options.event || cli.positionals[2] || "payment_intent_requires_action");
   return {
-    sponsorId: sponsorId as Parameters<typeof buildSponsorRuntimeRequest>[0]["sponsorId"],
-    event: event as Parameters<typeof buildSponsorRuntimeRequest>[0]["event"],
+    sponsorId: sponsorId as SponsorEventInput["sponsorId"],
+    event: event as SponsorEventInput["event"],
     sessionId: String(cli.options["session-id"] || cli.positionals[3] || "runtime-check"),
     title: typeof cli.options.title === "string" ? cli.options.title : undefined,
     summary: String(cli.options.summary || cli.options.line || "Runtime sponsor event routed through the broker."),
-    risk: typeof cli.options.risk === "string" ? cli.options.risk as Parameters<typeof buildSponsorRuntimeRequest>[0]["risk"] : undefined,
+    risk: typeof cli.options.risk === "string" ? cli.options.risk as SponsorEventInput["risk"] : undefined,
     amount: typeof cli.options.amount === "string" ? cli.options.amount : undefined,
     target: typeof cli.options.target === "string" ? cli.options.target : undefined,
     code: typeof cli.options.code === "string" ? cli.options.code : undefined,
@@ -708,6 +899,11 @@ function sponsorRuntimeInput(cli: ParsedCli, now: Date) {
 
 function splitList(value: string): string[] {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function sponsorRuntimeForceReal(cli: ParsedCli, sponsorId: SponsorEventInput["sponsorId"]): boolean {
+  const sponsorFlag = "real-" + sponsorId.replace(/_/g, "-");
+  return Boolean(cli.options.real || cli.options["real-sponsor"] || cli.options[sponsorFlag]);
 }
 
 function redactSponsorRuntimeRequest(request: SponsorRuntimeRequest): SponsorRuntimeRequest {
@@ -1552,6 +1748,7 @@ function capabilities(): unknown {
       "measure-latency",
       "demo dinner-booking",
       "demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display",
+      "review-bundle",
       "hud --local-display --text",
       "hud --local-display --mic mac",
       "hud --local-display --mic mac --asr-provider openai-realtime",
@@ -1581,9 +1778,11 @@ function capabilities(): unknown {
       "agent-bridge adapters",
       "agent-bridge launch-specs",
       "agent-bridge runtime-plan",
+      "agent-bridge launch",
       "agent-bridge transcript",
       "agent-bridge event",
       "agent-bridge route",
+      "agent-bridge session",
       "agent-bridge widget",
       "phone-runtime snapshot",
       "phone-runtime lease",
@@ -1797,6 +1996,7 @@ Usage:
   peripheralctl status [--local]
   peripheralctl measure-latency [--local]
   peripheralctl demo dinner-booking [--local] [--json]
+  peripheralctl review-bundle --json
   peripheralctl hud --local-display --text
   peripheralctl hud --local-display --text --hermes-cli
   peripheralctl hud --local-display --mic mac
@@ -1824,9 +2024,11 @@ Usage:
   peripheralctl agent-bridge adapters
   peripheralctl agent-bridge launch-specs
   peripheralctl agent-bridge runtime-plan [--agent codex_cli] [--session-id codex-auth]
+  peripheralctl agent-bridge launch --agent codex_cli --task "Summarize this repo in one sentence" --execute --json
   peripheralctl agent-bridge transcript
   peripheralctl agent-bridge event --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
   peripheralctl agent-bridge route --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
+  peripheralctl agent-bridge session --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
   peripheralctl agent-bridge widget --agent claude_code --line "Claude Code is 40% complete"
   peripheralctl phone-runtime snapshot
   peripheralctl phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test"
@@ -1876,12 +2078,16 @@ Global options:
   --event <name>          For sponsor-runtime: sponsor event name to normalize or dispatch.
   --session-id <id>       Stable session id for the normalized event.
   --line <text>           Bounded CLI transcript, input line, or fallback sponsor summary to normalize.
+  --execute               For agent-bridge launch: start the local CLI process instead of returning the phone-gateway route.
+  --process-command <bin> For agent-bridge launch: run a specific executable while preserving agent routing.
+  --process-args-json <a> For agent-bridge launch: JSON string array of process args.
+  --timeout-ms <ms>       For agent-bridge launch: process timeout, default 15000.
   --summary <text>        For sponsor-runtime: event summary sent through the broker payload.
   --hold-amount <amount>  For sponsor-runtime stripe-hold: card-hold amount, e.g. 25.00 or cents.
   --currency <code>       For sponsor-runtime stripe-hold: currency code, default usd.
   --customer <id>         For sponsor-runtime stripe-hold: optional Stripe customer id.
   --payment-method <id>   For sponsor-runtime stripe-hold: optional Stripe payment method id.
-  --task <text>           For sponsor-runtime browser-task: Browser Use Cloud task prompt.
+  --task <text>           For agent-bridge launch or sponsor-runtime browser-task.
   --start-url <url>       For sponsor-runtime browser-task: initial URL context.
   --browser-model <id>    For sponsor-runtime browser-task: Browser Use model, default gemini-3-flash.
   --profile-id <id>       For sponsor-runtime browser-task: Browser Use profile id.
@@ -2008,6 +2214,19 @@ function parseMoneyCents(value: unknown, name: string): number {
   return text.includes(".") ? Math.round(amount * 100) : Math.round(amount);
 }
 
+function parseStringArray(value: unknown, name: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(value ?? ""));
+  } catch {
+    throw new Error(name + " must be a JSON array of strings.");
+  }
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
+    throw new Error(name + " must be a JSON array of strings.");
+  }
+  return parsed;
+}
+
 function formatMoneyCents(amountCents: number, currency: string): string {
   const amount = (amountCents / 100).toFixed(2);
   return currency.toUpperCase() + " " + amount;
@@ -2019,6 +2238,29 @@ function delay(ms: number): Promise<void> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function readJsonIfPresent(path: string): unknown | null {
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function artifactMeta(path: string, kind: "json" | "jsonl" | "mp4"): Record<string, unknown> {
+  if (!existsSync(path)) {
+    return { kind, path, exists: false };
+  }
+  const bytes = readFileSync(path);
+  return {
+    kind,
+    path,
+    exists: true,
+    bytes: bytes.length,
+    sha256: sha256(bytes),
+  };
 }
 
 function sha256(value: string | Buffer): string {

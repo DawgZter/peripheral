@@ -18,7 +18,7 @@ import {
   assertWidget,
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
-import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeTranscript, buildAgentLaunchSpecs, buildAgentRuntimePlan, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
+import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeLaunchCommand, buildAgentBridgeRuntimeHandshake, buildAgentBridgeTranscript, buildAgentLaunchSpecs, buildAgentRuntimePlan, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, runAgentCliLaunch, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
 import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralHardwareProfile, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
@@ -98,7 +98,7 @@ assert.equal(connectedState.phone.ownsBle, true);
 assert.equal(connectedState.broker.activeLease.owner, "broker");
 assert.ok(connectedState.surfaceCommands.some((command) => command.kind === "enter_agent_mode"));
 const runtimeProfileState = buildConnectedGlassesState(new Date("2026-05-17T00:00:00Z"));
-assert.equal(runtimeProfileState.glasses.connected, true);
+assert.equal(runtimeProfileState.glasses.connected, false);
 assert.equal(runtimeProfileState.glasses.batteryPercent, undefined);
 assert.equal(runtimeProfileState.glasses.rssi, undefined);
 assert.equal(runtimeProfileState.glasses.telemetry.source, "phone_gateway_runtime");
@@ -113,15 +113,15 @@ assert.equal(hardwareProfile.battery.expectedHours, "12-24");
 assert.ok(hardwareProfile.runtimeBoundaries.some((item) => item.includes("semantic UI")));
 const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
 assert.equal(emptySupport.totals.integrations, 13);
-assert.equal(emptySupport.totals.configured, 13);
-assert.equal(emptySupport.totals.connected, 13);
+assert.equal(emptySupport.totals.configured, 0);
+assert.equal(emptySupport.totals.connected, 0);
 assert.equal(emptySupport.totals.supported, 13);
 assert.equal(emptySupport.totals.liveReady, 13);
 assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
 const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
 assert.equal(support.totals.integrations, 13);
-assert.equal(support.totals.configured, 13);
-assert.equal(support.totals.connected, 13);
+assert.equal(support.totals.configured, 1);
+assert.equal(support.totals.connected, 1);
 assert.equal(support.totals.supported, 13);
 assert.equal(support.totals.liveReady, 13);
 assert.equal(support.totals.operations > 30, true);
@@ -189,6 +189,93 @@ assert.equal(bridgeRoute.event.kind, "session_progress");
 assert.equal(bridgeRoute.command.kind, "show_widget");
 assert.equal(bridgeRoute.command.surface, "glance");
 assert.equal(bridgeRoute.command.widget?.id, bridgeRoute.widget.id);
+const bridgeHandshake = buildAgentBridgeRuntimeHandshake({
+  agentId: "codex_cli",
+  sessionId: "codex-check",
+  line: "Codex needs approval to run npm test.",
+  choice: "approve",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(bridgeHandshake.schema, "peripheral-agent-bridge-runtime-handshake-v1");
+assert.equal(bridgeHandshake.phoneGateway.surfaceOwner, "phone_runtime");
+assert.equal(bridgeHandshake.route.command.kind, "show_card");
+assert.equal(bridgeHandshake.approval?.decision.event_id, bridgeHandshake.route.event.id);
+assert.equal(bridgeHandshake.approval?.returnPath.transport, "tmux_send_keys");
+assert.equal(bridgeHandshake.approval?.returnPath.tmuxCommand?.[0], "tmux");
+const agentLaunch = runAgentCliLaunch({
+  agentId: "codex_cli",
+  sessionId: "codex-launch",
+  task: "Run the repo checks.",
+  cwd: root,
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(agentLaunch.mode, "phone_gateway");
+assert.equal(agentLaunch.runtimePlan.command, "codex");
+assert.equal(agentLaunch.events[0]?.kind, "session_started");
+assert.equal(agentLaunch.commands[0]?.surface, "glance");
+const launchCommand = buildAgentBridgeLaunchCommand({
+  agentId: "codex_cli",
+  sessionId: "codex-check",
+  cwd: root,
+  prompt: "Summarize this repo in one sentence.",
+  transcriptUri: "peripheral://agent-bridge/codex-check/transcript",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(launchCommand.command, "codex");
+assert.equal(launchCommand.cwd, root);
+assert.equal(launchCommand.args.includes("Summarize this repo in one sentence."), true);
+assert.equal(launchCommand.routeCommand.includes("agent-bridge"), true);
+const agentProcessLaunch = runAgentCliLaunch({
+  agentId: "codex_cli",
+  sessionId: "codex-process",
+  task: "Run the repo checks.",
+  cwd: root,
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  execute: true,
+  commandOverride: process.execPath,
+  argsOverride: ["-e", "console.log('Codex needs approval to run npm test'); console.log('Codex completed checks')"],
+  timeoutMs: 5_000,
+});
+assert.equal(agentProcessLaunch.mode, "process");
+assert.equal(agentProcessLaunch.ok, true);
+assert.equal(agentProcessLaunch.process.status, 0);
+assert.equal(agentProcessLaunch.events.some((event) => event.kind === "approval_required"), true);
+assert.equal(agentProcessLaunch.commands.some((command) => command.decision_required), true);
+const agentLaunchLogDir = mkdtempSync(join(tmpdir(), "peripheral-agent-launch-"));
+const agentLaunchLog = join(agentLaunchLogDir, "launch.jsonl");
+const agentLaunchRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "agent-bridge",
+  "launch",
+  "--agent",
+  "codex_cli",
+  "--session-id",
+  "codex-process",
+  "--task",
+  "Run the repo checks.",
+  "--execute",
+  "--process-command",
+  process.execPath,
+  "--process-args-json",
+  JSON.stringify(["-e", "console.log('Codex needs approval to run npm test')"]),
+  "--log",
+  agentLaunchLog,
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(agentLaunchRun.status, 0, agentLaunchRun.stderr);
+const agentLaunchResult = JSON.parse(agentLaunchRun.stdout.slice(agentLaunchRun.stdout.indexOf("{"))) as { launch: { mode: string; logPath: string; events: Array<{ kind: string; references?: Array<{ uri?: string }> }>; commands: Array<{ decision_required?: boolean }> } };
+assert.equal(agentLaunchResult.launch.mode, "process");
+assert.equal(agentLaunchResult.launch.events.some((event) => event.kind === "approval_required"), true);
+assert.equal(agentLaunchResult.launch.commands.some((command) => command.decision_required === true), true);
+assert.equal(agentLaunchResult.launch.logPath, agentLaunchLog);
+assert.equal(agentLaunchResult.launch.events[0]?.references?.[0]?.uri, agentLaunchLog);
+assert.match(readFileSync(agentLaunchLog, "utf8"), /agent-bridge\.launch\.route/);
+rmSync(agentLaunchLogDir, { recursive: true, force: true });
 assert.equal(buildAgentBridgeTranscript(new Date("2026-05-17T00:00:00Z")).events.length, 6);
 assert.equal((buildAgentBridgeDossier(new Date("2026-05-17T00:00:00Z")).routing as string[])[0].includes("Focused approval"), true);
 for (const item of [
@@ -616,6 +703,70 @@ assert.ok(existsSync(join(dinnerDemoResult.frameDir, "01-user-request.png")));
 assert.ok(existsSync(join(dinnerDemoResult.frameDir, "04-approval-required.png")));
 assert.match(readFileSync(dinnerDemoResult.timelinePath, "utf8"), /WAITING_FOR_APPROVAL/);
 assert.ok(existsSync(dinnerDemoResult.logPath));
+const reviewBundleRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "review-bundle",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(reviewBundleRun.status, 0, reviewBundleRun.stderr);
+const reviewBundle = JSON.parse(reviewBundleRun.stdout.slice(reviewBundleRun.stdout.indexOf("{"))) as {
+  ok: boolean;
+  schema: string;
+  artifacts: { frameCount: number; video: { exists: boolean; sha256?: string } };
+  experience: { primarySurface: string; browserPreviewSurface: boolean };
+  commands: { connectedState: string; phoneRuntime: string; agentRoute: string };
+  timeline: { stepCount: number; approvalSteps: number };
+  runtime: {
+    hardwareAccessRequired: boolean;
+    connectedState: {
+      schema: string;
+      glasses: { transport: string; display: string };
+      phone: { ownsBle: boolean };
+      surfaceCommandCount: number;
+    };
+    phoneRuntime: { schema: string; activeLeaseId: string; routingOrder: string[] };
+    agentBridge: {
+      schema: string;
+      eventKind: string;
+      commandKind: string;
+      surface: string;
+      decisionRequired: boolean;
+      phoneDecision: { accepted: boolean; focusedCardId: string | null };
+    };
+  };
+};
+assert.equal(reviewBundle.ok, true);
+assert.equal(reviewBundle.schema, "peripheral-review-bundle-v1");
+assert.equal(reviewBundle.experience.primarySurface, "Peripheral glasses");
+assert.equal(reviewBundle.experience.browserPreviewSurface, false);
+assert.match(reviewBundle.commands.connectedState, /connected-state/);
+assert.match(reviewBundle.commands.phoneRuntime, /phone-runtime snapshot/);
+assert.match(reviewBundle.commands.agentRoute, /agent-bridge route/);
+assert.equal(reviewBundle.timeline.stepCount, dinnerDemoResult.steps);
+assert.equal(reviewBundle.timeline.approvalSteps >= 1, true);
+assert.equal(reviewBundle.runtime.hardwareAccessRequired, false);
+assert.equal(reviewBundle.runtime.connectedState.schema, "peripheral-connected-state-v1");
+assert.equal(reviewBundle.runtime.connectedState.glasses.transport, "peripheral_phone_gateway");
+assert.equal(reviewBundle.runtime.connectedState.glasses.display, "540x280_2bpp");
+assert.equal(reviewBundle.runtime.connectedState.phone.ownsBle, true);
+assert.equal(reviewBundle.runtime.connectedState.surfaceCommandCount >= 3, true);
+assert.equal(reviewBundle.runtime.phoneRuntime.schema, "peripheral-phone-runtime-snapshot-v1");
+assert.equal(reviewBundle.runtime.phoneRuntime.activeLeaseId, "lease-current-stage");
+assert.deepEqual(reviewBundle.runtime.phoneRuntime.routingOrder, ["focused_card", "focused_widget", "named_agent", "mode_manager", "broker"]);
+assert.equal(reviewBundle.runtime.agentBridge.schema, "peripheral-agent-bridge-surface-route-v1");
+assert.equal(reviewBundle.runtime.agentBridge.eventKind, "approval_required");
+assert.equal(reviewBundle.runtime.agentBridge.commandKind, "show_card");
+assert.equal(reviewBundle.runtime.agentBridge.surface, "fullscreen");
+assert.equal(reviewBundle.runtime.agentBridge.decisionRequired, true);
+assert.equal(reviewBundle.runtime.agentBridge.phoneDecision.accepted, true);
+assert.ok(reviewBundle.runtime.agentBridge.phoneDecision.focusedCardId);
+assert.equal(reviewBundle.artifacts.frameCount >= 5, true);
+assert.equal(reviewBundle.artifacts.video.exists, true);
+assert.equal(typeof reviewBundle.artifacts.video.sha256, "string");
 const dinnerDecisionRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "phone-runtime",

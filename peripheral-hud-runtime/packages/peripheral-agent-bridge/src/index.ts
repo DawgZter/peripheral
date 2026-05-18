@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   assertWidget,
   cleanText,
@@ -11,6 +12,7 @@ import {
   type PeripheralWidget,
   type SurfaceCommand,
   type SurfaceKind,
+  type UserDecision,
 } from "../../peripheral-protocol/src/index.js";
 import { AGENT_CLI_IDS, agentCliIntegrations, sourceFor, type AgentCliId } from "../../peripheral-integrations/src/index.js";
 
@@ -69,6 +71,36 @@ export type AgentLaunchSpec = {
   surfacePolicy: "phone_owned_surface_policy";
 };
 
+export type AgentBridgeLaunchCommand = {
+  schema: "peripheral-agent-cli-launch-v1";
+  generatedAt: string;
+  id: AgentCliId;
+  name: string;
+  sessionId: string;
+  sessionName: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  envNames: string[];
+  sessionModel: AgentLaunchSpec["sessionModel"];
+  transcriptUri?: string;
+  stdout: "line_stream_to_agent_event";
+  stderr: "line_stream_to_agent_event";
+  routeCommand: string[];
+  prompt?: string;
+};
+
+export type AgentBridgeLaunchCommandInput = {
+  agentId: AgentCliId;
+  sessionId: string;
+  cwd: string;
+  prompt?: string;
+  commandOverride?: string;
+  argsOverride?: string[];
+  transcriptUri?: string;
+  now?: Date;
+};
+
 export type AgentRuntimePlan = {
   schema: "peripheral-agent-runtime-plan-v1";
   generatedAt: string;
@@ -80,6 +112,43 @@ export type AgentRuntimePlan = {
   };
   agents: AgentRuntimeAdapterPlan[];
   guarantees: string[];
+};
+
+export type AgentBridgeApprovalChoice = "approve" | "deny" | "details";
+
+export type AgentBridgeApprovalReturn = {
+  eventId: string;
+  sessionId: string;
+  choice: AgentBridgeApprovalChoice;
+  transport: AgentRuntimeAdapterPlan["approvals"]["transport"];
+  targetSession: string;
+  stdinLine: string;
+  tmuxCommand?: string[];
+  adapterPayload: Record<string, JsonValue>;
+};
+
+export type AgentBridgeRuntimeHandshake = {
+  schema: "peripheral-agent-bridge-runtime-handshake-v1";
+  generatedAt: string;
+  transcript: {
+    source: "stdout" | "stderr";
+    sequence: number;
+    line: string;
+    transcriptUri?: string;
+  };
+  plan: AgentRuntimePlan;
+  route: AgentBridgeSurfaceRoute;
+  phoneGateway: {
+    surfaceOwner: "phone_runtime";
+    displayPolicy: "lease_arbiter_required";
+    focusedInput: "focused_card_then_named_agent_then_mode_then_broker";
+    commandKind: SurfaceCommand["kind"];
+    surface: SurfaceKind;
+  };
+  approval?: {
+    decision: UserDecision;
+    returnPath: AgentBridgeApprovalReturn;
+  };
 };
 
 export type AgentRuntimeAdapterPlan = {
@@ -120,6 +189,53 @@ export type AgentRuntimeAdapterPlan = {
     approve: string[];
     deny: string[];
   };
+};
+
+export type AgentCliLaunchInput = {
+  agentId: AgentCliId;
+  sessionId: string;
+  task: string;
+  cwd?: string;
+  now?: Date;
+};
+
+export type AgentCliLaunchOptions = {
+  execute?: boolean;
+  commandOverride?: string;
+  argsOverride?: string[];
+  env?: Record<string, string | undefined>;
+  timeoutMs?: number;
+  maxLines?: number;
+  transcriptUri?: string;
+};
+
+export type AgentCliLaunchResult = {
+  schema: "peripheral-agent-cli-launch-v1";
+  ok: boolean;
+  mode: "phone_gateway" | "process";
+  generatedAt: string;
+  agent: {
+    id: AgentCliId;
+    name: string;
+    sessionId: string;
+  };
+  process: {
+    command: string;
+    args: string[];
+    cwd: string;
+    executablePath: string | null;
+    timeoutMs: number;
+    status?: number | null;
+    signal?: NodeJS.Signals | null;
+    stdoutLines: string[];
+    stderrLines: string[];
+    error?: string;
+  };
+  runtimePlan: AgentRuntimeAdapterPlan;
+  routes: AgentBridgeSurfaceRoute[];
+  events: AgentEvent[];
+  widgets: PeripheralWidget[];
+  commands: SurfaceCommand[];
 };
 
 export function isAgentCliId(value: string): value is AgentCliId {
@@ -174,6 +290,33 @@ export function buildAgentLaunchSpecs(): AgentLaunchSpec[] {
   }));
 }
 
+export function buildAgentBridgeLaunchCommand(input: AgentBridgeLaunchCommandInput): AgentBridgeLaunchCommand {
+  const now = input.now || new Date();
+  const agent = agentCliIntegrations.find((item) => item.id === input.agentId);
+  if (!agent) throw new Error("Unknown agent CLI adapter: " + input.agentId);
+  const baseArgs = input.argsOverride ? [...input.argsOverride] : launchArgsForAgent(agent.id);
+  const prompt = cleanText(input.prompt || "", 1200);
+  const args = prompt ? [...baseArgs, prompt] : baseArgs;
+  return {
+    schema: "peripheral-agent-cli-launch-v1",
+    generatedAt: now.toISOString(),
+    id: agent.id,
+    name: agent.name,
+    sessionId: input.sessionId,
+    sessionName: sessionNameForAgent(agent.id, input.sessionId),
+    command: input.commandOverride || agent.command,
+    args,
+    cwd: input.cwd,
+    envNames: agent.env,
+    sessionModel: agent.sessionModel,
+    transcriptUri: input.transcriptUri,
+    stdout: "line_stream_to_agent_event",
+    stderr: "line_stream_to_agent_event",
+    routeCommand: ["peripheralctl", "agent-bridge", "route", "--agent", agent.id, "--session-id", input.sessionId, "--line", "<stdout line>"],
+    prompt: prompt || undefined,
+  };
+}
+
 export function buildAgentRuntimePlan(now = new Date(), agentId?: AgentCliId, sessionId = "agent-session"): AgentRuntimePlan {
   const agents = agentCliIntegrations
     .filter((agent) => !agentId || agent.id === agentId)
@@ -195,6 +338,174 @@ export function buildAgentRuntimePlan(now = new Date(), agentId?: AgentCliId, se
       "Terminal fallback is bounded; semantic widgets remain the default glasses surface.",
     ],
   };
+}
+
+export function buildAgentBridgeRuntimeHandshake(input: AgentBridgeLine & { choice?: AgentBridgeApprovalChoice; stream?: "stdout" | "stderr" }): AgentBridgeRuntimeHandshake {
+  const now = input.now || new Date();
+  const agentId = normalizeAgentCliId(input.agentId);
+  const line = cleanText(input.line, 220);
+  const sequence = input.sequence ?? 1;
+  const plan = buildAgentRuntimePlan(now, agentId, input.sessionId);
+  const adapterPlan = plan.agents[0];
+  if (!adapterPlan) throw new Error("No runtime adapter plan for " + agentId);
+  const route = routeAgentBridgeLine({
+    agentId,
+    sessionId: input.sessionId,
+    sequence,
+    line,
+    transcriptUri: input.transcriptUri,
+    now,
+  });
+  const decision = route.event.kind === "approval_required"
+    ? buildAgentBridgeApprovalDecision(route.event, input.choice || "approve", now)
+    : undefined;
+  return {
+    schema: "peripheral-agent-bridge-runtime-handshake-v1",
+    generatedAt: now.toISOString(),
+    transcript: {
+      source: input.stream || "stdout",
+      sequence,
+      line,
+      transcriptUri: input.transcriptUri,
+    },
+    plan,
+    route,
+    phoneGateway: {
+      surfaceOwner: "phone_runtime",
+      displayPolicy: "lease_arbiter_required",
+      focusedInput: "focused_card_then_named_agent_then_mode_then_broker",
+      commandKind: route.command.kind,
+      surface: route.command.surface,
+    },
+    approval: decision
+      ? {
+          decision,
+          returnPath: buildAgentBridgeApprovalReturn(adapterPlan, route.event, decision),
+        }
+      : undefined,
+  };
+}
+
+export function buildAgentBridgeApprovalDecision(event: AgentEvent, choice: AgentBridgeApprovalChoice = "approve", now = new Date()): UserDecision {
+  return {
+    kind: "approval_decision",
+    event_id: event.id,
+    session_id: event.session_id,
+    decision: choice,
+    choice_id: choice,
+    confirmation_level: confirmationLevelForRisk(event.risk),
+    reason: "Wearer decision captured by the phone runtime focused card.",
+    source: {
+      id: "phone-runtime",
+      label: "Phone Runtime",
+      kind: "system",
+      vendor: "Peripheral",
+      trust: "local",
+      session_id: event.session_id,
+    },
+    metadata: {
+      focused_card_id: event.widget?.id || "",
+      source_agent: event.source.id,
+      return_route: "approval_router_to_process",
+    },
+    timestamp: now.toISOString(),
+  };
+}
+
+export function buildAgentBridgeApprovalReturn(plan: AgentRuntimeAdapterPlan, event: AgentEvent, decision: UserDecision): AgentBridgeApprovalReturn {
+  const choice = decision.decision === "deny" ? "deny" : decision.decision === "details" ? "details" : "approve";
+  const stdinLine = choice + "\n";
+  const payload: Record<string, JsonValue> = {
+    event_id: event.id,
+    session_id: event.session_id,
+    decision: choice,
+    confirmation_level: decision.confirmation_level,
+    agent_id: plan.id,
+  };
+  return {
+    eventId: event.id,
+    sessionId: event.session_id,
+    choice,
+    transport: plan.approvals.transport,
+    targetSession: plan.session.id,
+    stdinLine,
+    tmuxCommand: plan.approvals.transport === "tmux_send_keys"
+      ? ["tmux", "send-keys", "-t", plan.session.id, choice, "Enter"]
+      : undefined,
+    adapterPayload: payload,
+  };
+}
+
+export function runAgentCliLaunch(input: AgentCliLaunchInput, options: AgentCliLaunchOptions = {}): AgentCliLaunchResult {
+  const now = input.now || new Date();
+  const agent = agentCliIntegrations.find((item) => item.id === input.agentId);
+  if (!agent) throw new Error("Unknown agent CLI adapter: " + input.agentId);
+  const command = options.commandOverride || agent.command;
+  const args = options.argsOverride || processArgsForAgent(agent.id, input.task);
+  const cwd = input.cwd || process.cwd();
+  const timeoutMs = options.timeoutMs || 15_000;
+  const executablePath = resolveExecutablePath(command);
+  const base = {
+    schema: "peripheral-agent-cli-launch-v1" as const,
+    generatedAt: now.toISOString(),
+    agent: {
+      id: agent.id,
+      name: agent.name,
+      sessionId: input.sessionId,
+    },
+    process: {
+      command,
+      args,
+      cwd,
+      executablePath,
+      timeoutMs,
+      stdoutLines: [] as string[],
+      stderrLines: [] as string[],
+    },
+    runtimePlan: runtimePlanForAgent(agent, input.sessionId),
+  };
+
+  if (!options.execute) {
+    const line = agent.name + " session started for " + cleanText(input.task || "agent task", 120) + ".";
+    return finishAgentCliLaunch(base, "phone_gateway", true, [line], now, options.transcriptUri);
+  }
+
+  if (!executablePath) {
+    const line = agent.name + " cannot start because command " + command + " was not found.";
+    return finishAgentCliLaunch({
+      ...base,
+      process: {
+        ...base.process,
+        error: "command_not_found",
+      },
+    }, "process", false, [line], now, options.transcriptUri);
+  }
+
+  const spawned = spawnSync(command, args, {
+    cwd,
+    env: mergeProcessEnv(options.env),
+    encoding: "utf8",
+    timeout: timeoutMs,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  const stdoutLines = splitProcessLines(spawned.stdout);
+  const stderrLines = splitProcessLines(spawned.stderr);
+  const lines = [...stdoutLines, ...stderrLines].slice(0, options.maxLines || 30);
+  const ok = !spawned.error && spawned.status === 0;
+  const fallbackLine = ok
+    ? agent.name + " completed process with status 0."
+    : agent.name + " reported an error while running the agent command.";
+  return finishAgentCliLaunch({
+    ...base,
+    process: {
+      ...base.process,
+      status: spawned.status,
+      signal: spawned.signal,
+      stdoutLines,
+      stderrLines,
+      error: spawned.error ? spawned.error.message : undefined,
+    },
+  }, "process", ok, lines.length > 0 ? lines : [fallbackLine], now, options.transcriptUri);
 }
 
 export function normalizeAgentCliLine(input: AgentBridgeLine): AgentEvent {
@@ -431,6 +742,7 @@ export function buildAgentBridgeDossier(now = new Date()): Record<string, unknow
       "Adapters observe CLI text and emit AgentEvent objects.",
       "No adapter can push raw BLE, raw pixels, or hardware writes.",
       "Terminal fallback is bounded and semantic widgets are preferred.",
+      "Launch commands run as local CLI processes and still route through phone-owned surface policy.",
     ],
   };
 }
@@ -475,6 +787,12 @@ function runtimePlanForAgent(agent: (typeof agentCliIntegrations)[number], sessi
   };
 }
 
+function processArgsForAgent(id: AgentCliId, task: string): string[] {
+  const args = launchArgsForAgent(id);
+  const cleanTask = cleanText(task, 500);
+  return cleanTask ? [...args, cleanTask] : args;
+}
+
 function launchArgsForAgent(id: AgentCliId): string[] {
   switch (id) {
     case "codex_cli":
@@ -490,6 +808,65 @@ function launchArgsForAgent(id: AgentCliId): string[] {
     case "pi":
       return ["chat"];
   }
+}
+
+function finishAgentCliLaunch(
+  base: Omit<AgentCliLaunchResult, "ok" | "mode" | "routes" | "events" | "widgets" | "commands">,
+  mode: AgentCliLaunchResult["mode"],
+  ok: boolean,
+  lines: string[],
+  now: Date,
+  transcriptUri?: string,
+): AgentCliLaunchResult {
+  const routes = lines.map((line, index) => routeAgentBridgeLine({
+    agentId: base.agent.id,
+    sessionId: base.agent.sessionId,
+    line,
+    sequence: index + 1,
+    transcriptUri: transcriptUri || "peripheral://agent-bridge/" + base.agent.sessionId + "/transcript",
+    now,
+  }));
+  return {
+    ...base,
+    ok,
+    mode,
+    routes,
+    events: routes.map((route) => route.event),
+    widgets: routes.map((route) => route.widget),
+    commands: routes.map((route) => route.command),
+  };
+}
+
+function resolveExecutablePath(command: string): string | null {
+  const result = spawnSync("sh", ["-lc", "command -v " + shellQuote(command)], {
+    encoding: "utf8",
+    timeout: 2_000,
+  });
+  if (result.status !== 0) return null;
+  return cleanText(String(result.stdout || "").trim().split(/\r?\n/)[0] || "", 500) || null;
+}
+
+function mergeProcessEnv(env: Record<string, string | undefined> | undefined): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = { ...process.env };
+  for (const [key, value] of Object.entries(env || {})) {
+    if (value === undefined) {
+      delete merged[key];
+    } else {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+function splitProcessLines(value: string | Buffer | undefined): string[] {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => cleanText(line, 220))
+    .filter(Boolean);
+}
+
+function shellQuote(value: string): string {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
 }
 
 function approvalReturnPath(sessionModel: AgentLaunchSpec["sessionModel"]): AgentRuntimeAdapterPlan["approvals"] {
