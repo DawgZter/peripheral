@@ -320,6 +320,43 @@ try {
   rmSync(voiceAliasProjectRoot, { recursive: true, force: true });
 }
 
+const fakeOpenOnlySttScript = [
+  "setTimeout(() => console.log('Open'), 10)",
+  "setTimeout(() => console.log('close Hermes'), 1500)",
+].join(";");
+const fakeOpenOnlySttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeOpenOnlySttScript);
+const voiceOpenOnlyProjectRoot = makeTempProjectRoot("voice-open-only");
+try {
+  const voiceOpenOnlyRun = spawnSync(process.execPath, [
+    "dist/apps/peripheralctl/src/index.js",
+    "hud",
+    "--mock-display",
+    "--mic",
+    "mac",
+    "--mock-hermes",
+    "--stt-cmd",
+    fakeOpenOnlySttCommand,
+    "--json",
+    "--cadence-ms",
+    "700",
+    ...projectRootArgs(voiceOpenOnlyProjectRoot),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  assert.equal(voiceOpenOnlyRun.status, 0, voiceOpenOnlyRun.stderr);
+  const voiceOpenOnlyResult = JSON.parse(voiceOpenOnlyRun.stdout.slice(voiceOpenOnlyRun.stdout.indexOf("{"))) as { state: string; logPath: string };
+  assert.equal(voiceOpenOnlyResult.state, "blank");
+  const voiceOpenOnlyLog = readFileSync(voiceOpenOnlyResult.logPath, "utf8");
+  assert.match(voiceOpenOnlyLog, /"event":"input.voice_command.pending","command":"open"/);
+  assert.match(voiceOpenOnlyLog, /"event":"input.voice_command.pending_timeout","command":"open","fallback":"open"/);
+  assert.match(voiceOpenOnlyLog, /"state":"terminal"/);
+  assert.match(voiceOpenOnlyLog, /"event":"hermes_cli.close","reason":"input.dismiss"/);
+} finally {
+  rmSync(voiceOpenOnlyProjectRoot, { recursive: true, force: true });
+}
+
 const openAiAsrSelfTest = spawnSync(process.execPath, [
   "tools/openai-realtime-asr.mjs",
   "--self-test",

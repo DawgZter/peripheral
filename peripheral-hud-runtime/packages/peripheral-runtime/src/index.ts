@@ -331,6 +331,7 @@ class HudRuntime {
   private voiceDraftLineIndex: number | null = null;
   private lastVoiceDraftPiece = "";
   private pendingVoiceControlPrefix: string | null = null;
+  private pendingVoiceControlTimer: NodeJS.Timeout | null = null;
   private voicePromptArmed = false;
 
   constructor(
@@ -343,6 +344,35 @@ class HudRuntime {
 
   async log(event: Record<string, unknown>): Promise<void> {
     await appendJsonl(this.logPath, event);
+  }
+
+  private armPendingVoiceControl(command: string, fallback: "open" | "close" | null): void {
+    this.clearPendingVoiceControl();
+    this.pendingVoiceControlPrefix = command;
+    if (!fallback) return;
+    this.pendingVoiceControlTimer = setTimeout(() => {
+      this.pendingVoiceControlTimer = null;
+      if (this.pendingVoiceControlPrefix !== command) return;
+      this.pendingVoiceControlPrefix = null;
+      void this.runPendingVoiceControlFallback(command, fallback);
+    }, 1100);
+  }
+
+  private clearPendingVoiceControl(): void {
+    this.pendingVoiceControlPrefix = null;
+    if (this.pendingVoiceControlTimer) {
+      clearTimeout(this.pendingVoiceControlTimer);
+      this.pendingVoiceControlTimer = null;
+    }
+  }
+
+  private async runPendingVoiceControlFallback(command: string, fallback: "open" | "close"): Promise<void> {
+    await this.log({ event: "input.voice_command.pending_timeout", command, fallback });
+    if (fallback === "open") {
+      if (!this.hermesCli) await this.openHermesCli("input.voice_command.pending_timeout");
+      return;
+    }
+    if (this.hermesCli) await this.closeHermesCli("input.dismiss", true);
   }
 
   async resetAgents(): Promise<void> {
@@ -377,17 +407,17 @@ class HudRuntime {
     if (source === "voice") {
       const pendingCommand = consumeSplitHermesControlCommand(this.pendingVoiceControlPrefix, voiceCommand);
       if (pendingCommand === "open") {
-        this.pendingVoiceControlPrefix = null;
+        this.clearPendingVoiceControl();
         await this.log({ event: "input.voice_command.alias", text, command: voiceCommand });
         await this.openHermesCli("input.voice_command");
         return true;
       }
       if (isHermesOpenPrefix(voiceCommand)) {
-        this.pendingVoiceControlPrefix = voiceCommand;
+        this.armPendingVoiceControl(voiceCommand, voiceCommand === "open" ? "open" : null);
         await this.log({ event: "input.voice_command.pending", command: voiceCommand });
         return true;
       }
-      this.pendingVoiceControlPrefix = null;
+      if (!this.pendingVoiceControlTimer) this.clearPendingVoiceControl();
     }
 
     if (["look_up", "lookup", "look up", "show agents"].includes(voiceCommand)) {
@@ -466,7 +496,7 @@ class HudRuntime {
     this.voiceDraft = "";
     this.voiceDraftLineIndex = null;
     this.lastVoiceDraftPiece = "";
-    this.pendingVoiceControlPrefix = null;
+    this.clearPendingVoiceControl();
     this.voicePromptArmed = false;
     this.pushTerminalLine("$ hermes chat");
     this.pushTerminalLine(mode === "real" ? "HUD: launching native Hermes CLI." : "HUD: mock Hermes CLI view.");
@@ -700,6 +730,7 @@ class HudRuntime {
   }
 
   shutdown(): void {
+    this.clearPendingVoiceControl();
     this.stopHermesCliProcess("runtime.shutdown");
   }
 
@@ -729,16 +760,16 @@ class HudRuntime {
     const command = normalizeHermesVoiceCommandAlias(lower || normalizeVoiceControlCommand(text));
     const pendingCommand = consumeSplitHermesControlCommand(this.pendingVoiceControlPrefix, command);
     if (pendingCommand === "close") {
-      this.pendingVoiceControlPrefix = null;
+      this.clearPendingVoiceControl();
       await this.closeHermesCli("input.dismiss", true);
       return true;
     }
     if (isHermesClosePrefix(command)) {
-      this.pendingVoiceControlPrefix = command;
+      this.armPendingVoiceControl(command, command === "close" ? "close" : null);
       await this.log({ event: "input.voice_command.pending", command });
       return true;
     }
-    this.pendingVoiceControlPrefix = null;
+    if (!this.pendingVoiceControlTimer) this.clearPendingVoiceControl();
 
     if (command === "exit" || command === "quit") {
       await this.closeHermesCli("input.exit", true);
@@ -1073,7 +1104,7 @@ class HudRuntime {
     this.voiceDraft = "";
     this.voiceDraftLineIndex = null;
     this.lastVoiceDraftPiece = "";
-    this.pendingVoiceControlPrefix = null;
+    this.clearPendingVoiceControl();
     this.voicePromptArmed = false;
     if (this.terminalRenderTimer) {
       clearTimeout(this.terminalRenderTimer);
