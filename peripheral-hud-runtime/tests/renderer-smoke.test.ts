@@ -389,7 +389,7 @@ try {
   assert.match(asrReplayLog, /"event":"asr.voice_command.send"/);
   assert.match(asrReplayLog, /"event":"hermes_cli.input"/);
   assert.doesNotMatch(asrReplayLog, /"event":"hermes_cli.input","mode":"local","text":"send"/);
-  assert.match(asrReplayLog, /"event":"hermes_cli.review_response"/);
+  assert.match(asrReplayLog, /"event":"hermes_cli.local_response"/);
   assert.match(asrReplayLog, /asr_replay.awaiting_transcript/);
   assert.match(asrReplayLog, /"event":"asr_replay.complete"/);
 } finally {

@@ -35,6 +35,13 @@ const directSpecs = [
   ["recovered", "_types"],
   ["source", "_reference"],
   ["source", "-", "reference"],
+  ["hackathon", "-", "de", "mo"],
+  ["web/", "hackathon"],
+  ["Agent", " Mode", " De", "mo"],
+  ["simul", "ation"],
+  ["simul", "ated"],
+  ["fixture", "-", "only"],
+  ["contract", "-", "only"],
 ];
 
 const wordSpecs = [["tu", "ring"]];
