@@ -7,21 +7,45 @@
     "real": true
   },
   {
-    "name": "Codex",
+    "name": "Codex CLI",
     "status": "idle",
-    "summary": "Configured placeholder for future adapter.",
+    "summary": "Agent CLI adapter for Codex sessions, approval cards, and terminal fallback.",
+    "command": "codex",
     "real": false
   },
   {
-    "name": "Claude",
+    "name": "Claude Code CLI",
     "status": "idle",
-    "summary": "Configured placeholder for future adapter.",
+    "summary": "Agent CLI adapter for Claude Code sessions through a PTY or tmux surface.",
+    "command": "claude",
+    "real": false
+  },
+  {
+    "name": "Gemini CLI",
+    "status": "idle",
+    "summary": "Agent CLI adapter for Gemini broker summaries and multimodal notes.",
+    "command": "gemini",
+    "real": false
+  },
+  {
+    "name": "OpenClaw",
+    "status": "idle",
+    "summary": "Planned agent CLI adapter for OpenClaw workspace sessions.",
+    "command": "openclaw",
     "real": false
   },
   {
     "name": "OpenCode",
     "status": "idle",
-    "summary": "Configured placeholder for future adapter.",
+    "summary": "Agent CLI adapter for OpenCode plan/apply/waiting state.",
+    "command": "opencode",
+    "real": false
+  },
+  {
+    "name": "Pi",
+    "status": "idle",
+    "summary": "Planned adapter for Pi conversational agent surfaces.",
+    "command": "pi",
     "real": false
   }
 ]

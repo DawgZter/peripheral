@@ -33,6 +33,14 @@ import {
   type ScriptedTranscriptStep,
 } from "../../../packages/peripheral-runtime/src/index.js";
 import type { AgentStatus } from "../../../packages/peripheral-protocol/src/index.js";
+import {
+  buildAgentCliMatrixWidget,
+  buildAgentCockpitWidget,
+  buildHackathonDossier,
+  buildIntegrationSummary,
+  buildMockConnectedState,
+  buildSponsorMatrixWidget,
+} from "../../../packages/peripheral-integrations/src/index.js";
 
 type ParsedCli = {
   command: string;
@@ -140,6 +148,9 @@ async function main(): Promise<void> {
     case "agents":
       result = await commandAgents(cli, projectRoot, repoRoot, logPath);
       break;
+    case "integrations":
+      result = await commandIntegrations(cli, projectRoot);
+      break;
     case "render-card":
       result = await commandRenderCard(cli, projectRoot);
       break;
@@ -229,6 +240,37 @@ async function commandAgents(cli: ParsedCli, projectRoot: string, repoRoot: stri
   return listAgents(options);
 }
 
+async function commandIntegrations(cli: ParsedCli, projectRoot: string): Promise<unknown> {
+  const view = cli.positionals[0] || "summary";
+  const now = new Date();
+  switch (view) {
+    case "summary":
+      return { ok: true, ...buildIntegrationSummary() };
+    case "sponsors":
+      return { ok: true, sponsors: buildIntegrationSummary().sponsors };
+    case "agent-clis":
+      return { ok: true, agentClis: buildIntegrationSummary().agentClis };
+    case "connected-state":
+      return { ok: true, connectedState: buildMockConnectedState(now) };
+    case "dossier":
+      return { ok: true, dossier: buildHackathonDossier(now) };
+    case "widgets": {
+      const frameDir = join(projectRoot, "out", "frames", "integrations");
+      const widgets = [
+        buildAgentCockpitWidget(now),
+        buildSponsorMatrixWidget(now),
+        buildAgentCliMatrixWidget(now),
+      ];
+      const artifacts = widgets.map((widget, index) => renderWidgetToFile(widget, join(frameDir, `${String(index + 1).padStart(2, "0")}-${widget.id}.png`), {
+        assetRoot: join(projectRoot, "fixtures", "images"),
+      }));
+      return { ok: true, view, frames: frameDir, widgets: widgets.map((widget) => widget.id), artifacts };
+    }
+    default:
+      throw new Error("Unknown integrations view. Use one of: summary, sponsors, agent-clis, connected-state, dossier, widgets");
+  }
+}
+
 function runtimeOptions(cli: ParsedCli, projectRoot: string, repoRoot: string, logPath: string): HudRuntimeOptions {
   const realDisplay = Boolean(cli.options.real);
   const inputMode: HudInputMode = cli.options.mic === "mac" || cli.options["mac-mic"] ? "mac_mic" : "text";
@@ -311,7 +353,7 @@ async function commandRenderCard(cli: ParsedCli, projectRoot: string): Promise<u
 
 async function commandDemo(cli: ParsedCli, projectRoot: string, driverOptions: DriverOptions): Promise<unknown> {
   const name = cli.positionals[0];
-  if (!name) throw new Error("demo requires one of: live-call, blackjack, conference, agent");
+  if (!name) throw new Error("demo requires one of: live-call, blackjack, conference, agent, integrations");
   const cadenceMs = Math.max(250, Number(cli.options["cadence-ms"] || 1400));
   const flow = demoFlow(name);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -725,6 +767,12 @@ function capabilities(): unknown {
       "asr-demo --real --mock-hermes --framebuffer-check",
       "agents --mock",
       "agents --real",
+      "integrations summary",
+      "integrations sponsors",
+      "integrations agent-clis",
+      "integrations connected-state",
+      "integrations dossier",
+      "integrations widgets",
       "hudctl show-json",
       "hudctl show-card",
       "hudctl clear",
@@ -735,6 +783,7 @@ function capabilities(): unknown {
       "demo blackjack",
       "demo conference",
       "demo agent",
+      "demo integrations",
       "diagnostics",
     ],
     display: PERIPHERAL_DISPLAY,
@@ -866,8 +915,14 @@ function demoFlow(name: string): PeripheralWidget[] {
         widget("agent-approval", "approval_card", "Approve Hold?", { status: "$25 CARD HOLD", body: "Sato Table can hold the booking with a refundable card authorization.", choices: [{ label: "Approve", tone: "primary" }, { label: "Deny" }, { label: "Details" }] }),
         widget("agent-done", "generic_card", "Decision Logged", { status: "APPROVED", body: "The agent can continue and confirm the reservation.", icon: "check", footer: "AUDIT: USER APPROVED" }),
       ];
+    case "integrations":
+      return [
+        buildAgentCockpitWidget(),
+        buildSponsorMatrixWidget(),
+        buildAgentCliMatrixWidget(),
+      ].map(assertWidget);
     default:
-      throw new Error("Unknown demo. Use one of: live-call, blackjack, conference, agent");
+      throw new Error("Unknown demo. Use one of: live-call, blackjack, conference, agent, integrations");
   }
 }
 
@@ -918,10 +973,17 @@ Usage:
   peripheralctl asr-demo --real --mock-hermes [--framebuffer-check]
   peripheralctl agents --mock
   peripheralctl agents --real
+  peripheralctl integrations summary
+  peripheralctl integrations sponsors
+  peripheralctl integrations agent-clis
+  peripheralctl integrations connected-state
+  peripheralctl integrations dossier
+  peripheralctl integrations widgets
   peripheralctl demo live-call [--mock]
   peripheralctl demo blackjack [--mock]
   peripheralctl demo conference [--mock]
   peripheralctl demo agent [--mock]
+  peripheralctl demo integrations [--mock]
   peripheralctl diagnostics [--mock] [--sidecar-url http://127.0.0.1:8791]
   peripheralctl live-check [--attempt-connect --real-hardware-ok] [--capture] [--mock]
 

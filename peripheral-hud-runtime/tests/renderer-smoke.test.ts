@@ -8,13 +8,16 @@ import {
   APP_MODES,
   APPROVAL_RISK_LEVELS,
   INPUT_EVENT_KINDS,
+  PERIPHERAL_AGENT_MODE_PROTOCOL,
   SURFACE_COMMAND_KINDS,
   SURFACE_KINDS,
   SURFACE_OWNERS,
   SURFACE_PRIORITIES,
+  assertProtocolEnvelope,
   assertWidget,
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
+import { buildAgentCliMatrixWidget, buildIntegrationSummary, buildMockConnectedState, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
 
@@ -50,6 +53,34 @@ assert.ok(SURFACE_COMMAND_KINDS.includes("update_widget"));
 assert.ok(INPUT_EVENT_KINDS.includes("voice_text"));
 assert.ok(AGENT_EVENT_KINDS.includes("approval_required"));
 assert.ok(APPROVAL_RISK_LEVELS.includes("high"));
+const inputEnvelope = assertProtocolEnvelope({
+  protocol: PERIPHERAL_AGENT_MODE_PROTOCOL,
+  kind: "input_event",
+  id: "input-voice-1",
+  payload: {
+    kind: "voice_text",
+    id: "voice-1",
+    mode: "agent_mode",
+    text: "show status",
+    timestamp: "2026-01-01T00:00:00.000Z",
+  },
+  created_at: "2026-01-01T00:00:00.000Z",
+}) as { kind: string; payload: { kind: string } };
+assert.equal(inputEnvelope.kind, "input_event");
+assert.equal(inputEnvelope.payload.kind, "voice_text");
+
+const integrationSummary = buildIntegrationSummary();
+assert.equal(integrationSummary.counts.sponsorCount, 7);
+assert.equal(integrationSummary.counts.agentCliCount, 6);
+assert.equal(integrationSummary.sponsors.find((sponsor) => sponsor.id === "stripe")?.surfaces.length, 3);
+assert.equal(integrationSummary.agentClis.find((agent) => agent.id === "codex_cli")?.command, "codex");
+assertWidget(buildSponsorMatrixWidget(new Date("2026-05-17T00:00:00Z")));
+assertWidget(buildAgentCliMatrixWidget(new Date("2026-05-17T00:00:00Z")));
+const connectedState = buildMockConnectedState(new Date("2026-05-17T00:00:00Z"));
+assert.equal(connectedState.glasses.connected, true);
+assert.equal(connectedState.phone.ownsBle, true);
+assert.equal(connectedState.broker.activeLease.owner, "broker");
+assert.ok(connectedState.surfaceCommands.some((command) => command.kind === "enter_agent_mode"));
 
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
 const defaultFullPanelSetupPolicy = {

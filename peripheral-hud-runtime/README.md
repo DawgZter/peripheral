@@ -22,7 +22,10 @@ npm run peripheralctl -- hud --mock-display --text
 npm run peripheralctl -- hud --mock-display --text --hermes-cli
 npm run peripheralctl -- hud --mock-display --mic mac --hermes-cli --mock-hermes --stt-cmd "printf 'Hermes voice test prompt\nsend\n'"
 npm run peripheralctl -- asr-demo --mock-display --mock-hermes --script fixtures/mock_asr_demo.txt --json
+npm run peripheralctl -- integrations summary --json
+npm run peripheralctl -- integrations widgets --json
 npm run peripheralctl -- demo live-call --mock
+npm run peripheralctl -- demo integrations --mock
 ```
 
 Generated frames land in `out/frames/`. JSONL logs land in `out/logs/`. Both are gitignored.
@@ -63,6 +66,7 @@ Works now in mock mode:
 - peripheralctl hud --mock-display --mic mac --hermes-cli can feed line-based ASR into a Hermes terminal draft; saying `Hermes` opens the voice gate, and saying `send` submits that draft without adding `send` to the prompt
 - tools/openai-realtime-asr.mjs streams the Mac mic to OpenAI Realtime ASR and emits final transcripts as stdout lines for the HUD runtime
 - peripheralctl asr-demo --mock-display --mock-hermes replays scripted transcript lines through the same HUD handler and writes text-only JSON/JSONL proof
+- peripheralctl integrations exposes the hackathon sponsor matrix, agent CLI matrix, mock connected-glasses state, and public dossier without requiring secrets or hardware
 - hudctl can show validated JSON/cards, clear mock display state, report status, and emit manual agent status
 - mock push, clear, status, diagnostics, and latency commands work
 - the driver can build the existing `0704` full-panel image envelope

@@ -67,6 +67,16 @@ Agent cockpit approval mini-flow:
 npm run peripheralctl -- demo agent --mock
 ```
 
+Sponsor and agent CLI matrix:
+
+```sh
+npm run peripheralctl -- integrations summary --json
+npm run peripheralctl -- integrations connected-state --json
+npm run peripheralctl -- integrations dossier --json
+npm run peripheralctl -- integrations widgets --json
+npm run peripheralctl -- demo integrations --mock
+```
+
 Each demo writes sequential frames to `out/frames/demo-<name>-<timestamp>/` and JSONL events to `out/logs/`.
 
 ## Scripted ASR

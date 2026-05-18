@@ -22,6 +22,7 @@ import {
   status as driverStatus,
   type DriverOptions,
 } from "../../peripheral-driver/src/index.js";
+import { agentCliIntegrations } from "../../peripheral-integrations/src/index.js";
 
 export type HudInputMode = "text" | "mac_mic" | "mock_asr";
 export type HudDisplayMode = "mock" | "real";
@@ -1460,9 +1461,21 @@ async function buildAgentRegistry(projectRoot: string, options: { includeCache?:
       real: hermes.installed,
       updatedAt: now,
     },
-    { name: "Codex", status: "idle", summary: "Static registry entry for future adapter.", installed: true, real: false, updatedAt: now },
-    { name: "Claude", status: "idle", summary: "Static registry entry for future adapter.", installed: false, real: false, updatedAt: now },
-    { name: "OpenCode", status: "idle", summary: "Static registry entry for future adapter.", installed: false, real: false, updatedAt: now },
+    ...agentCliIntegrations.map((agent) => {
+      const detected = detectFirstExecutable(agent.detection.commands);
+      return {
+        name: agent.name,
+        status: "idle" as AgentStatus,
+        summary: detected
+          ? `Detected ${detected.command}; ${agent.surfaces.length} HUD surfaces mapped.`
+          : `${agent.status} adapter; ${agent.installHint}`,
+        command: agent.command,
+        installed: Boolean(detected),
+        path: detected?.path || null,
+        real: Boolean(detected),
+        updatedAt: now,
+      };
+    }),
   ];
   const withConfig = configured.length ? mergeConfiguredAgents(base, configured) : base;
   return cached.length ? mergeConfiguredAgents(withConfig, cached) : withConfig;
@@ -1630,6 +1643,14 @@ function detectHermes(): { installed: boolean; path: string | null } {
   const direct = spawnSync("which", ["hermes"], { encoding: "utf8" });
   const path = direct.status === 0 ? direct.stdout.trim().split(/\r?\n/)[0] || null : null;
   return { installed: Boolean(path), path };
+}
+
+function detectFirstExecutable(commands: string[]): { command: string; path: string } | null {
+  for (const command of commands) {
+    const path = resolveExecutablePath(command);
+    if (path) return { command, path };
+  }
+  return null;
 }
 
 function resolveMacMicSttCommand(options: HudRuntimeOptions): string | null {
@@ -2276,7 +2297,7 @@ function normalizeAgentName(name: string): string {
 }
 
 function agentSortKey(name: string): number {
-  const order = ["Hermes", "Codex", "Claude", "OpenCode"];
+  const order = ["Hermes", "Codex CLI", "Claude Code CLI", "Gemini CLI", "OpenCode", "OpenClaw", "Pi"];
   const index = order.findIndex((item) => item.toLowerCase() === name.toLowerCase());
   return index === -1 ? 99 : index;
 }
