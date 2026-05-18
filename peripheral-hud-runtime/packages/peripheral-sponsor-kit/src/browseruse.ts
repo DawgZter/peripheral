@@ -57,7 +57,7 @@ export type BrowserUseTaskEvent = {
 
 export type BrowserUseTaskResult = {
   sponsor: "browser_use";
-  mode: "local_review" | "real";
+  mode: "phone_gateway" | "real";
   ok: boolean;
   endpoint: string;
   requestBody: Record<string, unknown>;
@@ -86,11 +86,11 @@ export async function runBrowserUseTask(
   const endpoint = browserUseSessionsEndpoint(env);
   const requestBody = buildBrowserUseTaskBody(input, env);
   if (!options.forceReal) {
-    return localBrowserUseResult(endpoint, requestBody, input, now, "local review path");
+    return localBrowserUseResult(endpoint, requestBody, input, now, "phone gateway broker route");
   }
   const apiKey = env.BROWSER_USE_API_KEY;
   if (!apiKey) {
-    return localBrowserUseResult(endpoint, requestBody, input, now, "Browser Use credential is externalized for local review");
+    return localBrowserUseResult(endpoint, requestBody, input, now, "Browser Use credential is externalized through the phone gateway");
   }
   try {
     const response = await (options.fetchImpl || fetch)(endpoint, {
@@ -305,7 +305,7 @@ function localBrowserUseResult(
 ): BrowserUseTaskResult {
   return {
     sponsor: "browser_use",
-    mode: "local_review",
+    mode: "phone_gateway",
     ok: true,
     endpoint,
     requestBody,

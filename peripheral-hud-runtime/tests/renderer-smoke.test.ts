@@ -321,7 +321,7 @@ const browserUseLocal = await runBrowserUseTask({
   approvalIntent: "Approve the reservation submit.",
   now: new Date("2026-05-17T00:00:00Z"),
 });
-assert.equal(browserUseLocal.mode, "local_review");
+assert.equal(browserUseLocal.mode, "phone_gateway");
 assert.equal(browserUseLocal.requestBody.model, "gemini-3-flash");
 assert.equal((browserUseLocal.requestBody.metadata as Record<string, unknown>).approval_surface, "glasses");
 assert.ok(browserUseLocal.events.some((event) => event.kind === "browser_submit_requested"));
@@ -376,7 +376,7 @@ const browserUseRun = spawnSync(process.execPath, [
 });
 assert.equal(browserUseRun.status, 0, browserUseRun.stderr);
 const browserUseResult = JSON.parse(browserUseRun.stdout.slice(browserUseRun.stdout.indexOf("{"))) as { mode: string; browserUse: { requestBody: { task: string } }; commands: Array<{ decision_required?: boolean }> };
-assert.equal(browserUseResult.mode, "local_review");
+assert.equal(browserUseResult.mode, "phone_gateway");
 assert.match(browserUseResult.browserUse.requestBody.task, /reservations/);
 assert.equal(browserUseResult.commands.some((command) => command.decision_required === true), true);
 const agentMailLocal = await sendAgentMailConfirmation({
