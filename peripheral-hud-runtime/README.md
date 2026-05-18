@@ -55,10 +55,12 @@ npm run peripheralctl -- sponsor-runtime evidence-pack --json
 npm run peripheralctl -- sponsor-runtime browser-task --goal "Check restaurant availability" --json
 npm run peripheralctl -- sponsor-runtime sponge-context --context-text "Summarize customer context for glasses" --json
 npm run peripheralctl -- sponsor-runtime sponge-context --context-text "Pause before persisting sensitive context" --mode redaction_warning --json
+npm run peripheralctl -- sponsor-runtime moss-tool-context --tool-name dinner_booking_checkout --instruction "Prepare checkout context" --json
+npm run peripheralctl -- sponsor-runtime moss-sponge-stripe --hold-amount 25.00 --currency usd --json
 npm run peripheralctl -- sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface" --json
 npm run peripheralctl -- review-run --json
 npm run peripheralctl -- review-bundle --json
-npm run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
+npm run peripheralctl -- live-proof dinner-booking --json
 npm run peripheralctl -- sponsor-workflows widgets --json
 npm run peripheralctl -- integrations widgets --json
 npm run peripheralctl -- walkthrough live-call --local
@@ -115,9 +117,9 @@ Works now in runtime mode:
 - peripheralctl integrations exposes the sponsor matrix, agent CLI matrix, adapter operation catalog, support report, MCP manifest, phone runtime snapshot, broker timeline, glasses runtime state, and public dossier
 - peripheralctl integrations sponsor-events normalizes sponsor events into AgentEvent objects, HUD widgets, and phone-routable SurfaceCommand records
 - peripheralctl sponsor-runtime agentphone-call runs the AgentPhone call adapter, normalizes call/transcript/approval events, and returns the glasses surfaces that would be leased by the phone runtime
-- peripheralctl sponsor-runtime agentmail-send and supermemory-save run the post-approval follow-up adapters directly and return the phone-routable glasses status surfaces
+- peripheralctl sponsor-runtime agentmail-send and supermemory-save stage approval-gated follow-up payloads in phone-gateway mode; with real flags they use the credential-bound provider adapters and return sent/saved status surfaces
 - peripheralctl sponsor-runtime followup-pack renders the post-approval AgentMail and Supermemory glasses frames into `out/frames/sponsor-followup/` and writes `out/sponsor-runtime/followup-pack.json`
-- peripheralctl sponsor-runtime evidence-pack runs all seven sponsor adapters through the phone-gateway route, renders their glasses surfaces into `out/frames/sponsor-runtime-evidence/`, and writes `out/sponsor-runtime/evidence-pack.json`
+- peripheralctl sponsor-runtime evidence-pack runs all eight sponsor adapters through the phone-gateway route, renders their glasses surfaces into `out/frames/sponsor-runtime-evidence/`, and writes `out/sponsor-runtime/evidence-pack.json`
 - peripheralctl review-run generates the dinner-booking, agent CLI, all-sponsor runtime, and sponsor follow-up glasses evidence packs plus `out/review/evidence-index.json`
 - peripheralctl agent-bridge normalizes OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI output into AgentEvent objects, HUD widgets, executable launch envelopes, approval return paths, phone-routable surface commands, and adapter metadata for the intended glasses surface
 - peripheralctl agent-bridge session-pack renders all six agent CLI surfaces into `out/frames/agent-bridge-session/` and writes `out/agent-bridge/session-pack.json`

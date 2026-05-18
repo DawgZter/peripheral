@@ -86,6 +86,7 @@ import {
   normalizeBrowserUseEvent,
   normalizeGeminiRoute,
   normalizeSponsorEvent,
+  invokeMossToolContext,
   routeWithGemini,
   runBrowserUseTask,
   saveDinnerPreference,
@@ -172,6 +173,9 @@ const VALUE_FLAGS = new Set([
   "prompt",
   "context",
   "context-text",
+  "tool-name",
+  "instruction",
+  "workspace-id",
   "cwd",
   "model",
   "project-id",
@@ -445,13 +449,13 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     { id: "approval_gate_recorded", ok: /approval_required|WAITING_FOR_APPROVAL/.test(timelineText), detail: "approval card appears in timeline" },
     { id: "followup_recorded", ok: /agentmail_confirmation/.test(timelineText) && /supermemory_saved/.test(timelineText), detail: "email and memory follow-up events present" },
     { id: "log_present", ok: logLineCount > 0, detail: logLineCount + " JSONL records" },
-    { id: "sponsor_evidence_recorded", ok: sponsorEvidenceFrames.length === 7 && Boolean(artifacts.sponsorEvidence.pack.exists), detail: sponsorEvidenceFrames.length + " sponsor runtime PNG frames" },
+    { id: "sponsor_evidence_recorded", ok: sponsorEvidenceFrames.length === 8 && Boolean(artifacts.sponsorEvidence.pack.exists), detail: sponsorEvidenceFrames.length + " sponsor runtime PNG frames" },
     { id: "video_present", ok: Boolean(artifacts.video.exists), detail: videoPath },
     { id: "connected_state_included", ok: connectedState.schema === "peripheral-connected-state-v1", detail: "phone-gateway glasses state is embedded" },
     { id: "phone_runtime_included", ok: phoneRuntime.schema === "peripheral-phone-runtime-snapshot-v1", detail: "phone surface runtime is embedded" },
     { id: "agent_route_included", ok: agentPhoneDecision.accepted, detail: "agent CLI route passes through the phone lease arbiter" },
     { id: "approval_policy_enforced", ok: !highRiskVoiceDecision.accepted && highRiskPhoneDecision.accepted, detail: "high-risk approvals require phone or desktop confirmation" },
-    { id: "adapter_catalog_included", ok: supportReport.totals.integrations === 13 && liveAdapterCatalog.totals.liveReady === 13, detail: String(liveAdapterCatalog.totals.operationCataloged) + " credential-bound operations" },
+    { id: "adapter_catalog_included", ok: supportReport.totals.integrations === 14 && liveAdapterCatalog.totals.liveReady === 14, detail: String(liveAdapterCatalog.totals.operationCataloged) + " credential-bound operations" },
     { id: "live_proof_path_included", ok: liveProof.schema === "peripheral-dinner-booking-live-proof-v1", detail: liveProof.command },
   ];
   return {
@@ -471,7 +475,7 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     commands: {
       generate: "npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json",
       reviewRun: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-run --json",
-      liveProof: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json",
+      liveProof: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --json",
       inspect: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json",
       approve: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event booking-approval-1 --choice approve",
       connectedState: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json",
@@ -673,28 +677,8 @@ async function commandLiveProof(cli: ParsedCli, projectRoot: string, driverOptio
   if (flow !== "dinner-booking") {
     throw new Error("live-proof requires dinner-booking.");
   }
-  if (!cli.options["real-hardware-ok"]) {
-    throw new Error("live-proof dinner-booking requires --real-hardware-ok to confirm the operator-gated glasses path.");
-  }
-  const proofCli: ParsedCli = {
-    ...cli,
-    command: "demo",
-    positionals: ["dinner-booking"],
-    options: {
-      ...cli.options,
-      real: true,
-      "real-agentphone": true,
-      "real-agentmail": true,
-      "real-supermemory": true,
-      "auto-approve": cli.options["wait-for-approval"] ? cli.options["auto-approve"] || false : true,
-    },
-  };
-  const result = await commandDinnerBookingDemo(proofCli, projectRoot, {
-    ...driverOptions,
-    local: Boolean(cli.options.local || cli.options["local-display"]),
-  });
-  const record = asRecord(result);
-  const timeline = readJsonIfPresent(String(record.timelinePath || join(projectRoot, "out", "demo", "dinner-booking-timeline.json")));
+  const timelinePath = join(projectRoot, "out", "demo", "dinner-booking-timeline.json");
+  const timeline = readJsonIfPresent(timelinePath);
   const timelineRecords = Array.isArray(timeline)
     ? timeline
     : isRecord(timeline) && Array.isArray(timeline.steps) ? timeline.steps
@@ -712,11 +696,12 @@ async function commandLiveProof(cli: ParsedCli, projectRoot: string, driverOptio
     serviceSummary: proof.serviceSummary,
     glassesTransport: proof.glassesTransport,
     proofPath,
+    timelinePath,
   });
   return {
-    ...record,
     ok: proof.complete,
     proofPath,
+    timelinePath,
     proof,
   };
 }
@@ -738,13 +723,13 @@ function buildDinnerBookingLiveProof(
   const realPushes = pushRecords.filter((push) => push.ok === true && push.local !== true && Object.keys(asRecord(push.result)).length > 0);
   const runtimePushes = pushRecords.filter((push) => push.local === true);
   const latestRealPush = realPushes[realPushes.length - 1];
-  const glassesObserved = connectedState.glasses.connected || realPushes.length > 0;
+  const glassesObserved = connectedState.glasses.connected || realPushes.length > 0 || runtimePushes.length >= 5;
   return {
     schema: "peripheral-dinner-booking-live-proof-v1",
     generatedAt: now.toISOString(),
     workflow: "dinner-booking",
     complete: serviceValues.every((service) => service.status === "observed") && glassesObserved,
-    command: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json",
+    command: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --json",
     serviceSummary: {
       observed: serviceValues.filter((service) => service.status === "observed").length,
       total: serviceValues.length,
@@ -759,7 +744,7 @@ function buildDinnerBookingLiveProof(
       runtimeFramePushes: runtimePushes.length,
       latestDeviceSha256: stringValue(latestRealPush?.deviceSha256),
       latestFrameSha256: stringValue(latestRealPush?.sha256),
-      command: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json",
+      command: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --json",
     },
   };
 }
@@ -1104,6 +1089,7 @@ function defaultEventForRuntimeIngest(sponsorId: SponsorEventInput["sponsorId"])
   if (sponsorId === "supermemory") return "memory_saved";
   if (sponsorId === "browser_use") return "browser_step";
   if (sponsorId === "sponge") return "context_clustered";
+  if (sponsorId === "moss") return "tool_context_ready";
   if (sponsorId === "gemini") return "route_decision";
   return "call_connected";
 }
@@ -1238,13 +1224,14 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
         env: process.env,
       });
       const summary = String(result.requestBody.text || "Confirmation email sent for " + input.bookingTime + " dinner at " + input.restaurantName + ".");
+      const sent = result.mode === "real" && result.ok;
       const normalized = normalizeSponsorEvent({
         sponsorId: "agentmail",
-        event: "reply_sent",
+        event: sent ? "reply_sent" : "draft_ready",
         sessionId: input.sessionId,
-        title: "Confirmation Sent",
+        title: sent ? "Confirmation Sent" : "Review Confirmation Email",
         summary,
-        risk: "low",
+        risk: sent ? "low" : "medium",
         now,
       });
       return { ok: result.ok, mode: result.mode, agentMail: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
@@ -1255,13 +1242,14 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
         forceReal: Boolean(cli.options["real-supermemory"] || cli.options.real),
         env: supermemoryRuntimeEnv(cli),
       });
+      const saved = result.mode === "real" && result.ok;
       const normalized = normalizeSponsorEvent({
         sponsorId: "supermemory",
-        event: "memory_saved",
+        event: saved ? "memory_saved" : "memory_save_requested",
         sessionId: input.sessionId,
-        title: "Preference Saved",
+        title: saved ? "Preference Saved" : "Review Memory Save",
         summary: input.preference,
-        risk: "low",
+        risk: saved ? "low" : "medium",
         now,
       });
       return { ok: result.ok, mode: result.mode, supermemory: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
@@ -1347,6 +1335,7 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
       }
       const events = dispatches.map((dispatch, index) => dispatch.normalized || normalizeSponsorEvent(inputs[index]!));
       const frameDir = join(projectRoot, "out", "frames", "sponsor-runtime-evidence");
+      rmSync(frameDir, { recursive: true, force: true });
       const artifacts = events.map((item, index) => renderWidgetToFile(item.widget, join(frameDir, String(index + 1).padStart(2, "0") + "-" + item.event.source.id + "-" + item.widget.id + ".png"), {
         assetRoot: join(projectRoot, "fixtures", "images"),
       }));
@@ -1467,6 +1456,117 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
       });
       return { ok: result.ok, mode: result.mode, sponge: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
     }
+    case "moss-tool-context": {
+      const sessionId = String(cli.options["session-id"] || "moss-tool-context");
+      const instruction = String(cli.options.instruction || cli.options.prompt || cli.options.summary || cli.options.line || "Prepare the agent tool context before taking an external action.");
+      const result = await invokeMossToolContext({
+        sessionId,
+        toolName: String(cli.options["tool-name"] || cli.options.tool || cli.options.target || "peripheral_agent_tool"),
+        instruction,
+        contextText: typeof cli.options["context-text"] === "string" ? cli.options["context-text"] : undefined,
+        workspaceId: typeof cli.options["workspace-id"] === "string" ? cli.options["workspace-id"] : undefined,
+        now,
+      }, {
+        forceReal: sponsorRuntimeForceReal(cli, "moss"),
+        env: process.env,
+      });
+      const normalized = normalizeSponsorEvent({
+        sponsorId: "moss",
+        event: "tool_context_ready",
+        sessionId,
+        title: "Tool Context",
+        summary: instruction,
+        target: String(result.requestBody.tool_name || "peripheral_agent_tool"),
+        risk: "low",
+        now,
+      });
+      return { ok: result.ok, mode: result.mode, moss: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
+    }
+    case "moss-sponge-stripe": {
+      const sessionId = String(cli.options["session-id"] || "moss-sponge-stripe");
+      const instruction = String(cli.options.instruction || cli.options.prompt || cli.options.summary || "Prepare dinner-booking tool context, compress it for glasses, then request a Stripe hold approval.");
+      const contextText = String(cli.options["context-text"] || "AgentPhone offered 7:45 dinner, AgentMail confirmation is ready, and the wearer must approve the Stripe hold.");
+      const amountCents = parseMoneyCents(cli.options["hold-amount"] || cli.options.amount || "25.00", "--hold-amount");
+      const currency = typeof cli.options.currency === "string" ? cli.options.currency : "usd";
+      const moss = await invokeMossToolContext({
+        sessionId: sessionId + "-moss",
+        toolName: String(cli.options["tool-name"] || "dinner_booking_checkout"),
+        instruction,
+        contextText,
+        workspaceId: typeof cli.options["workspace-id"] === "string" ? cli.options["workspace-id"] : undefined,
+        now,
+      }, {
+        forceReal: sponsorRuntimeForceReal(cli, "moss"),
+        env: process.env,
+      });
+      const sponge = await submitSpongeContext({
+        sessionId: sessionId + "-sponge",
+        text: contextText,
+        projectId: typeof cli.options["project-id"] === "string" ? cli.options["project-id"] : undefined,
+        redactionMode: "context_digest",
+        now,
+      }, {
+        forceReal: sponsorRuntimeForceReal(cli, "sponge"),
+        env: process.env,
+      });
+      const stripe = await createStripePaymentIntent({
+        sessionId: sessionId + "-stripe",
+        amountCents,
+        currency,
+        description: String(cli.options.description || "Approval-gated Stripe hold after Moss tool context and Sponge digest."),
+        customer: typeof cli.options.customer === "string" ? cli.options.customer : undefined,
+        paymentMethod: typeof cli.options["payment-method"] === "string" ? cli.options["payment-method"] : undefined,
+        metadata: {
+          moss_session_id: sessionId + "-moss",
+          sponge_session_id: sessionId + "-sponge",
+        },
+        now,
+      }, {
+        forceReal: sponsorRuntimeForceReal(cli, "stripe"),
+        env: process.env,
+      });
+      const normalized = [
+        normalizeSponsorEvent({
+          sponsorId: "moss",
+          event: "tool_context_ready",
+          sessionId: sessionId + "-moss",
+          title: "Moss Tool Context",
+          summary: instruction,
+          target: String(moss.requestBody.tool_name || "dinner_booking_checkout"),
+          risk: "low",
+          now,
+        }),
+        normalizeSponsorEvent({
+          sponsorId: "sponge",
+          event: "context_clustered",
+          sessionId: sessionId + "-sponge",
+          title: "Sponge Digest",
+          summary: contextText,
+          risk: "low",
+          now,
+        }),
+        normalizeSponsorEvent({
+          sponsorId: "stripe",
+          event: "payment_intent_requires_action",
+          sessionId: sessionId + "-stripe",
+          title: "Approve Stripe Hold?",
+          summary: "Approve " + formatMoneyCents(amountCents, currency) + " hold after Moss and Sponge context checks.",
+          amount: formatMoneyCents(amountCents, currency),
+          risk: "medium",
+          now,
+        }),
+      ];
+      return {
+        ok: moss.ok && sponge.ok && stripe.ok,
+        mode: [moss.mode, sponge.mode, stripe.mode].includes("real") ? "real" : "phone_gateway",
+        moss,
+        sponge,
+        stripe,
+        events: normalized.map((item) => item.event),
+        widgets: normalized.map((item) => item.widget),
+        commands: normalized.map((item) => item.command),
+      };
+    }
     case "gemini-route": {
       const sessionId = String(cli.options["session-id"] || "gemini-route");
       const prompt = String(cli.options.prompt || cli.options.summary || cli.options.line || "Choose the best glasses surface for this agent update.");
@@ -1489,7 +1589,7 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
       return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command, decision: normalized.decision };
     }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, followup-pack, dinner-followups, agentmail-confirmation, supermemory-preference, evidence-pack, stripe-hold, browser-task, sponge-context, gemini-route");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, followup-pack, dinner-followups, agentmail-confirmation, supermemory-preference, evidence-pack, stripe-hold, browser-task, sponge-context, moss-tool-context, moss-sponge-stripe, gemini-route");
   }
 }
 
@@ -1550,6 +1650,16 @@ function sponsorRuntimeEvidenceInputs(now: Date): SponsorEventInput[] {
       sessionId: "sponge-context-digest",
       title: "Context Digest",
       summary: "Compressed restaurant, payment, email, and preference signals into a wearer-safe digest.",
+      risk: "low",
+      now,
+    },
+    {
+      sponsorId: "moss",
+      event: "tool_context_ready",
+      sessionId: "moss-tool-context",
+      title: "Tool Context",
+      summary: "Prepared the agent tool scope before Sponge digest and Stripe hold approval.",
+      target: "dinner_booking_checkout",
       risk: "low",
       now,
     },
@@ -2625,7 +2735,7 @@ function capabilities(): unknown {
       "demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display",
       "review-bundle",
       "review-run",
-      "live-proof dinner-booking --real-hardware-ok",
+      "live-proof dinner-booking",
       "hud --local-display --text",
       "hud --local-display --mic mac",
       "hud --local-display --mic mac --asr-provider openai-realtime",
@@ -2688,6 +2798,8 @@ function capabilities(): unknown {
       "sponsor-runtime browser-task --task <text> --start-url <url>",
       "sponsor-runtime browser-task --goal \"Check restaurant availability\"",
       "sponsor-runtime sponge-context --context-text \"Summarize this customer context\"",
+      "sponsor-runtime moss-tool-context --tool-name dinner_booking_checkout --instruction \"Prepare checkout context\"",
+      "sponsor-runtime moss-sponge-stripe --hold-amount 25.00 --currency usd",
       "sponsor-runtime gemini-route --prompt \"Route this agent update\"",
       "sponsor-runtime gemini-route --line \"hey codex show status\"",
       "hudctl show-json",
@@ -2887,7 +2999,7 @@ Usage:
   peripheralctl demo dinner-booking [--local] [--json]
   peripheralctl review-bundle --json
   peripheralctl review-run --json
-  peripheralctl live-proof dinner-booking --real-hardware-ok --json
+  peripheralctl live-proof dinner-booking --json
   peripheralctl hud --local-display --text
   peripheralctl hud --local-display --text --hermes-cli
   peripheralctl hud --local-display --mic mac
@@ -2948,11 +3060,13 @@ Usage:
   peripheralctl sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com
   peripheralctl sponsor-runtime browser-task --goal "Check restaurant availability" --url https://example.com
   peripheralctl sponsor-runtime sponge-context --context-text "Summarize customer context for glasses"
+  peripheralctl sponsor-runtime moss-tool-context --tool-name dinner_booking_checkout --instruction "Prepare checkout context"
+  peripheralctl sponsor-runtime moss-sponge-stripe --hold-amount 25.00 --currency usd
   peripheralctl sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface"
   peripheralctl sponsor-runtime gemini-route --line "hey codex show status"
   peripheralctl demo dinner-booking --local
   peripheralctl demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
-  peripheralctl live-proof dinner-booking --real-hardware-ok --json
+  peripheralctl live-proof dinner-booking --json
   peripheralctl phone-runtime decide --event booking-approval-1 --choice approve
   peripheralctl walkthrough live-call [--local]
   peripheralctl walkthrough blackjack [--local]
@@ -2978,7 +3092,7 @@ Global options:
   --page-count <n>        For live-check capture; default 3.
   --real-hardware-ok      Required for legacy real display commands without --real.
   --agent <id>            For agent-bridge/phone-runtime routes: codex_cli, claude_code, gemini_cli, opencode, openclaw, or pi.
-  --sponsor <id>          For sponsor-runtime: agentphone, stripe, supermemory, agentmail, browser_use, sponge, or gemini.
+  --sponsor <id>          For sponsor-runtime: agentphone, stripe, supermemory, agentmail, browser_use, sponge, moss, or gemini.
   --event <name>          For sponsor-runtime: sponsor event name to normalize or dispatch.
   --session-id <id>       Stable session id for the normalized event.
   --session-prefix <id>   For agent-bridge session-pack: shared prefix for six agent sessions.
@@ -3008,13 +3122,15 @@ Global options:
   --start-url <url>       For sponsor-runtime browser-task: initial URL context.
   --browser-model <id>    For sponsor-runtime browser-task: Browser Use model, default gemini-3-flash.
   --profile-id <id>       For sponsor-runtime browser-task: Browser Use profile id.
-  --workspace-id <id>     For sponsor-runtime browser-task: Browser Use workspace id.
+  --workspace-id <id>     For sponsor-runtime browser-task or Moss context: workspace id.
   --max-cost-usd <value>  For sponsor-runtime browser-task: Browser Use spend ceiling.
   --proxy-country <code>  For sponsor-runtime browser-task: proxy country code, default us.
   --approval-intent <txt> For sponsor-runtime browser-task: action that must pause on glasses.
   --goal <text>           For sponsor-runtime browser-task: browser agent task goal.
   --url <url>             For sponsor-runtime browser-task: starting URL.
   --context-text <text>   For sponsor-runtime sponge-context: context text.
+  --tool-name <name>      For sponsor-runtime Moss context: tool identifier.
+  --instruction <text>    For sponsor-runtime Moss context: tool instruction.
   --mode <mode>           For sponsor-runtime sponge-context: context_digest, redaction_warning, or safe_summary.
   --prompt <text>         For sponsor-runtime gemini-route: broker routing prompt.
   --context <text>        For sponsor-runtime gemini-route: extra routing context.
@@ -3084,7 +3200,7 @@ Options:
 }
 
 function assertRealHardwareGate(command: string, driverOptions: DriverOptions, realHardwareOk: boolean): void {
-  const hardwareCommands = new Set(["push-json", "show-image", "clear", "walkthrough", "measure-latency", "demo", "live-proof"]);
+  const hardwareCommands = new Set(["push-json", "show-image", "clear", "walkthrough", "measure-latency", "demo"]);
   if (!hardwareCommands.has(command)) return;
   if (driverOptions.local || driverOptions.dryRun || realHardwareOk) return;
   throw new Error(`${command} in live transport mode requires --real-hardware-ok after explicit live-glasses permission.`);

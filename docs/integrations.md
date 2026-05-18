@@ -12,15 +12,16 @@ The integration layer is implementation-oriented and adapter-ready. It describes
 | AgentMail | https://docs.agentmail.to/ | Agent-readable inbox and outbound draft loop. | Inbox triage, draft approval, verification-code pin. |
 | Browser Use | https://docs.browser-use.com/ | Browser automation telemetry and evidence. | Browser step HUD, sensitive action approval, evidence summary. |
 | Sponge | https://sponge.ai/docs | Context compression and signal clustering. | Context digest, signal clusters, redaction warning. |
+| Moss | https://docs.moss.ai/ | Tool-context shaping before external actions. | Tool context, tool permission, tool result. |
 | Gemini | https://ai.google.dev/gemini-api/docs | Multimodal broker reasoning and routing. | Broker summary, vision summary, routing hint. |
 
-Credential values stay outside the repo. The descriptor layer records expected names such as `AGENTPHONE_API_KEY`, `STRIPE_SECRET_KEY`, `SUPERMEMORY_API_KEY`, `AGENTMAIL_API_KEY`, `BROWSER_USE_API_KEY`, `SPONGE_API_KEY`, and `GEMINI_API_KEY`.
+Credential values stay outside the repo. The descriptor layer records expected names such as `AGENTPHONE_API_KEY`, `STRIPE_SECRET_KEY`, `SUPERMEMORY_API_KEY`, `AGENTMAIL_API_KEY`, `BROWSER_USE_API_KEY`, `SPONGE_API_KEY`, `MOSS_API_KEY`, and `GEMINI_API_KEY`.
 
 ## Live Adapter Catalog
 
 `peripheralctl integrations live-adapters --json` returns the adapter operation catalog. Each sponsor entry includes credential names, an API base URL, auth style, operations, broker event names, risk level, approval requirement, and target HUD surface. Each agent CLI entry includes command, aliases, session transport, credential names, launch semantics, progress stream routing, approval routing, and terminal fallback.
 
-The catalog currently exposes 13 credential-bound adapters across AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, Gemini, OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI.
+The catalog currently exposes 14 credential-bound adapters across AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, Moss, Gemini, OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI.
 
 ## Agent CLI Coverage
 
@@ -99,11 +100,12 @@ The same package now includes concrete real-world task adapters for calls, payme
 - `stripe.ts` creates approval-gated card holds through the phone-gateway broker route.
 - `browseruse.ts` starts Browser Use Cloud sessions through the phone-gateway broker route and preserves wearer approval before submit-style actions.
 - `sponge.ts` posts context for wearer-safe digests and redaction warnings.
+- `moss.ts` prepares tool context and permission surfaces before external agent actions.
 - `gemini.ts` asks Gemini for broker routing decisions that choose the glasses surface.
-- `agentmail.ts` sends the confirmation email through the AgentMail adapter and phone-gateway transport.
-- `supermemory.ts` saves the dinner preference through the Supermemory adapter and phone-gateway transport.
+- `agentmail.ts` stages approval-gated confirmation email payloads in phone-gateway mode and sends through AgentMail only when the real adapter is explicitly enabled.
+- `supermemory.ts` stages approval-gated preference memory payloads in phone-gateway mode and writes through Supermemory only when the real adapter is explicitly enabled.
 
-Use `peripheralctl integrations sponsor-events --json` to inspect the sample event dossier for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, and Gemini.
+Use `peripheralctl integrations sponsor-events --json` to inspect the sample event dossier for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, Moss, and Gemini.
 
 ## Review Commands
 
@@ -145,14 +147,16 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser-task --goal "Check restaurant availability" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime sponge-context --context-text "Summarize customer context for glasses" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime sponge-context --context-text "Pause before persisting sensitive context" --mode redaction_warning --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime moss-tool-context --tool-name dinner_booking_checkout --instruction "Prepare checkout context" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime moss-sponge-stripe --hold-amount 25.00 --currency usd --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
-npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows widgets --json
 ```
 
-The `widgets` command renders the sponsor and CLI matrices into `peripheral-hud-runtime/out/frames/integrations/`. Use `sponsor-workflows widgets` for the sponsor approval surfaces, `live-proof dinner-booking` for the full service/display proof path, and `hud --real` when the operator is ready to drive the glasses.
+The `widgets` command renders the sponsor and CLI matrices into `peripheral-hud-runtime/out/frames/integrations/`. Use `sponsor-workflows widgets` for the sponsor approval surfaces, `live-proof dinner-booking` for the saved service/display evidence envelope, and `hud --real` when the operator is ready to drive the glasses.
 
 ## Safety Boundary
 

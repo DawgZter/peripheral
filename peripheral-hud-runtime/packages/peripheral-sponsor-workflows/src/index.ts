@@ -115,6 +115,17 @@ export function workflowForSponsor(id: string): SponsorWorkflow {
           step(id, "context_clustered", "Pin Digest?", "Ask before pinning a digest across sessions.", "pinned", "medium", true),
         ],
       );
+    case "moss":
+      return workflow(
+        id,
+        "Tool context loop",
+        "Shape agent tool calls into a compact operator-visible scope before Sponge digestion or Stripe approval.",
+        "agent tool context or permission event",
+        [
+          step(id, "tool_context_ready", "Tool Context", "Show the tool name, scope, and instruction before execution continues.", "glance", "low", false),
+          step(id, "tool_permission_requested", "Run Tool?", "Require approval when a tool could mutate payment, memory, browser, or email state.", "fullscreen", "medium", true),
+        ],
+      );
     case "gemini":
       return workflow(
         id,

@@ -4,7 +4,7 @@
 
 Agent-first smart glasses for real-world AI agents.
 
-Peripheral started as hardware I built in Shenzhen because agents needed a better output device than a laptop window or another phone notification. The glasses are a 28g, microLED, binocular-waveguide display system with 12-24 hours of battery life depending on operating mode and an optical stack tuned for extremely low light leakage. At 28g, Peripheral is built to be the lightest display smart-glasses form factor in the world.
+Peripheral started as hardware I built in Shenzhen because agents needed a better output device than a laptop window or another phone notification. The glasses are a 28g, microLED, binocular-waveguide display system with 12-24 hours of battery life depending on operating mode and a lowest-light-leakage optical stack tuned for public, glanceable work. At 28g, Peripheral is built to be the lightest display smart-glasses form factor in the world.
 
 The hardware matters because Peripheral is not trying to become another phone screen. It is a wearable peripheral for your agents: light enough to keep on all day, private enough for public spaces, bright enough for glanceable work, and simple enough that the phone/runtime can own safety, rendering, and approvals. In my view, this is the strongest shape for smart glasses in an agent-native world: barely there until an agent needs your eyes, your context, or your consent.
 
@@ -19,7 +19,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --l
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-run --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
-npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge session-pack --session-prefix reviewer --json
 ```
 
@@ -58,12 +58,13 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot 
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime approval-policy --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime evaluate-decision --risk high --confirmation voice --choice approve --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
-npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime evidence-pack --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime moss-sponge-stripe --hold-amount 25.00 --currency usd --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
@@ -90,11 +91,14 @@ export SUPERMEMORY_API_KEY=...
 export STRIPE_SECRET_KEY=...
 export BROWSER_USE_API_KEY=...
 export SPONGE_API_KEY=...
+export MOSS_API_KEY=...
 export GEMINI_API_KEY=...
 # optional endpoint/target overrides:
 # export STRIPE_API_URL=...
 # export BROWSER_USE_API_URL=...
 # export SPONGE_API_URL=...
+# export MOSS_API_URL=...
+# export MOSS_WORKSPACE_ID=...
 # export GEMINI_API_URL=...
 # export AGENTMAIL_API_URL=...
 # export AGENTMAIL_TO=...
@@ -102,11 +106,11 @@ export GEMINI_API_KEY=...
 # export SUPERMEMORY_CONTAINER=...
 ```
 
-Then run the same flow with the AgentPhone, AgentMail, and Supermemory adapter paths enabled while keeping display output local unless the operator explicitly chooses real glasses transport:
+Then run the same flow with the AgentPhone, AgentMail, and Supermemory adapter paths enabled. The operator proof command below is the real-display path and requires an explicit hardware acknowledgement.
 
 ```sh
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
-npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --json
 ```
 
 To inspect the AgentMail and Supermemory follow-up payloads, credential binding names, and glasses approval surfaces before any provider call:
@@ -115,7 +119,7 @@ To inspect the AgentMail and Supermemory follow-up payloads, credential binding 
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime dinner-followups --json
 ```
 
-For single sponsor-runtime probes, `--real-sponsor` or the adapter-specific flag such as `--real-agentmail`, `--real-supermemory`, `--real-stripe`, `--real-browser-use`, `--real-sponge`, or `--real-gemini` switches from phone-gateway review mode to the credential-bound provider adapter.
+For single sponsor-runtime probes, `--real-sponsor` or the adapter-specific flag such as `--real-agentmail`, `--real-supermemory`, `--real-stripe`, `--real-browser-use`, `--real-sponge`, `--real-moss`, or `--real-gemini` switches from phone-gateway review mode to the credential-bound provider adapter.
 
 ## Sponsor Status
 
@@ -127,6 +131,7 @@ For single sponsor-runtime probes, `--real-sponsor` or the adapter-specific flag
 | Stripe | Credential-bound card-hold adapter path plus approval/risk surface |
 | Browser Use | Credential-bound browser task adapter plus approval-gated evidence surface |
 | Sponge | Credential-bound context adapter plus redaction and digest surface |
+| Moss | Credential-bound tool-context adapter plus approval surface |
 | Gemini | Credential-bound broker routing adapter plus summary surface |
 
 ## Repo Layout

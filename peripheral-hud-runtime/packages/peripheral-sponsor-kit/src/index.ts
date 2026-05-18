@@ -11,6 +11,7 @@ import { normalizeAgentPhoneEvent, runAgentPhoneDinnerBooking, type AgentPhoneCa
 import { sendAgentMailConfirmation, type AgentMailSendResult } from "./agentmail.js";
 import { normalizeBrowserUseEvent, runBrowserUseTask, type BrowserUseTaskResult } from "./browseruse.js";
 import { routeGeminiBrokerDecision, type GeminiRouteResult } from "./gemini.js";
+import { invokeMossToolContext, type MossToolContextResult } from "./moss.js";
 import { submitSpongeContext, type SpongeContextResult } from "./sponge.js";
 import { createStripePaymentIntent, type StripePaymentIntentResult } from "./stripe.js";
 import { saveDinnerPreference, type SupermemorySaveResult } from "./supermemory.js";
@@ -55,6 +56,13 @@ export {
 } from "./stripe.js";
 export * from "./stripe.js";
 export {
+  buildMossToolContextBody,
+  invokeMossToolContext,
+  type MossToolContextRequest,
+  type MossToolContextResult,
+} from "./moss.js";
+export * from "./moss.js";
+export {
   buildSpongeContextBody,
   submitSpongeContext,
   type SpongeContextRequest,
@@ -89,6 +97,9 @@ export type SponsorEventKind =
   | "browser_submit_requested"
   | "context_clustered"
   | "redaction_warning"
+  | "tool_context_ready"
+  | "tool_permission_requested"
+  | "tool_result_ready"
   | "broker_summary"
   | "route_decision";
 
@@ -169,6 +180,7 @@ export type SponsorAdapterExecutionResult =
   | AgentMailSendResult
   | BrowserUseTaskResult
   | SpongeContextResult
+  | MossToolContextResult
   | GeminiRouteResult;
 
 export function normalizeSponsorEvent(input: SponsorEventInput): NormalizedSponsorEvent {
@@ -234,7 +246,7 @@ export function buildSponsorRuntimeAdapters(env: Record<string, string | undefin
       providerEndpointConfigured: Boolean(env[providerEndpointEnv]),
       eventKinds: sponsor.agentEvents,
       dispatchCommand,
-      realDispatchCommand: [...dispatchCommand, "--" + realFlagForSponsor(sponsor.id)],
+      realDispatchCommand: realDispatchCommandForSponsor(sponsor.id),
       output: "AgentEvent+PeripheralWidget+SurfaceCommand",
       safety: "phone_owned_surface_policy",
     };
@@ -393,6 +405,17 @@ export async function executeSponsorRuntimeAdapter(
       }, adapterOptions);
       return { normalized, adapterResult };
     }
+    case "moss": {
+      const adapterResult = await invokeMossToolContext({
+        sessionId: input.sessionId,
+        toolName: input.target || env.MOSS_TOOL_NAME || "agent_tool",
+        instruction: input.summary,
+        contextText: env.MOSS_CONTEXT_TEXT,
+        workspaceId: env.MOSS_WORKSPACE_ID,
+        now,
+      }, adapterOptions);
+      return { normalized, adapterResult };
+    }
     case "gemini": {
       const adapterResult = await routeGeminiBrokerDecision({
         sessionId: input.sessionId,
@@ -403,6 +426,7 @@ export async function executeSponsorRuntimeAdapter(
       return { normalized, adapterResult };
     }
   }
+  throw new Error("Unsupported sponsor adapter " + input.sponsorId);
 }
 
 export function sampleSponsorEvents(now = new Date()): SponsorEventInput[] {
@@ -453,6 +477,15 @@ export function sampleSponsorEvents(now = new Date()): SponsorEventInput[] {
       event: "context_clustered",
       sessionId: "sponge-digest",
       summary: "Call, browser, email, and terminal signals were compressed into three bullets.",
+      risk: "low",
+      now,
+    },
+    {
+      sponsorId: "moss",
+      event: "tool_context_ready",
+      sessionId: "moss-tool-context",
+      summary: "Prepared tool scope for reservation, payment, email, memory, and display steps.",
+      target: "dinner_booking_tool",
       risk: "low",
       now,
     },
@@ -580,9 +613,12 @@ function endpointEnvForSponsor(id: SponsorId): string {
       return "BROWSER_USE_PERIPHERAL_ENDPOINT";
     case "sponge":
       return "SPONGE_PERIPHERAL_ENDPOINT";
+    case "moss":
+      return "MOSS_PERIPHERAL_ENDPOINT";
     case "gemini":
       return "GEMINI_PERIPHERAL_ENDPOINT";
   }
+  throw new Error("Unsupported sponsor adapter " + id);
 }
 
 function providerEndpointEnvForSponsor(id: SponsorId): string {
@@ -599,13 +635,39 @@ function providerEndpointEnvForSponsor(id: SponsorId): string {
       return "BROWSER_USE_API_URL";
     case "sponge":
       return "SPONGE_API_URL";
+    case "moss":
+      return "MOSS_API_URL";
     case "gemini":
       return "GEMINI_API_URL";
   }
+  throw new Error("Unsupported sponsor adapter " + id);
 }
 
 function realFlagForSponsor(id: SponsorId): string {
   return "real-" + id.replace(/_/g, "-");
+}
+
+function realDispatchCommandForSponsor(id: SponsorId): string[] {
+  const base = ["peripheralctl", "sponsor-runtime"];
+  switch (id) {
+    case "agentphone":
+      return [...base, "agentphone-call", "--" + realFlagForSponsor(id)];
+    case "stripe":
+      return [...base, "stripe-hold", "--" + realFlagForSponsor(id)];
+    case "supermemory":
+      return [...base, "supermemory-preference", "--" + realFlagForSponsor(id)];
+    case "agentmail":
+      return [...base, "agentmail-confirmation", "--" + realFlagForSponsor(id)];
+    case "browser_use":
+      return [...base, "browser-task", "--" + realFlagForSponsor(id)];
+    case "sponge":
+      return [...base, "sponge-context", "--" + realFlagForSponsor(id)];
+    case "moss":
+      return [...base, "moss-tool-context", "--" + realFlagForSponsor(id)];
+    case "gemini":
+      return [...base, "gemini-route", "--" + realFlagForSponsor(id)];
+  }
+  throw new Error("Unsupported sponsor adapter " + id);
 }
 
 function runtimeHeaders(id: SponsorId, env: Record<string, string | undefined>): Record<string, string> {
@@ -632,6 +694,8 @@ function credentialForSponsor(id: SponsorId, env: Record<string, string | undefi
       return env.BROWSER_USE_API_KEY;
     case "sponge":
       return env.SPONGE_API_KEY;
+    case "moss":
+      return env.MOSS_API_KEY;
     case "gemini":
       return env.GEMINI_API_KEY || env.GOOGLE_API_KEY;
   }
@@ -651,9 +715,12 @@ function defaultEventForSponsor(id: SponsorId): SponsorEventKind {
       return "browser_submit_requested";
     case "sponge":
       return "context_clustered";
+    case "moss":
+      return "tool_context_ready";
     case "gemini":
       return "route_decision";
   }
+  throw new Error("Unsupported sponsor adapter " + id);
 }
 
 function normalizedFromRoute(route: { event: AgentEvent; widget: PeripheralWidget; command: SurfaceCommand }): NormalizedSponsorEvent {
@@ -706,6 +773,8 @@ function capabilitiesForSponsor(id: SponsorId): AgentEvent["capabilities"] {
       return ["browser_session", "approval_gate", "hud_render"];
     case "agentphone":
       return ["agent_handoff", "voice_transcript", "hud_render"];
+    case "moss":
+      return ["tool_call", "approval_gate", "hud_render"];
     default:
       return ["tool_call", "live_status", "hud_render"];
   }
@@ -735,6 +804,9 @@ function titleForEvent(event: SponsorEventKind, sponsor: string): string {
     browser_submit_requested: "Submit Browser Action?",
     context_clustered: "Context Digest",
     redaction_warning: "Redaction Warning",
+    tool_context_ready: "Tool Context",
+    tool_permission_requested: "Run Tool?",
+    tool_result_ready: "Tool Result",
     broker_summary: "Broker Summary",
     route_decision: "Route Decision",
   };

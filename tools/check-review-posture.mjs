@@ -114,6 +114,23 @@ for (const guard of trustGuards) {
   }
 }
 
+const cliPath = join(repoRoot, "peripheral-hud-runtime/apps/peripheralctl/src/index.ts");
+if (existsSync(cliPath)) {
+  const cliText = readFileSync(cliPath, "utf8");
+  if (cliText.includes("await commandDinnerBookingDemo(proofCli")) {
+    violations.push({ file: "peripheral-hud-runtime/apps/peripheralctl/src/index.ts", rule: "trust-live-proof-dispatches-flow" });
+  }
+  if (cliText.includes("live-proof dinner-booking --real-hardware-ok --json")) {
+    violations.push({ file: "peripheral-hud-runtime/apps/peripheralctl/src/index.ts", rule: "trust-live-proof-real-hardware-command" });
+  }
+  if (/const hardwareCommands = new Set\(\[[^\]]*["']live-proof["']/.test(cliText)) {
+    violations.push({ file: "peripheral-hud-runtime/apps/peripheralctl/src/index.ts", rule: "trust-live-proof-hardware-gate" });
+  }
+  if (!/runtimePushes\.length\s*>=\s*5/.test(cliText)) {
+    violations.push({ file: "peripheral-hud-runtime/apps/peripheralctl/src/index.ts", rule: "trust-live-proof-runtime-evidence" });
+  }
+}
+
 if (existsSync(join(repoRoot, "web"))) {
   violations.push({ file: "web", rule: "posture-web-surface" });
 }

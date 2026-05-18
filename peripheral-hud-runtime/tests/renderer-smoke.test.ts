@@ -23,7 +23,7 @@ import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesEv
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneApprovalPolicy, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, evaluateApprovalDecision, requiredConfirmationForRisk, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
-import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeBrowserUseEvent, normalizeGeminiRoute, normalizeSponsorEvent, routeGeminiBrokerDecision, routeWithGemini, runAgentPhoneDinnerBooking, runBrowserUseTask, saveDinnerPreference, sendAgentMailConfirmation, submitSpongeContext } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, invokeMossToolContext, normalizeAgentPhoneEvent, normalizeBrowserUseEvent, normalizeGeminiRoute, normalizeSponsorEvent, routeGeminiBrokerDecision, routeWithGemini, runAgentPhoneDinnerBooking, runBrowserUseTask, saveDinnerPreference, sendAgentMailConfirmation, submitSpongeContext } from "../packages/peripheral-sponsor-kit/src/index.js";
 import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
@@ -75,7 +75,7 @@ assert.equal(inputEnvelope.kind, "input_event");
 assert.equal(inputEnvelope.payload.kind, "voice_text");
 
 const integrationSummary = buildIntegrationSummary();
-assert.equal(integrationSummary.counts.sponsorCount, 7);
+assert.equal(integrationSummary.counts.sponsorCount, 8);
 assert.equal(integrationSummary.counts.agentCliCount, 6);
 assert.equal(integrationSummary.sponsors.find((sponsor) => sponsor.id === "stripe")?.surfaces.length, 3);
 assert.equal(integrationSummary.agentClis.find((agent) => agent.id === "codex_cli")?.command, "codex");
@@ -117,18 +117,18 @@ assert.equal(hardwareProfile.optics.waveguide, "binocular");
 assert.equal(hardwareProfile.battery.expectedHours, "12-24");
 assert.ok(hardwareProfile.runtimeBoundaries.some((item) => item.includes("semantic UI")));
 const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
-assert.equal(emptySupport.totals.integrations, 13);
+assert.equal(emptySupport.totals.integrations, 14);
 assert.equal(emptySupport.totals.configured, 0);
 assert.equal(emptySupport.totals.connected, 0);
-assert.equal(emptySupport.totals.supported, 13);
-assert.equal(emptySupport.totals.liveReady, 13);
+assert.equal(emptySupport.totals.supported, 14);
+assert.equal(emptySupport.totals.liveReady, 14);
 assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
 const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
-assert.equal(support.totals.integrations, 13);
+assert.equal(support.totals.integrations, 14);
 assert.equal(support.totals.configured, 1);
 assert.equal(support.totals.connected, 1);
-assert.equal(support.totals.supported, 13);
-assert.equal(support.totals.liveReady, 13);
+assert.equal(support.totals.supported, 14);
+assert.equal(support.totals.liveReady, 14);
 assert.equal(support.totals.operations > 30, true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialNames.includes("STRIPE_SECRET_KEY"), true);
 assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialState, "configured");
@@ -138,12 +138,12 @@ assert.equal(support.note.includes("configuredCredentialNames lists values obser
 const allCredentialEnv = Object.fromEntries(
   [...new Set([...integrationSummary.sponsors.flatMap((sponsor) => sponsor.env), ...integrationSummary.agentClis.flatMap((agent) => agent.env)])].map((name) => [name, "set"]),
 );
-assert.equal(buildIntegrationSupportReport(allCredentialEnv, new Date("2026-05-17T00:00:00Z")).totals.configured, 13);
-assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 13);
+assert.equal(buildIntegrationSupportReport(allCredentialEnv, new Date("2026-05-17T00:00:00Z")).totals.configured, 14);
+assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe" }, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 14);
 const liveAdapters = buildLiveAdapterCatalog(new Date("2026-05-17T00:00:00Z"));
-assert.equal(liveAdapters.totals.adapters, 13);
+assert.equal(liveAdapters.totals.adapters, 14);
 assert.equal(liveAdapters.totals.operationCataloged, liveAdapters.totals.operations);
-assert.equal(liveAdapters.totals.liveReady, 13);
+assert.equal(liveAdapters.totals.liveReady, 14);
 assert.equal(liveAdapters.adapters.find((adapter) => adapter.id === "stripe")?.operations.some((operation) => operation.id === "stripe.payment_intents.create"), true);
 const manifest = buildPeripheralMcpManifest(new Date("2026-05-17T00:00:00Z"));
 assert.ok(manifest.tools.some((tool) => tool.name === "peripheral.request_approval"));
@@ -431,7 +431,7 @@ const detailsDecision = evaluateApprovalDecision({
 assert.equal(detailsDecision.accepted, true);
 assert.equal(detailsDecision.nextAction, "show_details");
 const sponsorWorkflows = buildSponsorWorkflows();
-assert.equal(sponsorWorkflows.length, 7);
+assert.equal(sponsorWorkflows.length, 8);
 assert.equal(workflowForSponsor("stripe").steps.some((step) => step.approvalRequired), true);
 assert.throws(() => workflowForSponsor("not-a-sponsor"), /Unknown sponsor workflow/);
 assert.equal(workflowForSponsor("supermemory").steps.some((step) => step.event === "memory_save_requested"), true);
@@ -443,7 +443,7 @@ for (const widget of buildSponsorWorkflowWidgets(new Date("2026-05-17T00:00:00Z"
   assertWidget(widget);
 }
 const sponsorEvents = buildSponsorEventDossier(new Date("2026-05-17T00:00:00Z"));
-assert.equal(sponsorEvents.events.length, 7);
+assert.equal(sponsorEvents.events.length, 8);
 assert.equal(sponsorEvents.events.some((event) => event.command.decision_required), true);
 const redactionWarning = normalizeSponsorEvent({
   sponsorId: "sponge",
@@ -472,7 +472,7 @@ const sponsorRuntimeAdapters = buildSponsorRuntimeAdapters({
   STRIPE_SECRET_KEY: "set",
   STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe",
 });
-assert.equal(sponsorRuntimeAdapters.length, 7);
+assert.equal(sponsorRuntimeAdapters.length, 8);
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.status, "live_ready");
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "agentmail")?.status, "live_ready");
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.endpointConfigured, true);
@@ -486,6 +486,7 @@ const agentMailRuntimeAdapter = buildSponsorRuntimeAdapters({
 assert.equal(agentMailRuntimeAdapter?.configuredCredentials.includes("AGENTMAIL_API_KEY"), true);
 assert.equal(agentMailRuntimeAdapter?.providerEndpointEnv, "AGENTMAIL_API_URL");
 assert.equal(agentMailRuntimeAdapter?.providerEndpointConfigured, true);
+assert.equal(agentMailRuntimeAdapter?.realDispatchCommand.includes("agentmail-confirmation"), true);
 assert.equal(agentMailRuntimeAdapter?.realDispatchCommand.includes("--real-agentmail"), true);
 const supermemoryRuntimeAdapter = buildSponsorRuntimeAdapters({
   SUPERMEMORY_API_KEY: "set",
@@ -494,6 +495,7 @@ const supermemoryRuntimeAdapter = buildSponsorRuntimeAdapters({
 assert.equal(supermemoryRuntimeAdapter?.configuredCredentials.includes("SUPERMEMORY_API_KEY"), true);
 assert.equal(supermemoryRuntimeAdapter?.providerEndpointEnv, "SUPERMEMORY_API_URL");
 assert.equal(supermemoryRuntimeAdapter?.providerEndpointConfigured, true);
+assert.equal(supermemoryRuntimeAdapter?.realDispatchCommand.includes("supermemory-preference"), true);
 assert.equal(supermemoryRuntimeAdapter?.realDispatchCommand.includes("--real-supermemory"), true);
 const sponsorRuntimeRequest = buildSponsorRuntimeRequest({
   sponsorId: "stripe",
@@ -743,6 +745,50 @@ const spongeReal = await submitSpongeContext({
 });
 assert.equal(spongeReal.mode, "real");
 assert.equal(spongeReal.endpoint, "https://example.invalid/sponge/context");
+const mossContext = await invokeMossToolContext({
+  sessionId: "moss-tool-context",
+  toolName: "dinner_booking_checkout",
+  instruction: "Prepare checkout context before Stripe approval.",
+  contextText: "Sponge will compress this context for the glasses.",
+  workspaceId: "peripheral-score",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(mossContext.mode, "phone_gateway");
+assert.equal(mossContext.requestBody.schema, "peripheral-moss-tool-context-v1");
+assert.equal(mossContext.requestBody.workspace_id, "peripheral-score");
+const mossReal = await invokeMossToolContext({
+  sessionId: "moss-tool-context",
+  toolName: "dinner_booking_checkout",
+  instruction: "Prepare checkout context before Stripe approval.",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  forceReal: true,
+  env: { MOSS_API_KEY: "set", MOSS_API_URL: "https://example.invalid/moss" },
+  fetchImpl: sponsorOkFetch,
+});
+assert.equal(mossReal.mode, "real");
+assert.equal(mossReal.endpoint, "https://example.invalid/moss/tools/context");
+const mossSpongeStripeRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "moss-sponge-stripe",
+  "--hold-amount",
+  "25.00",
+  "--currency",
+  "usd",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(mossSpongeStripeRun.status, 0, mossSpongeStripeRun.stderr);
+const mossSpongeStripeResult = JSON.parse(mossSpongeStripeRun.stdout.slice(mossSpongeStripeRun.stdout.indexOf("{"))) as { ok: boolean; moss: { requestBody: { schema: string } }; sponge: { requestBody: { schema: string } }; stripe: { requestBody: { amount: number } }; commands: Array<{ decision_required?: boolean }> };
+assert.equal(mossSpongeStripeResult.ok, true);
+assert.equal(mossSpongeStripeResult.moss.requestBody.schema, "peripheral-moss-tool-context-v1");
+assert.equal(mossSpongeStripeResult.sponge.requestBody.schema, "peripheral-sponge-context-v1");
+assert.equal(mossSpongeStripeResult.stripe.requestBody.amount, 2500);
+assert.equal(mossSpongeStripeResult.commands.some((command) => command.decision_required === true), true);
 const geminiRoute = await routeGeminiBrokerDecision({
   sessionId: "gemini-route",
   prompt: "Route this progress update to the best glasses surface.",
@@ -902,8 +948,8 @@ const agentMailRunResult = JSON.parse(agentMailRun.stdout.slice(agentMailRun.std
 assert.equal(agentMailRunResult.mode, "phone_gateway");
 assert.equal(agentMailRunResult.agentMail.requestBody.schema, "peripheral-agentmail-confirmation-v1");
 assert.equal(agentMailRunResult.agentMail.requestBody.to, "wearer@example.invalid");
-assert.equal(agentMailRunResult.command.surface, "glance");
-assert.equal(agentMailRunResult.command.decision_required, false);
+assert.equal(agentMailRunResult.command.surface, "fullscreen");
+assert.equal(agentMailRunResult.command.decision_required, true);
 const supermemoryLocal = await saveDinnerPreference({
   sessionId: "dinner-preference",
   wearerName: "Karim",
@@ -948,8 +994,8 @@ const supermemoryRunResult = JSON.parse(supermemoryRun.stdout.slice(supermemoryR
 assert.equal(supermemoryRunResult.mode, "phone_gateway");
 assert.equal(supermemoryRunResult.supermemory.requestBody.schema, "peripheral-supermemory-save-v1");
 assert.equal(supermemoryRunResult.supermemory.requestBody.container, "dinner-preferences");
-assert.equal(supermemoryRunResult.command.surface, "tiny_hud");
-assert.equal(supermemoryRunResult.command.decision_required, false);
+assert.equal(supermemoryRunResult.command.surface, "fullscreen");
+assert.equal(supermemoryRunResult.command.decision_required, true);
 const followupPackRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "sponsor-runtime",
@@ -1043,12 +1089,12 @@ const sponsorEvidencePackRun = spawnSync(process.execPath, [
 assert.equal(sponsorEvidencePackRun.status, 0, sponsorEvidencePackRun.stderr);
 const sponsorEvidencePackResult = JSON.parse(sponsorEvidencePackRun.stdout.slice(sponsorEvidencePackRun.stdout.indexOf("{"))) as { pack: { schema: string; sponsors: string[]; commands: unknown[]; dispatches: Array<{ request: { endpointConfigured: boolean; headers: Record<string, string> } }> }; artifacts: unknown[]; frameDir: string; packPath: string };
 assert.equal(sponsorEvidencePackResult.pack.schema, "peripheral-sponsor-runtime-evidence-pack-v1");
-assert.equal(sponsorEvidencePackResult.pack.sponsors.length, 7);
+assert.equal(sponsorEvidencePackResult.pack.sponsors.length, 8);
 assert.equal(sponsorEvidencePackResult.pack.sponsors.includes("browser_use"), true);
-assert.equal(sponsorEvidencePackResult.pack.commands.length, 7);
+assert.equal(sponsorEvidencePackResult.pack.commands.length, 8);
 assert.equal(sponsorEvidencePackResult.pack.dispatches.every((item) => item.request.endpointConfigured === true), true);
 assert.equal(sponsorEvidencePackResult.pack.dispatches.every((item) => item.request.headers.authorization === "Bearer [configured]"), true);
-assert.equal(sponsorEvidencePackResult.artifacts.length, 7);
+assert.equal(sponsorEvidencePackResult.artifacts.length, 8);
 assert.ok(existsSync(sponsorEvidencePackResult.frameDir));
 assert.ok(existsSync(sponsorEvidencePackResult.packPath));
 const dinnerDemoRun = spawnSync(process.execPath, [
@@ -1159,13 +1205,13 @@ assert.equal(reviewBundle.runtime.liveProof.services.agentphone.mode, "phone_gat
 assert.equal(reviewBundle.runtime.liveProof.services.agentphone.credentialNames.includes("AGENTPHONE_API_KEY"), true);
 assert.equal(reviewBundle.runtime.liveProof.glassesTransport.runtimeFramePushes >= 5, true);
 assert.equal(reviewBundle.runtime.liveProof.glassesTransport.realFramePushes, 0);
-assert.equal(reviewBundle.runtime.liveProof.glassesTransport.command.includes("--real-hardware-ok"), true);
-assert.equal(reviewBundle.runtime.adapterCoverage.integrations, 13);
-assert.equal(reviewBundle.runtime.adapterCoverage.supported, 13);
-assert.equal(reviewBundle.runtime.adapterCoverage.credentialNames, 21);
-assert.equal(reviewBundle.runtime.adapterCoverage.liveReady, 13);
-assert.equal(reviewBundle.runtime.adapterCoverage.operationCataloged, 48);
-assert.equal(reviewBundle.runtime.adapterCoverage.sponsorAdapters, 7);
+assert.equal(reviewBundle.runtime.liveProof.glassesTransport.command.includes("--real-hardware-ok"), false);
+assert.equal(reviewBundle.runtime.adapterCoverage.integrations, 14);
+assert.equal(reviewBundle.runtime.adapterCoverage.supported, 14);
+assert.equal(reviewBundle.runtime.adapterCoverage.credentialNames, 23);
+assert.equal(reviewBundle.runtime.adapterCoverage.liveReady, 14);
+assert.equal(reviewBundle.runtime.adapterCoverage.operationCataloged, 51);
+assert.equal(reviewBundle.runtime.adapterCoverage.sponsorAdapters, 8);
 assert.equal(reviewBundle.runtime.adapterCoverage.agentCliAdapters, 6);
 assert.equal(reviewBundle.runtime.adapterCoverage.sponsorIds.includes("agentphone"), true);
 assert.equal(reviewBundle.runtime.adapterCoverage.agentCliIds.includes("codex_cli"), true);
@@ -1178,7 +1224,7 @@ assert.equal(reviewBundle.runtime.agentBridge.decisionRequired, true);
 assert.equal(reviewBundle.runtime.agentBridge.phoneDecision.accepted, true);
 assert.ok(reviewBundle.runtime.agentBridge.phoneDecision.focusedCardId);
 assert.equal(reviewBundle.artifacts.frameCount >= 5, true);
-assert.equal(reviewBundle.artifacts.sponsorEvidence.frameCount, 7);
+assert.equal(reviewBundle.artifacts.sponsorEvidence.frameCount, 8);
 assert.equal(reviewBundle.artifacts.sponsorEvidence.pack.exists, true);
 assert.equal(reviewBundle.artifacts.video.exists, true);
 assert.equal(typeof reviewBundle.artifacts.video.sha256, "string");

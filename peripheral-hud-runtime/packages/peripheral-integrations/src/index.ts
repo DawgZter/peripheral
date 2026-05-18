@@ -280,6 +280,7 @@ export const SPONSOR_IDS = [
   "agentmail",
   "browser_use",
   "sponge",
+  "moss",
   "gemini",
 ] as const;
 
@@ -409,6 +410,24 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     notes: [
       "Sponge serves as the compression stage before long-lived memory or display.",
       "The checked-in adapter provides deterministic broker surfaces and credential-aware runtime handoff.",
+    ],
+  },
+  {
+    id: "moss",
+    name: "Moss",
+    role: "Agent tool-context plane for shaping live tool calls before they hit memory, payments, or browser automation.",
+    docs: "https://docs.moss.ai/",
+    env: ["MOSS_API_KEY", "MOSS_WORKSPACE_ID"],
+    status: "supported",
+    agentEvents: ["tool_context_ready", "tool_permission_requested", "tool_result_ready"],
+    surfaces: [
+      capability("moss.tool_context", "Tool context", "Shows the compact instruction and tool scope an agent is about to use.", "glance", "low"),
+      capability("moss.permission", "Tool permission", "Gates sensitive tool execution through a focused approval card.", "fullscreen", "medium"),
+      capability("moss.result", "Tool result", "Summarizes the returned tool evidence for follow-up agents.", "glance", "low"),
+    ],
+    notes: [
+      "Moss prepares tool context before Sponge condenses it for display and Supermemory persistence.",
+      "Sensitive tool permission requests become approval cards owned by the phone runtime.",
     ],
   },
   {
@@ -563,7 +582,7 @@ export function buildPeripheralMcpManifest(now = new Date()): PeripheralMcpManif
       },
       {
         uri: "peripheral://integrations/sponsors",
-        description: "Sponsor adapter capabilities and event names for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, and Gemini.",
+        description: "Sponsor adapter capabilities and event names for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, Moss, and Gemini.",
       },
       {
         uri: "peripheral://integrations/agent-clis",
@@ -608,7 +627,7 @@ export function buildSponsorMatrixWidget(now = new Date()): PeripheralWidget {
     id: "sponsor-matrix",
     type: "table",
     title: "Sponsor Stack",
-    status: "7 ADAPTERS",
+    status: "8 ADAPTERS",
     columns: ["Sponsor", "Surface", "State"],
     rows: sponsorIntegrations.map((item) => ({
       Sponsor: item.name,
@@ -649,7 +668,7 @@ export function buildAgentCockpitWidget(now = new Date()): PeripheralWidget {
       { label: "Phone owns BLE and renderer", checked: true, status: "current_stage" },
       { label: "Mac broker accepts MCP-style events", checked: true, status: "agent_mode" },
       { label: "Surface lease arbiter active", checked: true, status: "ready" },
-      { label: "Sponsor adapters mapped", checked: true, status: "7" },
+      { label: "Sponsor adapters mapped", checked: true, status: "8" },
       { label: "Agent CLI adapters mapped", checked: true, status: "6" },
       { label: "Display command policy active", checked: true, status: "safe" },
     ],
@@ -922,6 +941,8 @@ function sponsorEndpoint(id: SponsorId): LiveAdapter["endpoint"] {
       return { baseUrl: "https://api.browser-use.com/v1", auth: "bearer" };
     case "sponge":
       return { baseUrl: "https://api.sponge.ai/v1", auth: "api_key_header" };
+    case "moss":
+      return { baseUrl: "https://api.moss.ai/v1", auth: "bearer" };
     case "gemini":
       return { baseUrl: "https://generativelanguage.googleapis.com/v1beta", auth: "google_api_key" };
   }
@@ -941,6 +962,8 @@ function endpointEnvForSponsor(id: SponsorId): string {
       return "BROWSER_USE_PERIPHERAL_ENDPOINT";
     case "sponge":
       return "SPONGE_PERIPHERAL_ENDPOINT";
+    case "moss":
+      return "MOSS_PERIPHERAL_ENDPOINT";
     case "gemini":
       return "GEMINI_PERIPHERAL_ENDPOINT";
   }
@@ -986,6 +1009,12 @@ function sponsorOperations(item: SponsorIntegration): LiveAdapterOperation[] {
         adapterOperation("sponge.context.absorb", "Absorb context", "POST", "/contexts", "context_absorbed", "glance", "low", "ambient"),
         adapterOperation("sponge.context.cluster", "Cluster signals", "POST", "/contexts/{context_id}/clusters", "context_clustered", "glance", "low", "ambient"),
         adapterOperation("sponge.summaries.create", "Create context summary", "POST", "/summaries", "summary_ready", "glance", "low", "ambient"),
+      ];
+    case "moss":
+      return [
+        adapterOperation("moss.tools.context", "Prepare tool context", "POST", "/tools/context", "tool_context_ready", "glance", "low", "ambient"),
+        adapterOperation("moss.tools.permission", "Request tool permission", "POST", "/tools/permissions", "tool_permission_requested", "fullscreen", "medium", "voice_and_tap"),
+        adapterOperation("moss.tools.result", "Store tool result", "POST", "/tools/results", "tool_result_ready", "glance", "low", "ambient"),
       ];
     case "gemini":
       return [
