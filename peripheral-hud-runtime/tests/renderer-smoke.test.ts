@@ -345,6 +345,41 @@ const approvalCommand = approvalSurfaceCommand({
 const appliedApproval = applySurfaceCommand(phoneRuntime, approvalCommand, new Date("2026-05-17T00:00:01Z"));
 assert.equal(appliedApproval.accepted, true);
 assert.equal(appliedApproval.state.focusedCardId, "approval-test");
+const blockingSystemLease = {
+  ...phoneRuntime.activeLease,
+  id: "lease-system-alert",
+  owner: "system",
+  priority: "urgent",
+  surface: "fullscreen",
+  mode: "system",
+  interruptible: true,
+  reason: "System alert owns fullscreen.",
+  created_at: "2026-05-17T00:00:01Z",
+} satisfies typeof phoneRuntime.activeLease;
+const queuedBehindSystem = applySurfaceCommand({
+  ...phoneRuntime,
+  activeLease: blockingSystemLease,
+}, approvalCommand, new Date("2026-05-17T00:00:02Z"));
+assert.equal(queuedBehindSystem.accepted, false);
+assert.equal(queuedBehindSystem.state.queue.length, 1);
+assert.equal(queuedBehindSystem.state.queue[0]?.surface, "tiny_hud");
+assert.equal(queuedBehindSystem.state.queue[0]?.lease?.surface, "fullscreen");
+const clearedSystemFullscreen = applySurfaceCommand(queuedBehindSystem.state, {
+  kind: "clear_surface",
+  id: "command-system-clear",
+  mode: "system",
+  surface: "fullscreen",
+  lease: {
+    ...blockingSystemLease,
+    id: "lease-system-clear",
+    reason: "System cleared fullscreen after alert.",
+    created_at: "2026-05-17T00:00:03Z",
+  },
+  reason: "System cleared fullscreen after alert.",
+  created_at: "2026-05-17T00:00:03Z",
+} satisfies Parameters<typeof applySurfaceCommand>[1], new Date("2026-05-17T00:00:03Z"));
+assert.equal(clearedSystemFullscreen.accepted, true);
+assert.equal(clearedSystemFullscreen.state.queue.length, 0);
 assert.equal(routeInputEvent(appliedApproval.state, {
   kind: "voice_text",
   id: "voice-approve",

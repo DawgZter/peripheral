@@ -422,7 +422,7 @@ function enqueueCommand(queue: SurfaceCommand[], command: SurfaceCommand): Surfa
 }
 
 function drainQueue(queue: SurfaceCommand[], surface: SurfaceKind): SurfaceCommand[] {
-  return queue.filter((item) => item.surface !== surface);
+  return queue.filter((item) => item.surface !== surface && item.lease?.surface !== surface);
 }
 
 function namedAgent(text: string): string | undefined {
