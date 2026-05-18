@@ -73,6 +73,7 @@ The support and live-adapter reports expose 13 supported integrations, 13 live-r
 | CLI transcript normalization | `peripheral-hud-runtime/packages/peripheral-agent-bridge/src/index.ts` |
 | Agent CLI runtime plan | `peripheralctl agent-bridge runtime-plan --agent codex_cli --session-id codex-check --json` |
 | Agent CLI executable route | `peripheralctl agent-bridge launch --agent codex_cli --session-id codex-check --task "Run checks" --json` |
+| Agent CLI glasses frames | `peripheralctl agent-bridge session-pack --session-prefix reviewer --json` |
 | Smoke coverage | `peripheral-hud-runtime/tests/renderer-smoke.test.ts` |
 
 ## Safety Boundary

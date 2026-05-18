@@ -50,11 +50,50 @@ export type AgentBridgeTranscript = {
   widgets: PeripheralWidget[];
 };
 
+export type AgentBridgeSessionPack = {
+  schema: "peripheral-agent-bridge-session-pack-v1";
+  generatedAt: string;
+  sessionPrefix: string;
+  phoneGateway: AgentBridgePhoneGatewayPlan;
+  agents: AgentBridgeSessionPackAgent[];
+  approvals: Array<{
+    agentId: AgentCliId;
+    eventId: string;
+    surface: SurfaceKind;
+    commandId: string;
+  }>;
+};
+
+export type AgentBridgeSessionPackAgent = {
+  id: AgentCliId;
+  name: string;
+  command: string;
+  sessionId: string;
+  transcriptLine: string;
+  event: AgentEvent;
+  widget: PeripheralWidget;
+  commandSurface: SurfaceCommand;
+  runtime: {
+    start: string[];
+    route: string[];
+    approvalTransport: AgentRuntimeAdapterPlan["approvals"]["transport"];
+    surfaces: SurfaceKind[];
+    focusedApprovalWinsInput: true;
+  };
+};
+
 export type AgentBridgeSurfaceRoute = {
   schema: "peripheral-agent-bridge-surface-route-v1";
   event: AgentEvent;
   widget: PeripheralWidget;
   command: SurfaceCommand;
+};
+
+export type AgentBridgePhoneGatewayPlan = {
+  route: "agent_stdout_to_surface_command";
+  surfaceOwner: "phone_runtime";
+  displayPolicy: "lease_arbiter_required";
+  transport: "semantic_surface_commands";
 };
 
 export type AgentLaunchSpec = {
@@ -104,12 +143,7 @@ export type AgentBridgeLaunchCommandInput = {
 export type AgentRuntimePlan = {
   schema: "peripheral-agent-runtime-plan-v1";
   generatedAt: string;
-  phoneGateway: {
-    route: "agent_stdout_to_surface_command";
-    surfaceOwner: "phone_runtime";
-    displayPolicy: "lease_arbiter_required";
-    transport: "semantic_surface_commands";
-  };
+  phoneGateway: AgentBridgePhoneGatewayPlan;
   agents: AgentRuntimeAdapterPlan[];
   guarantees: string[];
 };
@@ -723,6 +757,54 @@ export function buildAgentBridgeTranscript(now = new Date()): AgentBridgeTranscr
   };
 }
 
+export function buildAgentBridgeSessionPack(now = new Date(), sessionPrefix = "review"): AgentBridgeSessionPack {
+  const runtime = buildAgentRuntimePlan(now, undefined, sessionPrefix);
+  const agents: AgentBridgeSessionPackAgent[] = agentCliIntegrations.map((agent, index) => {
+    const sessionId = sessionPrefix + "-" + agent.id.replace(/_/g, "-");
+    const transcriptLine = sessionPackLine(agent.id);
+    const route = routeAgentBridgeLine({
+      agentId: agent.id,
+      sessionId,
+      sequence: index + 1,
+      line: transcriptLine,
+      now,
+    });
+    const runtimePlan = runtime.agents.find((item) => item.id === agent.id) || runtimePlanForAgent(agent, sessionPrefix);
+    return {
+      id: agent.id,
+      name: agent.name,
+      command: agent.command,
+      sessionId,
+      transcriptLine,
+      event: route.event,
+      widget: route.widget,
+      commandSurface: route.command,
+      runtime: {
+        start: runtimePlan.operatorCommands.start,
+        route: runtimePlan.operatorCommands.route,
+        approvalTransport: runtimePlan.approvals.transport,
+        surfaces: runtimePlan.glasses.surfaces,
+        focusedApprovalWinsInput: runtimePlan.glasses.focusedApprovalWinsInput,
+      },
+    };
+  });
+  return {
+    schema: "peripheral-agent-bridge-session-pack-v1",
+    generatedAt: now.toISOString(),
+    sessionPrefix,
+    phoneGateway: runtime.phoneGateway,
+    agents,
+    approvals: agents
+      .filter((agent) => agent.commandSurface.decision_required)
+      .map((agent) => ({
+        agentId: agent.id,
+        eventId: agent.event.id,
+        surface: agent.commandSurface.surface,
+        commandId: agent.commandSurface.id,
+      })),
+  };
+}
+
 export function buildAgentBridgeDossier(now = new Date()): Record<string, unknown> {
   const transcript = buildAgentBridgeTranscript(now);
   return {
@@ -731,6 +813,7 @@ export function buildAgentBridgeDossier(now = new Date()): Record<string, unknow
     adapters: buildAgentBridgeAdapters(),
     launchSpecs: buildAgentLaunchSpecs(),
     runtimePlan: buildAgentRuntimePlan(now),
+    sessionPack: buildAgentBridgeSessionPack(now),
     transcript,
     routing: [
       "Focused approval card receives approve/deny/details first.",
@@ -745,6 +828,23 @@ export function buildAgentBridgeDossier(now = new Date()): Record<string, unknow
       "Launch commands run as local CLI processes and still route through phone-owned surface policy.",
     ],
   };
+}
+
+function sessionPackLine(agentId: AgentCliId): string {
+  switch (agentId) {
+    case "openclaw":
+      return "OpenClaw started the workspace task and is streaming progress.";
+    case "claude_code":
+      return "Claude Code requests permission to edit the renderer files.";
+    case "pi":
+      return "Pi is stuck waiting for a short wearer response.";
+    case "opencode":
+      return "OpenCode is waiting on user input before apply.";
+    case "gemini_cli":
+      return "Gemini completed the broker summary for the current session.";
+    case "codex_cli":
+      return "Codex is 40% through the checks and still running.";
+  }
 }
 
 function runtimePlanForAgent(agent: (typeof agentCliIntegrations)[number], sessionId: string): AgentRuntimeAdapterPlan {

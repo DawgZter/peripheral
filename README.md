@@ -18,6 +18,7 @@ npm run check
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge session-pack --session-prefix reviewer --json
 ```
 
 `review-bundle` is the quickest judge-facing JSON: it checks the rendered frames, timeline, log, and MP4, then embeds the connected-state, phone-runtime, and agent-bridge route summaries for operator-driven glasses access.
@@ -27,6 +28,8 @@ Artifacts:
 - `peripheral-hud-runtime/out/frames/dinner-booking/`
 - `peripheral-hud-runtime/out/demo/dinner-booking-timeline.json`
 - `peripheral-hud-runtime/out/logs/dinner-booking.jsonl`
+- `peripheral-hud-runtime/out/frames/agent-bridge-session/`
+- `peripheral-hud-runtime/out/agent-bridge/session-pack.json`
 - `docs/media/peripheral-demo-dinner-booking.mp4`
 
 Use manual approval mode when you want the run to stop at the card:

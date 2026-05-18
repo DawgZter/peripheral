@@ -18,7 +18,7 @@ import {
   assertWidget,
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
-import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeLaunchCommand, buildAgentBridgeRuntimeHandshake, buildAgentBridgeTranscript, buildAgentLaunchSpecs, buildAgentRuntimePlan, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, runAgentCliLaunch, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
+import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeLaunchCommand, buildAgentBridgeRuntimeHandshake, buildAgentBridgeSessionPack, buildAgentBridgeTranscript, buildAgentLaunchSpecs, buildAgentRuntimePlan, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, runAgentCliLaunch, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
 import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesEvidence, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralHardwareProfile, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
@@ -283,6 +283,17 @@ assert.match(readFileSync(agentLaunchLog, "utf8"), /agent-bridge\.launch\.route/
 rmSync(agentLaunchLogDir, { recursive: true, force: true });
 assert.equal(buildAgentBridgeTranscript(new Date("2026-05-17T00:00:00Z")).events.length, 6);
 assert.equal((buildAgentBridgeDossier(new Date("2026-05-17T00:00:00Z")).routing as string[])[0].includes("Focused approval"), true);
+const sessionPack = buildAgentBridgeSessionPack(new Date("2026-05-17T00:00:00Z"), "reviewer");
+assert.equal(sessionPack.schema, "peripheral-agent-bridge-session-pack-v1");
+assert.equal(sessionPack.agents.length, 6);
+assert.equal(sessionPack.phoneGateway.route, "agent_stdout_to_surface_command");
+assert.equal(sessionPack.agents.some((agent) => agent.id === "claude_code" && agent.commandSurface.decision_required === true), true);
+assert.equal(sessionPack.approvals.length >= 1, true);
+for (const agent of sessionPack.agents) {
+  assertWidget(agent.widget);
+  assert.equal(agent.runtime.focusedApprovalWinsInput, true);
+  assert.equal(agent.event.metadata?.adapter_id, agent.id);
+}
 for (const item of [
   { agentId: "openclaw", line: "OpenClaw started the workspace task.", kind: "session_started", surface: "glance", commandKind: "show_widget" },
   { agentId: "claude_code", line: "Claude Code requests permission to edit files.", kind: "approval_required", surface: "fullscreen", commandKind: "show_card" },
@@ -304,6 +315,24 @@ for (const item of [
   assert.equal(route.command.kind, item.commandKind);
   assertWidget(route.widget);
 }
+const sessionPackRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "agent-bridge",
+  "session-pack",
+  "--session-prefix",
+  "reviewer",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(sessionPackRun.status, 0, sessionPackRun.stderr);
+const sessionPackResult = JSON.parse(sessionPackRun.stdout.slice(sessionPackRun.stdout.indexOf("{"))) as { sessionPack: { agents: unknown[]; approvals: unknown[] }; frameDir: string; packPath: string };
+assert.equal(sessionPackResult.sessionPack.agents.length, 6);
+assert.equal(sessionPackResult.sessionPack.approvals.length >= 1, true);
+assert.ok(existsSync(sessionPackResult.frameDir));
+assert.ok(existsSync(sessionPackResult.packPath));
 const phoneRuntime = createPhoneSurfaceRuntime(new Date("2026-05-17T00:00:00Z"));
 const approvalCommand = approvalSurfaceCommand({
   id: "approval-test",

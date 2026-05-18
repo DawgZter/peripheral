@@ -44,6 +44,7 @@ Adapters normalize CLI output into `AgentEvent` objects. The glasses see a compa
 - `runtime-plan` returns per-agent launch commands, stdout/stderr routing, transcript audit path, phone-gateway surface routing, and approval return commands.
 - `launch --agent <id> --task <text>` creates the runtime launch envelope; add `--execute` to run a process and route stdout/stderr lines into glasses surfaces.
 - `transcript` emits one sample event per supported CLI.
+- `session-pack` renders all six CLI adapters into glasses frames and writes a JSON audit pack for review.
 - `event --agent <id> --line <text>` normalizes one bounded CLI line into an `AgentEvent` plus widget.
 - `route --agent <id> --line <text>` adds the phone-owned `SurfaceCommand` and lease decision that would place the card or status surface on the glasses.
 - `widget --agent <id> --line <text>` renders that widget into `out/frames/agent-bridge/`.
@@ -121,6 +122,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge dossier --
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge launch-specs --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge runtime-plan --agent codex_cli --session-id codex-check --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge launch --agent codex_cli --session-id codex-check --task "Run the repo checks" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge session-pack --session-prefix reviewer --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge event --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge widget --agent opencode --line "OpenCode is waiting on user input"

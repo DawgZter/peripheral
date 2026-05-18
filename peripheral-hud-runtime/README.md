@@ -35,6 +35,7 @@ npm run peripheralctl -- integrations sponsor-events --json
 npm run peripheralctl -- agent-bridge launch-specs --json
 npm run peripheralctl -- agent-bridge runtime-plan --agent codex_cli --session-id codex-check --json
 npm run peripheralctl -- agent-bridge launch --agent codex_cli --session-id codex-check --task "Run the repo checks" --json
+npm run peripheralctl -- agent-bridge session-pack --session-prefix reviewer --json
 npm run peripheralctl -- agent-bridge event --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- agent-bridge route --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
@@ -101,6 +102,7 @@ Works now in runtime mode:
 - peripheralctl integrations exposes the sponsor matrix, agent CLI matrix, adapter operation catalog, support report, MCP manifest, phone runtime snapshot, broker timeline, glasses runtime state, and public dossier
 - peripheralctl integrations sponsor-events normalizes sponsor events into AgentEvent objects, HUD widgets, and phone-routable SurfaceCommand records
 - peripheralctl agent-bridge normalizes OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI output into AgentEvent objects, HUD widgets, executable launch envelopes, approval return paths, phone-routable surface commands, and adapter metadata for the intended glasses surface
+- peripheralctl agent-bridge session-pack renders all six agent CLI surfaces into `out/frames/agent-bridge-session/` and writes `out/agent-bridge/session-pack.json`
 - peripheralctl phone-runtime exposes the phone-owned mode manager, lease arbiter, and input router as runtime commands
 - peripheralctl sponsor-workflows documents sponsor event loops, approval gates, semantic surfaces, and workflow widgets
 - hudctl can show validated JSON/cards, clear runtime display state, report status, and emit manual agent status

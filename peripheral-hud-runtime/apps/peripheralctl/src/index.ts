@@ -51,6 +51,7 @@ import {
   buildAgentBridgeAdapters,
   buildAgentBridgeDossier,
   buildAgentBridgeRuntimeHandshake,
+  buildAgentBridgeSessionPack,
   buildAgentRuntimePlan,
   buildAgentBridgeTranscript,
   buildAgentLaunchSpecs,
@@ -134,6 +135,7 @@ const VALUE_FLAGS = new Set([
   "sponsor",
   "event",
   "session-id",
+  "session-prefix",
   "line",
   "transcript-uri",
   "payload-json",
@@ -564,6 +566,18 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string, repoRoot:
     }
     case "transcript":
       return { ok: true, transcript: buildAgentBridgeTranscript(now) };
+    case "session-pack": {
+      const sessionPrefix = String(cli.options["session-prefix"] || cli.options["session-id"] || "review");
+      const pack = buildAgentBridgeSessionPack(now, sessionPrefix);
+      const frameDir = join(projectRoot, "out", "frames", "agent-bridge-session");
+      const artifacts = pack.agents.map((agent, index) => renderWidgetToFile(agent.widget, join(frameDir, String(index + 1).padStart(2, "0") + "-" + agent.id + "-" + agent.widget.id + ".png"), {
+        assetRoot: join(projectRoot, "fixtures", "images"),
+      }));
+      const packPath = join(projectRoot, "out", "agent-bridge", "session-pack.json");
+      mkdirSync(dirname(packPath), { recursive: true });
+      writeFileSync(packPath, JSON.stringify({ ...pack, frames: artifacts }, null, 2));
+      return { ok: true, sessionPack: pack, frameDir, packPath, artifacts };
+    }
     case "event": {
       const agentId = normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli"));
       const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "review-session");
@@ -629,7 +643,7 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string, repoRoot:
     case "dossier":
       return { ok: true, bridge: buildAgentBridgeDossier(now) };
     default:
-      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, runtime-plan, launch, transcript, event, route, session, widget");
+      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, runtime-plan, launch, transcript, session-pack, event, route, session, widget");
   }
 }
 
@@ -1864,6 +1878,7 @@ function capabilities(): unknown {
       "agent-bridge runtime-plan",
       "agent-bridge launch",
       "agent-bridge transcript",
+      "agent-bridge session-pack",
       "agent-bridge event",
       "agent-bridge route",
       "agent-bridge session",
@@ -2111,6 +2126,7 @@ Usage:
   peripheralctl agent-bridge runtime-plan [--agent codex_cli] [--session-id codex-auth]
   peripheralctl agent-bridge launch --agent codex_cli --task "Summarize this repo in one sentence" --execute --json
   peripheralctl agent-bridge transcript
+  peripheralctl agent-bridge session-pack [--session-prefix reviewer]
   peripheralctl agent-bridge event --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
   peripheralctl agent-bridge route --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
   peripheralctl agent-bridge session --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
@@ -2163,6 +2179,7 @@ Global options:
   --sponsor <id>          For sponsor-runtime: agentphone, stripe, supermemory, agentmail, browser_use, sponge, or gemini.
   --event <name>          For sponsor-runtime: sponsor event name to normalize or dispatch.
   --session-id <id>       Stable session id for the normalized event.
+  --session-prefix <id>   For agent-bridge session-pack: shared prefix for six agent sessions.
   --line <text>           Bounded CLI transcript, input line, or fallback sponsor summary to normalize.
   --payload-json <json>   For phone-runtime ingest: inbound sponsor or agent event payload.
   --payload-file <path>   For phone-runtime ingest: JSON file containing an inbound payload.
