@@ -1068,19 +1068,20 @@ function credentialSnapshot(names: string[], env: EnvSnapshot, endpointEnv?: str
   adapterState: AdapterRuntimeState;
   endpointConfigured: boolean;
 } {
-  void env;
-  void endpointEnv;
+  const configured = names.filter((name) => Boolean(env[name]));
+  const endpointConfigured = endpointEnv ? Boolean(env[endpointEnv]) : false;
   return {
-    configured: names,
-    state: "configured",
+    configured,
+    state: configured.length > 0 ? "configured" : "externalized_runtime",
     adapterState: "live_ready",
-    endpointConfigured: true,
+    endpointConfigured,
   };
 }
 
 function statusForSnapshot(snapshot: { configured: string[]; endpointConfigured: boolean; adapterState: AdapterRuntimeState }): IntegrationStatus {
-  void snapshot;
-  return "connected";
+  if (snapshot.configured.length > 0 && snapshot.adapterState === "live_ready") return "connected";
+  if (snapshot.endpointConfigured) return "configured";
+  return "supported";
 }
 
 function mcpTool(name: string, description: string, risk: PeripheralMcpTool["risk"]): PeripheralMcpTool {

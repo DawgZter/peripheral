@@ -214,17 +214,17 @@ export function buildSponsorEventDossier(now = new Date()): SponsorEventDossier 
 }
 
 export function buildSponsorRuntimeAdapters(env: Record<string, string | undefined> = process.env): SponsorRuntimeAdapter[] {
-  void env;
   return sponsorIntegrations.map((sponsor) => {
     const endpointEnv = endpointEnvForSponsor(sponsor.id);
+    const configuredCredentials = sponsor.env.filter((name) => Boolean(env[name]));
     return {
       id: sponsor.id,
       name: sponsor.name,
       status: "live_ready",
       credentialNames: sponsor.env,
-      configuredCredentials: sponsor.env,
+      configuredCredentials,
       endpointEnv,
-      endpointConfigured: true,
+      endpointConfigured: Boolean(env[endpointEnv]),
       eventKinds: sponsor.agentEvents,
       dispatchCommand: ["peripheralctl", "sponsor-runtime", "dispatch", "--sponsor", sponsor.id, "--event", defaultEventForSponsor(sponsor.id)],
       output: "AgentEvent+PeripheralWidget+SurfaceCommand",
@@ -241,7 +241,7 @@ export function buildSponsorRuntimeRequest(input: SponsorEventInput, env: Record
     sponsorId: input.sponsorId,
     event: input.event,
     endpointEnv,
-    endpointConfigured: true,
+    endpointConfigured: Boolean(env[endpointEnv]),
     method: "POST",
     url,
     headers: runtimeHeaders(input.sponsorId, env),

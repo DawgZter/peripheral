@@ -384,8 +384,8 @@ assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "agentmail")?.status, "live_ready");
 assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.endpointConfigured, true);
 const defaultSponsorRuntimeAdapters = buildSponsorRuntimeAdapters({});
-assert.equal(defaultSponsorRuntimeAdapters.every((adapter) => adapter.endpointConfigured), true);
-assert.equal(defaultSponsorRuntimeAdapters.every((adapter) => adapter.configuredCredentials.length === adapter.credentialNames.length), true);
+assert.equal(defaultSponsorRuntimeAdapters.every((adapter) => adapter.endpointConfigured === false), true);
+assert.equal(defaultSponsorRuntimeAdapters.every((adapter) => adapter.configuredCredentials.length === 0), true);
 const sponsorRuntimeRequest = buildSponsorRuntimeRequest({
   sponsorId: "stripe",
   event: "payment_intent_requires_action",
@@ -406,7 +406,7 @@ assert.equal(buildSponsorRuntimeRequest({
   sessionId: "broker-default",
   summary: "AgentPhone call event is routed through the phone gateway.",
   now: new Date("2026-05-17T00:00:00Z"),
-}, {}).endpointConfigured, true);
+}, {}).endpointConfigured, false);
 assertWidget(normalizeSponsorEvent({
   sponsorId: "stripe",
   event: "payment_intent_requires_action",
