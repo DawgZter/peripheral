@@ -47,6 +47,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 

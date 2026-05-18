@@ -42,6 +42,7 @@ npm run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex nee
 npm run peripheralctl -- sponsor-workflows dossier --json
 npm run peripheralctl -- sponsor-runtime adapters --json
 npm run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
+npm run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
 npm run peripheralctl -- sponsor-runtime browser-task --goal "Check restaurant availability" --json
 npm run peripheralctl -- sponsor-runtime sponge-context --context-text "Summarize customer context for glasses" --json
 npm run peripheralctl -- sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface" --json
@@ -101,6 +102,7 @@ Works now in runtime mode:
 - peripheralctl asr-replay --local-display --local-hermes replays scripted transcript lines through the same HUD handler and writes text-only JSON/JSONL proof
 - peripheralctl integrations exposes the sponsor matrix, agent CLI matrix, adapter operation catalog, support report, MCP manifest, phone runtime snapshot, broker timeline, glasses runtime state, and public dossier
 - peripheralctl integrations sponsor-events normalizes sponsor events into AgentEvent objects, HUD widgets, and phone-routable SurfaceCommand records
+- peripheralctl sponsor-runtime agentphone-call runs the AgentPhone call adapter, normalizes call/transcript/approval events, and returns the glasses surfaces that would be leased by the phone runtime
 - peripheralctl agent-bridge normalizes OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI output into AgentEvent objects, HUD widgets, executable launch envelopes, approval return paths, phone-routable surface commands, and adapter metadata for the intended glasses surface
 - peripheralctl agent-bridge session-pack renders all six agent CLI surfaces into `out/frames/agent-bridge-session/` and writes `out/agent-bridge/session-pack.json`
 - peripheralctl phone-runtime exposes the phone-owned mode manager, lease arbiter, and input router as runtime commands

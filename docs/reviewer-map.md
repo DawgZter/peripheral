@@ -41,6 +41,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
@@ -65,6 +66,7 @@ The support and live-adapter reports expose 13 supported integration records, 13
 | --- | --- |
 | Phone-owned surface runtime | `peripheral-hud-runtime/packages/peripheral-phone-runtime/src/index.ts` |
 | Inbound runtime ingest | `peripheralctl phone-runtime ingest --sponsor agentphone --event call_connected --json` |
+| AgentPhone call adapter | `peripheralctl sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json` |
 | Peripheral hardware profile | `docs/peripheral-glasses.md` and `peripheralctl integrations hardware-profile --json` |
 | Agent Mode protocol | `peripheral-hud-runtime/packages/peripheral-protocol/src/index.ts` |
 | Sponsor registry | `peripheral-hud-runtime/packages/peripheral-integrations/src/index.ts` |

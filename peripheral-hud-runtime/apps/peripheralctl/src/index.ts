@@ -377,6 +377,9 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
   const logLineCount = existsSync(logPath) ? readFileSync(logPath, "utf8").trim().split(/\r?\n/).filter(Boolean).length : 0;
   const connectedState = buildConnectedGlassesState(now, buildConnectedGlassesEvidence(process.env, now));
   const phoneRuntime = buildPhoneRuntimeSnapshot(now);
+  const integrationSummary = buildIntegrationSummary();
+  const supportReport = buildIntegrationSupportReport(process.env, now);
+  const liveAdapterCatalog = buildLiveAdapterCatalog(now);
   const agentRoute = routeAgentBridgeLine({
     agentId: "codex_cli",
     sessionId: "review-bundle",
@@ -411,6 +414,8 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     experience: {
       primarySurface: "Peripheral glasses",
       browserPreviewSurface: false,
+      reviewSurface: "rendered_glasses_frames",
+      accessSurface: "glasses_only",
       displayOwnership: "phone_runtime_surface_lease",
       agentOutput: "semantic_surface_commands",
       liveTransportPolicy: "explicit_operator_choice_only",
@@ -421,6 +426,9 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
       approve: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event booking-approval-1 --choice approve",
       connectedState: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json",
       phoneRuntime: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json",
+      support: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json",
+      liveAdapters: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json",
+      agentPhoneCall: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt \"Book dinner for two and pause before confirming\" --json",
       agentRoute: "npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line \"Codex needs approval to run npm test.\" --json",
     },
     artifacts,
@@ -448,6 +456,18 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
         mode: phoneRuntime.state.mode,
         activeLeaseId: phoneRuntime.state.activeLease.id,
         routingOrder: phoneRuntime.routingOrder,
+      },
+      adapterCoverage: {
+        integrations: supportReport.totals.integrations,
+        supported: supportReport.totals.supported,
+        credentialNames: supportReport.totals.credentialNames,
+        liveReady: supportReport.totals.liveReady,
+        operationCataloged: liveAdapterCatalog.totals.operationCataloged,
+        sponsorAdapters: integrationSummary.counts.sponsorCount,
+        agentCliAdapters: integrationSummary.counts.agentCliCount,
+        sponsorIds: integrationSummary.sponsors.map((sponsor) => sponsor.id),
+        agentCliIds: integrationSummary.agentClis.map((agent) => agent.id),
+        credentialMode: "operator_environment_bound",
       },
       agentBridge: {
         schema: agentRoute.schema,
@@ -851,6 +871,36 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
         request: redactSponsorRuntimeRequest(result.request),
       };
     }
+    case "agentphone-call": {
+      const request: AgentPhoneDinnerRequest = {
+        restaurantName: String(cli.options["restaurant-name"] || cli.options.target || "Sato Table"),
+        restaurantPhoneNumber: String(cli.options["restaurant-phone"] || process.env.AGENTPHONE_RESTAURANT_PHONE || process.env.PERIPHERAL_RESTAURANT_PHONE || ""),
+        partySize: Math.max(1, Number(cli.options["party-size"] || process.env.PERIPHERAL_PARTY_SIZE || 2)),
+        neighborhood: String(cli.options.neighborhood || process.env.PERIPHERAL_NEIGHBORHOOD || "Mission"),
+        bookingName: String(cli.options["booking-name"] || process.env.PERIPHERAL_BOOKING_NAME || process.env.PERIPHERAL_WEARER_NAME || "Wearer"),
+        preferredWindow: String(cli.options["preferred-window"] || process.env.PERIPHERAL_PREFERRED_WINDOW || "7:45"),
+        prompt: String(cli.options.prompt || cli.options.task || cli.options.summary || "Book dinner for two tonight and pause on Peripheral glasses before confirming."),
+        now,
+      };
+      const result = await runAgentPhoneDinnerBooking(request, {
+        forceReal: Boolean(cli.options["real-agentphone"] || cli.options.real),
+        env: process.env,
+      });
+      const normalized = result.events.map(normalizeAgentPhoneEvent);
+      const primary = normalized.find((item) => item.command.decision_required) || normalized[0];
+      return {
+        ok: result.ok,
+        mode: result.mode,
+        agentPhone: result,
+        request,
+        event: primary?.event,
+        widget: primary?.widget,
+        command: primary?.command,
+        events: normalized.map((item) => item.event),
+        widgets: normalized.map((item) => item.widget),
+        commands: normalized.map((item) => item.command),
+      };
+    }
     case "stripe-hold": {
       const sessionId = String(cli.options["session-id"] || "stripe-card-hold");
       const amountCents = parseMoneyCents(cli.options["hold-amount"] || cli.options.amount || "25.00", "--hold-amount");
@@ -974,7 +1024,7 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
       return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command, decision: normalized.decision };
     }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, stripe-hold, browser-task, sponge-context, gemini-route");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, stripe-hold, browser-task, sponge-context, gemini-route");
   }
 }
 
@@ -1895,6 +1945,7 @@ function capabilities(): unknown {
       "sponsor-runtime adapters",
       "sponsor-runtime request",
       "sponsor-runtime dispatch",
+      "sponsor-runtime agentphone-call --restaurant-phone <number> --prompt <text>",
       "sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd",
       "sponsor-runtime browser-task --task <text> --start-url <url>",
       "sponsor-runtime browser-task --goal \"Check restaurant availability\"",
@@ -2143,6 +2194,7 @@ Usage:
   peripheralctl sponsor-runtime adapters
   peripheralctl sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold"
   peripheralctl sponsor-runtime dispatch --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
+  peripheralctl sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming"
   peripheralctl sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold"
   peripheralctl sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com
   peripheralctl sponsor-runtime browser-task --goal "Check restaurant availability" --url https://example.com
@@ -2188,6 +2240,9 @@ Global options:
   --process-args-json <a> For agent-bridge launch: JSON string array of process args.
   --timeout-ms <ms>       For agent-bridge launch: process timeout, default 15000.
   --summary <text>        For sponsor-runtime: event summary sent through the broker payload.
+  --restaurant-phone <n>  For sponsor-runtime agentphone-call or dinner-booking: venue phone number.
+  --restaurant-name <n>   For sponsor-runtime agentphone-call or dinner-booking: venue name.
+  --preferred-window <t>  For sponsor-runtime agentphone-call or dinner-booking: preferred booking time.
   --hold-amount <amount>  For sponsor-runtime stripe-hold: card-hold amount, e.g. 25.00 or cents.
   --currency <code>       For sponsor-runtime stripe-hold: currency code, default usd.
   --customer <id>         For sponsor-runtime stripe-hold: optional Stripe customer id.

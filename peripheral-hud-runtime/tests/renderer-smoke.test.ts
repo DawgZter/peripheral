@@ -468,6 +468,53 @@ assert.equal(normalizedOffer.event.kind, "approval_required");
 assert.equal(normalizedOffer.event.id, "booking-approval-1");
 assert.equal(normalizedOffer.command.surface, "fullscreen");
 assert.equal(normalizedOffer.command.decision_required, true);
+const agentPhoneOfferFetch: typeof fetch = async () => new Response(JSON.stringify({
+  id: "call-real-1",
+  status: "connected",
+  transcript: "Restaurant: We have 7:45 or 8:15 available tonight.",
+}), {
+  status: 200,
+  headers: { "content-type": "application/json" },
+});
+const agentPhoneRealOffer = await runAgentPhoneDinnerBooking({
+  restaurantName: "Sato Table",
+  restaurantPhoneNumber: "+14155550137",
+  partySize: 2,
+  neighborhood: "Mission",
+  bookingName: "Karim",
+  preferredWindow: "7:45",
+  prompt: "Book dinner for two tonight near Mission, under Karim.",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  forceReal: true,
+  env: { AGENTPHONE_API_KEY: "set", AGENTPHONE_API_URL: "https://example.invalid/agentphone" },
+  fetchImpl: agentPhoneOfferFetch,
+});
+assert.equal(agentPhoneRealOffer.mode, "real");
+assert.equal(agentPhoneRealOffer.ok, true);
+assert.equal(agentPhoneRealOffer.endpoint, "https://example.invalid/agentphone/calls");
+const realAgentPhoneApproval = agentPhoneRealOffer.events.find((event) => event.kind === "approval_required");
+assert.ok(realAgentPhoneApproval);
+assert.equal(realAgentPhoneApproval!.real, true);
+assert.deepEqual(realAgentPhoneApproval!.offeredTimes, ["7:45", "8:15"]);
+const agentPhoneCallRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "agentphone-call",
+  "--restaurant-phone",
+  "+14155550137",
+  "--prompt",
+  "Book dinner for two and pause before confirming.",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(agentPhoneCallRun.status, 0, agentPhoneCallRun.stderr);
+const agentPhoneCallResult = JSON.parse(agentPhoneCallRun.stdout.slice(agentPhoneCallRun.stdout.indexOf("{"))) as { mode: string; commands: Array<{ decision_required?: boolean; surface?: string }> };
+assert.equal(agentPhoneCallResult.mode, "phone_gateway");
+assert.equal(agentPhoneCallResult.commands.some((command) => command.decision_required === true && command.surface === "fullscreen"), true);
 const sponsorOkFetch: typeof fetch = async () => new Response(JSON.stringify({ id: "adapter-ok" }), {
   status: 200,
   headers: { "content-type": "application/json" },

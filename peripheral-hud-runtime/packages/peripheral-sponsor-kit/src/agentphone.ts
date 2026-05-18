@@ -308,6 +308,10 @@ function eventsFromAgentPhoneBody(body: unknown, request: AgentPhoneDinnerReques
   const transcript = stringField(record, ["transcript", "summary", "latest_transcript", "text"]);
   if (transcript) {
     events.push(eventFromTranscript(transcript, request, callId, now, body, true));
+    const offeredTimes = offeredTimesFromText(transcript, request.preferredWindow);
+    if (offeredTimes.length) {
+      events.push(approvalEventFromOffer(transcript, request, callId, now, body, true, offeredTimes));
+    }
   }
   const status = stringField(record, ["status", "state"]);
   if (status && !events.length) {
@@ -337,24 +341,9 @@ function eventFromRawAgentPhoneItem(item: unknown, request: AgentPhoneDinnerRequ
   const type = (stringField(record, ["type", "kind", "event", "status"]) || "").toLowerCase();
   const createdAt = stringField(record, ["created_at", "createdAt", "timestamp"]) || now.toISOString();
   if (!text && !type) return null;
-  if (type.includes("approval") || /7:45|8:15|available|offer/i.test(text || "")) {
-    return {
-      id: "booking-approval-1",
-      kind: "approval_required",
-      sessionId: "dinner-booking",
-      callId,
-      restaurantName: request.restaurantName,
-      restaurantPhoneNumber: request.restaurantPhoneNumber,
-      partySize: request.partySize,
-      bookingName: request.bookingName,
-      selectedTime: request.preferredWindow,
-      offeredTimes: [request.preferredWindow, "8:15"],
-      text: "Approve booking " + request.preferredWindow + " for " + request.partySize + "?",
-      status: "WAITING_FOR_APPROVAL",
-      real: true,
-      raw: item,
-      createdAt,
-    };
+  const offeredTimes = offeredTimesFromText(text || "", request.preferredWindow);
+  if (type.includes("approval") || offeredTimes.length || /available|offer/i.test(text || "")) {
+    return approvalEventFromOffer(text || type, request, callId, now, item, true, offeredTimes, createdAt);
   }
   if (type.includes("connect")) {
     return {
@@ -378,6 +367,7 @@ function eventFromRawAgentPhoneItem(item: unknown, request: AgentPhoneDinnerRequ
 }
 
 function eventFromTranscript(text: string, request: AgentPhoneDinnerRequest, callId: string, now: Date, raw: unknown, real: boolean): AgentPhoneCallEvent {
+  const offeredTimes = offeredTimesFromText(text, request.preferredWindow);
   return {
     id: "agentphone_transcript",
     kind: "transcript",
@@ -387,13 +377,44 @@ function eventFromTranscript(text: string, request: AgentPhoneDinnerRequest, cal
     restaurantPhoneNumber: request.restaurantPhoneNumber,
     partySize: request.partySize,
     bookingName: request.bookingName,
-    selectedTime: request.preferredWindow,
-    offeredTimes: [request.preferredWindow, "8:15"],
+    selectedTime: offeredTimes[0] || request.preferredWindow,
+    offeredTimes: offeredTimes.length ? offeredTimes : [request.preferredWindow, "8:15"],
     text,
     status: "CONNECTED",
     real,
     raw,
     createdAt: now.toISOString(),
+  };
+}
+
+function approvalEventFromOffer(
+  text: string,
+  request: AgentPhoneDinnerRequest,
+  callId: string,
+  now: Date,
+  raw: unknown,
+  real: boolean,
+  offeredTimes: string[],
+  createdAt = now.toISOString(),
+): AgentPhoneCallEvent {
+  const times = offeredTimes.length ? offeredTimes : [request.preferredWindow, "8:15"];
+  const selectedTime = times.includes(request.preferredWindow) ? request.preferredWindow : times[0] || request.preferredWindow;
+  return {
+    id: "booking-approval-1",
+    kind: "approval_required",
+    sessionId: "dinner-booking",
+    callId,
+    restaurantName: request.restaurantName,
+    restaurantPhoneNumber: request.restaurantPhoneNumber,
+    partySize: request.partySize,
+    bookingName: request.bookingName,
+    selectedTime,
+    offeredTimes: times,
+    text: "Approve booking " + selectedTime + " for " + request.partySize + "?",
+    status: "WAITING_FOR_APPROVAL",
+    real,
+    raw: { transcript: text, provider: raw },
+    createdAt,
   };
 }
 
@@ -403,6 +424,19 @@ function ensureApprovalEvent(events: AgentPhoneCallEvent[], request: AgentPhoneD
     out.push(localAgentPhoneEvents(request, callId, now)[2]!);
   }
   return out;
+}
+
+function offeredTimesFromText(text: string, preferredWindow: string): string[] {
+  const normalized = text.replace(/\s+/g, " ");
+  const matches = normalized.match(/\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)?\b/gi) || [];
+  const times = matches
+    .filter((value) => /:|am|pm/i.test(value) || Number(value) >= 6 && Number(value) <= 11)
+    .map((value) => value.replace(/\s+/g, "").toLowerCase())
+    .filter(Boolean);
+  if (preferredWindow && new RegExp("\\b" + escapeRegExp(preferredWindow) + "\\b", "i").test(normalized)) {
+    times.unshift(preferredWindow);
+  }
+  return [...new Set(times)].slice(0, 3);
 }
 
 function widgetForAgentPhoneEvent(event: AgentPhoneCallEvent): PeripheralWidget {
@@ -505,4 +539,8 @@ function stringField(value: unknown, names: string[]): string | undefined {
     if (typeof field === "number" && Number.isFinite(field)) return String(field);
   }
   return undefined;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^\${}()|[\]\\]/g, "\\$&");
 }
