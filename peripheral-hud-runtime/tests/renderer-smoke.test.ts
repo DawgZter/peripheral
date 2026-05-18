@@ -23,7 +23,7 @@ import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesSt
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
-import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeBrowserUseEvent, normalizeSponsorEvent, routeGeminiBrokerDecision, runAgentPhoneDinnerBooking, runBrowserUseTask, saveDinnerPreference, sendAgentMailConfirmation, submitSpongeContext } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeBrowserUseEvent, normalizeGeminiRoute, normalizeSponsorEvent, routeGeminiBrokerDecision, routeWithGemini, runAgentPhoneDinnerBooking, runBrowserUseTask, saveDinnerPreference, sendAgentMailConfirmation, submitSpongeContext } from "../packages/peripheral-sponsor-kit/src/index.js";
 import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
@@ -456,6 +456,80 @@ const geminiReal = await routeGeminiBrokerDecision({
 });
 assert.equal(geminiReal.mode, "real");
 assert.equal(geminiReal.endpoint, "https://example.invalid/gemini/models/gemini-test:generateContent");
+const geminiFocusedRoute = await routeWithGemini({
+  sessionId: "gemini-route-check",
+  wearerInput: "approve",
+  focusedCardId: "booking-approval-1",
+  activeAgents: ["codex_cli", "claude_code"],
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(geminiFocusedRoute.mode, "phone_gateway");
+assert.equal(geminiFocusedRoute.decision.route, "focused_card");
+assert.equal(geminiFocusedRoute.decision.surface, "tiny_hud");
+const normalizedGeminiRoute = normalizeGeminiRoute(geminiFocusedRoute, {
+  sessionId: "gemini-route-check",
+  wearerInput: "approve",
+  focusedCardId: "booking-approval-1",
+  activeAgents: ["codex_cli", "claude_code"],
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(normalizedGeminiRoute.event.kind, "session_progress");
+assert.equal(normalizedGeminiRoute.command.surface, "tiny_hud");
+assertWidget(normalizedGeminiRoute.widget);
+const geminiDecisionFetch: typeof fetch = async () => new Response(JSON.stringify({
+  candidates: [
+    {
+      content: {
+        parts: [
+          {
+            text: JSON.stringify({
+              summary: "Route to Codex status",
+              route: "named_agent",
+              target: "codex_cli",
+              surface: "tiny_hud",
+              reason: "The wearer named Codex explicitly.",
+            }),
+          },
+        ],
+      },
+    },
+  ],
+}), {
+  status: 200,
+  headers: { "content-type": "application/json" },
+});
+const geminiDecisionReal = await routeWithGemini({
+  sessionId: "gemini-route-check",
+  wearerInput: "hey codex show status",
+  activeAgents: ["codex_cli", "claude_code"],
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  forceReal: true,
+  env: { GEMINI_API_KEY: "set", GEMINI_API_URL: "https://example.invalid/gemini" },
+  fetchImpl: geminiDecisionFetch,
+});
+assert.equal(geminiDecisionReal.mode, "real");
+assert.equal(geminiDecisionReal.ok, true);
+assert.equal(geminiDecisionReal.endpoint, "https://example.invalid/gemini/models/gemini-2.5-flash:generateContent");
+assert.equal(geminiDecisionReal.decision.target, "codex_cli");
+const geminiRouteRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "gemini-route",
+  "--line",
+  "hey codex show status",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(geminiRouteRun.status, 0, geminiRouteRun.stderr);
+const geminiRouteResult = JSON.parse(geminiRouteRun.stdout.slice(geminiRouteRun.stdout.indexOf("{"))) as { mode: string; decision: { route: string; target?: string }; command: { surface: string } };
+assert.equal(geminiRouteResult.mode, "phone_gateway");
+assert.equal(geminiRouteResult.decision.route, "named_agent");
+assert.equal(geminiRouteResult.decision.target, "codex_cli");
+assert.equal(geminiRouteResult.command.surface, "tiny_hud");
 const browserSubmit = normalizeBrowserUseEvent({
   id: "browser-submit-check",
   kind: "browser_submit_requested",

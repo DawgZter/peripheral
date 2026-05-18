@@ -56,7 +56,10 @@ export {
 export * from "./sponge.js";
 export {
   buildGeminiRouteBody,
+  normalizeGeminiRoute,
   routeGeminiBrokerDecision,
+  routeWithGemini,
+  type GeminiRouteDecision,
   type GeminiRouteRequest,
   type GeminiRouteResult,
 } from "./gemini.js";

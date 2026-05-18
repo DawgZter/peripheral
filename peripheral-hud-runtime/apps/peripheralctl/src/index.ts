@@ -79,8 +79,9 @@ import {
   createStripePaymentIntent,
   dispatchSponsorEvent,
   normalizeBrowserUseEvent,
+  normalizeGeminiRoute,
   normalizeSponsorEvent,
-  routeGeminiBrokerDecision,
+  routeWithGemini,
   runBrowserUseTask,
   saveDinnerPreference,
   sendAgentMailConfirmation,
@@ -139,6 +140,9 @@ const VALUE_FLAGS = new Set([
   "max-cost-usd",
   "proxy-country",
   "approval-intent",
+  "gemini-model",
+  "focused-card",
+  "active-agents",
   "risk",
   "amount",
   "currency",
@@ -662,26 +666,23 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
     case "gemini-route": {
       const sessionId = String(cli.options["session-id"] || "gemini-route");
       const prompt = String(cli.options.prompt || cli.options.summary || cli.options.line || "Choose the best glasses surface for this agent update.");
-      const result = await routeGeminiBrokerDecision({
+      const activeAgents = typeof cli.options["active-agents"] === "string" ? splitList(cli.options["active-agents"]) : ["codex_cli", "claude_code", "gemini_cli", "opencode"];
+      const request = {
         sessionId,
         prompt,
+        wearerInput: String(cli.options.line || prompt),
+        focusedCardId: typeof cli.options["focused-card"] === "string" ? cli.options["focused-card"] : undefined,
+        activeAgents,
         context: typeof cli.options.context === "string" ? cli.options.context : undefined,
-        model: typeof cli.options.model === "string" ? cli.options.model : undefined,
+        model: typeof cli.options["gemini-model"] === "string" ? cli.options["gemini-model"] : typeof cli.options.model === "string" ? cli.options.model : undefined,
         now,
-      }, {
+      };
+      const result = await routeWithGemini(request, {
         forceReal: Boolean(cli.options["real-gemini"]),
         env: process.env,
       });
-      const normalized = normalizeSponsorEvent({
-        sponsorId: "gemini",
-        event: "route_decision",
-        sessionId,
-        title: "Broker Route",
-        summary: prompt,
-        risk: "low",
-        now,
-      });
-      return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
+      const normalized = normalizeGeminiRoute(result, request);
+      return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command, decision: normalized.decision };
     }
     default:
       throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, stripe-hold, browser-task, sponge-context, gemini-route");
@@ -703,6 +704,10 @@ function sponsorRuntimeInput(cli: ParsedCli, now: Date) {
     code: typeof cli.options.code === "string" ? cli.options.code : undefined,
     now,
   };
+}
+
+function splitList(value: string): string[] {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function redactSponsorRuntimeRequest(request: SponsorRuntimeRequest): SponsorRuntimeRequest {
@@ -1596,6 +1601,7 @@ function capabilities(): unknown {
       "sponsor-runtime browser-task --goal \"Check restaurant availability\"",
       "sponsor-runtime sponge-context --context-text \"Summarize this customer context\"",
       "sponsor-runtime gemini-route --prompt \"Route this agent update\"",
+      "sponsor-runtime gemini-route --line \"hey codex show status\"",
       "hudctl show-json",
       "hudctl show-card",
       "hudctl clear",
@@ -1838,6 +1844,7 @@ Usage:
   peripheralctl sponsor-runtime browser-task --goal "Check restaurant availability" --url https://example.com
   peripheralctl sponsor-runtime sponge-context --context-text "Summarize customer context for glasses"
   peripheralctl sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface"
+  peripheralctl sponsor-runtime gemini-route --line "hey codex show status"
   peripheralctl demo dinner-booking --local
   peripheralctl demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
   peripheralctl phone-runtime decide --event booking-approval-1 --choice approve
@@ -1888,6 +1895,9 @@ Global options:
   --prompt <text>         For sponsor-runtime gemini-route: broker routing prompt.
   --context <text>        For sponsor-runtime gemini-route: extra routing context.
   --model <name>          For sponsor-runtime gemini-route: Gemini model name.
+  --gemini-model <name>   For sponsor-runtime gemini-route: Gemini model alias.
+  --focused-card <id>     For sponsor-runtime gemini-route: focused approval/card id.
+  --active-agents <list>  For sponsor-runtime gemini-route: comma-separated agent ids.
   --email-to <addr>       For dinner-booking: override AgentMail recipient.
   --email-from <addr>     For dinner-booking: override AgentMail sender.
   --memory-container <id> For dinner-booking: override Supermemory container.
