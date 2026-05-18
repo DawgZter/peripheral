@@ -136,6 +136,8 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime adapter
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser-task --goal "Check restaurant availability" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime sponge-context --context-text "Summarize customer context for glasses" --json

@@ -180,10 +180,13 @@ const VALUE_FLAGS = new Set([
   "neighborhood",
   "booking-name",
   "preferred-window",
+  "booking-time",
   "hold-amount",
   "email-to",
   "email-from",
   "memory-container",
+  "wearer-name",
+  "preference",
 ]);
 
 async function main(): Promise<void> {
@@ -429,6 +432,8 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
       support: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json",
       liveAdapters: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json",
       agentPhoneCall: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt \"Book dinner for two and pause before confirming\" --json",
+      agentMailSend: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name \"Sato Table\" --preferred-window 7:45 --booking-name Karim --json",
+      supermemorySave: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference \"Prefers 7-8pm dinner slots\" --memory-container dinner-preferences --json",
       agentRoute: "npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line \"Codex needs approval to run npm test.\" --json",
     },
     artifacts,
@@ -901,6 +906,70 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
         commands: normalized.map((item) => item.command),
       };
     }
+    case "agentmail-send": {
+      const sessionId = String(cli.options["session-id"] || "dinner-confirmation-email");
+      const restaurantName = String(cli.options["restaurant-name"] || cli.options.target || process.env.PERIPHERAL_RESTAURANT_NAME || "Sato Table");
+      const bookingTime = String(cli.options["booking-time"] || cli.options["preferred-window"] || process.env.PERIPHERAL_PREFERRED_WINDOW || "7:45");
+      const partySize = Math.max(1, Number(cli.options["party-size"] || process.env.PERIPHERAL_PARTY_SIZE || 2));
+      const bookingName = String(cli.options["booking-name"] || process.env.PERIPHERAL_BOOKING_NAME || process.env.PERIPHERAL_WEARER_NAME || "Wearer");
+      const result = await sendAgentMailConfirmation({
+        sessionId,
+        restaurantName,
+        bookingTime,
+        partySize,
+        bookingName,
+        to: typeof cli.options["email-to"] === "string" ? cli.options["email-to"] : undefined,
+        from: typeof cli.options["email-from"] === "string" ? cli.options["email-from"] : undefined,
+        subject: typeof cli.options.title === "string" ? cli.options.title : undefined,
+        text: typeof cli.options.body === "string" ? cli.options.body : typeof cli.options.summary === "string" ? cli.options.summary : undefined,
+        now,
+      }, {
+        forceReal: Boolean(cli.options["real-agentmail"] || cli.options.real),
+        env: process.env,
+      });
+      const summary = String(result.requestBody.text || "Confirmation email sent for " + bookingTime + " dinner at " + restaurantName + ".");
+      const normalized = normalizeSponsorEvent({
+        sponsorId: "agentmail",
+        event: "reply_sent",
+        sessionId,
+        title: "Confirmation Sent",
+        summary,
+        risk: "low",
+        now,
+      });
+      return { ok: result.ok, mode: result.mode, agentMail: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
+    }
+    case "supermemory-save": {
+      const sessionId = String(cli.options["session-id"] || "dinner-preference");
+      const restaurantName = typeof cli.options["restaurant-name"] === "string" ? cli.options["restaurant-name"] : typeof cli.options.target === "string" ? cli.options.target : process.env.PERIPHERAL_RESTAURANT_NAME;
+      const bookingTime = String(cli.options["booking-time"] || cli.options["preferred-window"] || process.env.PERIPHERAL_PREFERRED_WINDOW || "7:45");
+      const wearerName = String(cli.options["wearer-name"] || cli.options["booking-name"] || process.env.PERIPHERAL_WEARER_NAME || process.env.PERIPHERAL_BOOKING_NAME || "Wearer");
+      const preference = String(cli.options.preference || cli.options["context-text"] || cli.options.summary || cli.options.body || "Saved preference: prefers 7-8pm dinner slots.");
+      const result = await saveDinnerPreference({
+        sessionId,
+        wearerName,
+        preference,
+        restaurantName,
+        bookingTime,
+        now,
+      }, {
+        forceReal: Boolean(cli.options["real-supermemory"] || cli.options.real),
+        env: {
+          ...process.env,
+          ...(typeof cli.options["memory-container"] === "string" ? { SUPERMEMORY_CONTAINER: cli.options["memory-container"] } : {}),
+        },
+      });
+      const normalized = normalizeSponsorEvent({
+        sponsorId: "supermemory",
+        event: "memory_saved",
+        sessionId,
+        title: "Preference Saved",
+        summary: preference,
+        risk: "low",
+        now,
+      });
+      return { ok: result.ok, mode: result.mode, supermemory: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
+    }
     case "stripe-hold": {
       const sessionId = String(cli.options["session-id"] || "stripe-card-hold");
       const amountCents = parseMoneyCents(cli.options["hold-amount"] || cli.options.amount || "25.00", "--hold-amount");
@@ -1024,7 +1093,7 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
       return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command, decision: normalized.decision };
     }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, stripe-hold, browser-task, sponge-context, gemini-route");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, stripe-hold, browser-task, sponge-context, gemini-route");
   }
 }
 
@@ -1946,6 +2015,8 @@ function capabilities(): unknown {
       "sponsor-runtime request",
       "sponsor-runtime dispatch",
       "sponsor-runtime agentphone-call --restaurant-phone <number> --prompt <text>",
+      "sponsor-runtime agentmail-send --restaurant-name <name> --preferred-window <time>",
+      "sponsor-runtime supermemory-save --preference <text>",
       "sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd",
       "sponsor-runtime browser-task --task <text> --start-url <url>",
       "sponsor-runtime browser-task --goal \"Check restaurant availability\"",
@@ -2195,6 +2266,8 @@ Usage:
   peripheralctl sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold"
   peripheralctl sponsor-runtime dispatch --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
   peripheralctl sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming"
+  peripheralctl sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim
+  peripheralctl sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences
   peripheralctl sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold"
   peripheralctl sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com
   peripheralctl sponsor-runtime browser-task --goal "Check restaurant availability" --url https://example.com
@@ -2243,6 +2316,9 @@ Global options:
   --restaurant-phone <n>  For sponsor-runtime agentphone-call or dinner-booking: venue phone number.
   --restaurant-name <n>   For sponsor-runtime agentphone-call or dinner-booking: venue name.
   --preferred-window <t>  For sponsor-runtime agentphone-call or dinner-booking: preferred booking time.
+  --booking-time <t>      For sponsor-runtime AgentMail/Supermemory: confirmed booking time.
+  --wearer-name <name>    For sponsor-runtime Supermemory: wearer identity label.
+  --preference <text>     For sponsor-runtime Supermemory: preference content to store.
   --hold-amount <amount>  For sponsor-runtime stripe-hold: card-hold amount, e.g. 25.00 or cents.
   --currency <code>       For sponsor-runtime stripe-hold: currency code, default usd.
   --customer <id>         For sponsor-runtime stripe-hold: optional Stripe customer id.
@@ -2264,9 +2340,9 @@ Global options:
   --gemini-model <name>   For sponsor-runtime gemini-route: Gemini model alias.
   --focused-card <id>     For sponsor-runtime gemini-route: focused approval/card id.
   --active-agents <list>  For sponsor-runtime gemini-route: comma-separated agent ids.
-  --email-to <addr>       For dinner-booking: override AgentMail recipient.
-  --email-from <addr>     For dinner-booking: override AgentMail sender.
-  --memory-container <id> For dinner-booking: override Supermemory container.
+  --email-to <addr>       For dinner-booking or sponsor-runtime agentmail-send: override AgentMail recipient.
+  --email-from <addr>     For dinner-booking or sponsor-runtime agentmail-send: override AgentMail sender.
+  --memory-container <id> For dinner-booking or sponsor-runtime supermemory-save: override Supermemory container.
 
 HUD runtime options:
   --local-display          Use the runtime display driver without touching live display transport.

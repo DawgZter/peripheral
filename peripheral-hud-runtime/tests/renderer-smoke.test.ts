@@ -784,6 +784,31 @@ const agentMailReal = await sendAgentMailConfirmation({
 assert.equal(agentMailReal.mode, "real");
 assert.equal(agentMailReal.ok, true);
 assert.equal(agentMailReal.endpoint, "https://example.invalid/agentmail/messages");
+const agentMailRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "agentmail-send",
+  "--restaurant-name",
+  "Sato Table",
+  "--preferred-window",
+  "7:45",
+  "--booking-name",
+  "Karim",
+  "--email-to",
+  "wearer@example.invalid",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(agentMailRun.status, 0, agentMailRun.stderr);
+const agentMailRunResult = JSON.parse(agentMailRun.stdout.slice(agentMailRun.stdout.indexOf("{"))) as { mode: string; agentMail: { requestBody: { schema: string; to: string } }; command: { surface: string; decision_required?: boolean } };
+assert.equal(agentMailRunResult.mode, "phone_gateway");
+assert.equal(agentMailRunResult.agentMail.requestBody.schema, "peripheral-agentmail-confirmation-v1");
+assert.equal(agentMailRunResult.agentMail.requestBody.to, "wearer@example.invalid");
+assert.equal(agentMailRunResult.command.surface, "glance");
+assert.equal(agentMailRunResult.command.decision_required, false);
 const supermemoryLocal = await saveDinnerPreference({
   sessionId: "dinner-preference",
   wearerName: "Karim",
@@ -809,6 +834,27 @@ const supermemoryReal = await saveDinnerPreference({
 assert.equal(supermemoryReal.mode, "real");
 assert.equal(supermemoryReal.ok, true);
 assert.equal(supermemoryReal.endpoint, "https://example.invalid/supermemory/memories");
+const supermemoryRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "supermemory-save",
+  "--preference",
+  "Prefers 7-8pm dinner slots.",
+  "--memory-container",
+  "dinner-preferences",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(supermemoryRun.status, 0, supermemoryRun.stderr);
+const supermemoryRunResult = JSON.parse(supermemoryRun.stdout.slice(supermemoryRun.stdout.indexOf("{"))) as { mode: string; supermemory: { requestBody: { schema: string; container: string } }; command: { surface: string; decision_required?: boolean } };
+assert.equal(supermemoryRunResult.mode, "phone_gateway");
+assert.equal(supermemoryRunResult.supermemory.requestBody.schema, "peripheral-supermemory-save-v1");
+assert.equal(supermemoryRunResult.supermemory.requestBody.container, "dinner-preferences");
+assert.equal(supermemoryRunResult.command.surface, "tiny_hud");
+assert.equal(supermemoryRunResult.command.decision_required, false);
 const dinnerDemoRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "demo",
