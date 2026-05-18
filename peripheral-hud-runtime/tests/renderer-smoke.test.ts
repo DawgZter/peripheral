@@ -20,7 +20,7 @@ import {
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
 import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeLaunchCommand, buildAgentBridgeRuntimeHandshake, buildAgentBridgeSessionPack, buildAgentBridgeTranscript, buildAgentLaunchSpecs, buildAgentRuntimePlan, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, runAgentCliLaunch, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
 import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesEvidence, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralHardwareProfile, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
-import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
+import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneApprovalPolicy, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, evaluateApprovalDecision, requiredConfirmationForRisk, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
 import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeBrowserUseEvent, normalizeGeminiRoute, normalizeSponsorEvent, routeGeminiBrokerDecision, routeWithGemini, runAgentPhoneDinnerBooking, runBrowserUseTask, saveDinnerPreference, sendAgentMailConfirmation, submitSpongeContext } from "../packages/peripheral-sponsor-kit/src/index.js";
@@ -360,7 +360,41 @@ assert.equal(routeInputEvent(phoneRuntime, {
   timestamp: "2026-05-17T00:00:03Z",
 }).agentName, "Codex");
 assert.equal(agentModeLease("walkthrough", new Date("2026-05-17T00:00:00Z")).owner, "broker");
-assert.equal(buildPhoneRuntimeSnapshot(new Date("2026-05-17T00:00:00Z")).routingOrder[0], "focused_card");
+const phoneSnapshot = buildPhoneRuntimeSnapshot(new Date("2026-05-17T00:00:00Z"));
+assert.equal(phoneSnapshot.routingOrder[0], "focused_card");
+assert.equal(phoneSnapshot.approvalPolicy.schema, "peripheral-phone-approval-policy-v1");
+assert.equal(buildPhoneApprovalPolicy(new Date("2026-05-17T00:00:00Z")).rules.find((rule) => rule.risk === "high")?.requiredConfirmation.includes("phone"), true);
+assert.deepEqual(requiredConfirmationForRisk("medium"), ["voice_and_tap", "phone", "desktop"]);
+const mediumVoiceDecision = evaluateApprovalDecision({
+  kind: "approval_decision",
+  event_id: "approval-medium",
+  session_id: "codex-check",
+  decision: "approve",
+  confirmation_level: "voice",
+  timestamp: "2026-05-17T00:00:04Z",
+}, "medium", new Date("2026-05-17T00:00:05Z"));
+assert.equal(mediumVoiceDecision.accepted, false);
+assert.equal(mediumVoiceDecision.nextAction, "block_action");
+const highPhoneDecision = evaluateApprovalDecision({
+  kind: "approval_decision",
+  event_id: "approval-high",
+  session_id: "stripe-hold",
+  decision: "approve",
+  confirmation_level: "phone",
+  timestamp: "2026-05-17T00:00:06Z",
+}, "high", new Date("2026-05-17T00:00:07Z"));
+assert.equal(highPhoneDecision.accepted, true);
+assert.equal(highPhoneDecision.nextAction, "continue_action");
+const detailsDecision = evaluateApprovalDecision({
+  kind: "details",
+  event_id: "approval-details",
+  session_id: "browser-submit",
+  decision: "details",
+  confirmation_level: "tap",
+  timestamp: "2026-05-17T00:00:08Z",
+}, "high", new Date("2026-05-17T00:00:09Z"));
+assert.equal(detailsDecision.accepted, true);
+assert.equal(detailsDecision.nextAction, "show_details");
 const sponsorWorkflows = buildSponsorWorkflows();
 assert.equal(sponsorWorkflows.length, 7);
 assert.equal(workflowForSponsor("stripe").steps.some((step) => step.approvalRequired), true);
@@ -762,8 +796,8 @@ const reviewBundle = JSON.parse(reviewBundleRun.stdout.slice(reviewBundleRun.std
   ok: boolean;
   schema: string;
   artifacts: { frameCount: number; video: { exists: boolean; sha256?: string } };
-  experience: { primarySurface: string; browserPreviewSurface: boolean };
-  commands: { connectedState: string; phoneRuntime: string; agentRoute: string };
+  experience: { primarySurface: string; browserPreviewSurface: boolean; reviewSurface: string; accessSurface: string };
+  commands: { connectedState: string; phoneRuntime: string; agentRoute: string; support: string; liveAdapters: string };
   timeline: { stepCount: number; approvalSteps: number };
   runtime: {
     hardwareAccessRequired: boolean;
@@ -774,6 +808,18 @@ const reviewBundle = JSON.parse(reviewBundleRun.stdout.slice(reviewBundleRun.std
       surfaceCommandCount: number;
     };
     phoneRuntime: { schema: string; activeLeaseId: string; routingOrder: string[] };
+    adapterCoverage: {
+      integrations: number;
+      supported: number;
+      credentialNames: number;
+      liveReady: number;
+      operationCataloged: number;
+      sponsorAdapters: number;
+      agentCliAdapters: number;
+      sponsorIds: string[];
+      agentCliIds: string[];
+      credentialMode: string;
+    };
     agentBridge: {
       schema: string;
       eventKind: string;
@@ -788,9 +834,13 @@ assert.equal(reviewBundle.ok, true);
 assert.equal(reviewBundle.schema, "peripheral-review-bundle-v1");
 assert.equal(reviewBundle.experience.primarySurface, "Peripheral glasses");
 assert.equal(reviewBundle.experience.browserPreviewSurface, false);
+assert.equal(reviewBundle.experience.reviewSurface, "rendered_glasses_frames");
+assert.equal(reviewBundle.experience.accessSurface, "glasses_only");
 assert.match(reviewBundle.commands.connectedState, /connected-state/);
 assert.match(reviewBundle.commands.phoneRuntime, /phone-runtime snapshot/);
 assert.match(reviewBundle.commands.agentRoute, /agent-bridge route/);
+assert.match(reviewBundle.commands.support, /integrations support/);
+assert.match(reviewBundle.commands.liveAdapters, /integrations live-adapters/);
 assert.equal(reviewBundle.timeline.stepCount, dinnerDemoResult.steps);
 assert.equal(reviewBundle.timeline.approvalSteps >= 1, true);
 assert.equal(reviewBundle.runtime.hardwareAccessRequired, false);
@@ -802,6 +852,16 @@ assert.equal(reviewBundle.runtime.connectedState.surfaceCommandCount >= 3, true)
 assert.equal(reviewBundle.runtime.phoneRuntime.schema, "peripheral-phone-runtime-snapshot-v1");
 assert.equal(reviewBundle.runtime.phoneRuntime.activeLeaseId, "lease-current-stage");
 assert.deepEqual(reviewBundle.runtime.phoneRuntime.routingOrder, ["focused_card", "focused_widget", "named_agent", "mode_manager", "broker"]);
+assert.equal(reviewBundle.runtime.adapterCoverage.integrations, 13);
+assert.equal(reviewBundle.runtime.adapterCoverage.supported, 13);
+assert.equal(reviewBundle.runtime.adapterCoverage.credentialNames, 21);
+assert.equal(reviewBundle.runtime.adapterCoverage.liveReady, 13);
+assert.equal(reviewBundle.runtime.adapterCoverage.operationCataloged, 48);
+assert.equal(reviewBundle.runtime.adapterCoverage.sponsorAdapters, 7);
+assert.equal(reviewBundle.runtime.adapterCoverage.agentCliAdapters, 6);
+assert.equal(reviewBundle.runtime.adapterCoverage.sponsorIds.includes("agentphone"), true);
+assert.equal(reviewBundle.runtime.adapterCoverage.agentCliIds.includes("codex_cli"), true);
+assert.equal(reviewBundle.runtime.adapterCoverage.credentialMode, "operator_environment_bound");
 assert.equal(reviewBundle.runtime.agentBridge.schema, "peripheral-agent-bridge-surface-route-v1");
 assert.equal(reviewBundle.runtime.agentBridge.eventKind, "approval_required");
 assert.equal(reviewBundle.runtime.agentBridge.commandKind, "show_card");

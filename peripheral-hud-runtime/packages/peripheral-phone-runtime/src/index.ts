@@ -1,5 +1,7 @@
 import {
   type AppMode,
+  type ApprovalRiskLevel,
+  type ConfirmationLevel,
   type InputEvent,
   type PeripheralSource,
   type PeripheralWidget,
@@ -7,6 +9,7 @@ import {
   type SurfaceKind,
   type SurfaceLease,
   type SurfacePriority,
+  type UserDecision,
 } from "../../peripheral-protocol/src/index.js";
 
 export type PhoneSurfaceRuntimeState = {
@@ -45,7 +48,37 @@ export type PhoneRuntimeSnapshot = {
   modes: AppMode[];
   priorityOrder: SurfacePriority[];
   routingOrder: string[];
+  approvalPolicy: PhoneApprovalPolicy;
   state: PhoneSurfaceRuntimeState;
+};
+
+export type PhoneApprovalPolicyRule = {
+  risk: ApprovalRiskLevel;
+  requiredConfirmation: ConfirmationLevel[];
+  wearerAction: string;
+  rationale: string;
+};
+
+export type PhoneApprovalPolicy = {
+  schema: "peripheral-phone-approval-policy-v1";
+  generatedAt: string;
+  rules: PhoneApprovalPolicyRule[];
+  defaultRisk: ApprovalRiskLevel;
+  nonApproveChoices: string;
+};
+
+export type ApprovalPolicyEvaluation = {
+  schema: "peripheral-approval-policy-evaluation-v1";
+  eventId: string;
+  sessionId: string;
+  risk: ApprovalRiskLevel;
+  decision: UserDecision["decision"];
+  providedConfirmation: ConfirmationLevel;
+  requiredConfirmation: ConfirmationLevel[];
+  accepted: boolean;
+  reason: string;
+  nextAction: "continue_action" | "block_action" | "show_details" | "record_denial" | "dismiss_card";
+  evaluatedAt: string;
 };
 
 const priorityRank: Record<SurfacePriority, number> = {
@@ -181,8 +214,72 @@ export function buildPhoneRuntimeSnapshot(now = new Date()): PhoneRuntimeSnapsho
     modes: ["current_stage", "ambient_agent_hud", "agent_mode", "pairing", "debug", "system"],
     priorityOrder: ["ambient", "normal", "high", "urgent"],
     routingOrder: ["focused_card", "focused_widget", "named_agent", "mode_manager", "broker"],
+    approvalPolicy: buildPhoneApprovalPolicy(now),
     state: createPhoneSurfaceRuntime(now),
   };
+}
+
+export function buildPhoneApprovalPolicy(now = new Date()): PhoneApprovalPolicy {
+  return {
+    schema: "peripheral-phone-approval-policy-v1",
+    generatedAt: now.toISOString(),
+    defaultRisk: "low",
+    nonApproveChoices: "deny, details, and dismiss never advance the external action and may be captured from any focused card confirmation.",
+    rules: [
+      {
+        risk: "low",
+        requiredConfirmation: ["voice", "tap", "voice_and_tap", "phone", "desktop"],
+        wearerAction: "Voice or tap is enough for reversible local checks and status changes.",
+        rationale: "Low-risk actions should stay fast while still preserving an audit trail.",
+      },
+      {
+        risk: "medium",
+        requiredConfirmation: ["voice_and_tap", "phone", "desktop"],
+        wearerAction: "Require voice plus tap, or a phone/desktop confirmation.",
+        rationale: "Medium-risk sends, stores, and handoffs need a second signal from the wearer.",
+      },
+      {
+        risk: "high",
+        requiredConfirmation: ["phone", "desktop"],
+        wearerAction: "Escalate to the phone or desktop before continuing.",
+        rationale: "Payments, authenticated submissions, and irreversible actions should not advance from glasses-only voice.",
+      },
+    ],
+  };
+}
+
+export function requiredConfirmationForRisk(risk: ApprovalRiskLevel): ConfirmationLevel[] {
+  const policy = buildPhoneApprovalPolicy(new Date(0));
+  return policy.rules.find((rule) => rule.risk === risk)?.requiredConfirmation || policy.rules[0]!.requiredConfirmation;
+}
+
+export function evaluateApprovalDecision(
+  decision: UserDecision,
+  risk: ApprovalRiskLevel = "low",
+  now = new Date(),
+): ApprovalPolicyEvaluation {
+  const requiredConfirmation = requiredConfirmationForRisk(risk);
+  if (decision.decision === "deny") {
+    return approvalEvaluation(decision, risk, requiredConfirmation, true, "Denial recorded; external action remains blocked.", "record_denial", now);
+  }
+  if (decision.decision === "details") {
+    return approvalEvaluation(decision, risk, requiredConfirmation, true, "Details requested; external action remains blocked.", "show_details", now);
+  }
+  if (decision.decision === "dismiss") {
+    return approvalEvaluation(decision, risk, requiredConfirmation, true, "Approval card dismissed; external action remains blocked.", "dismiss_card", now);
+  }
+  const accepted = requiredConfirmation.includes(decision.confirmation_level);
+  return approvalEvaluation(
+    decision,
+    risk,
+    requiredConfirmation,
+    accepted,
+    accepted
+      ? "Confirmation satisfies " + risk + "-risk approval policy."
+      : "Confirmation must escalate to " + requiredConfirmation.join(" or ") + " before continuing.",
+    accepted ? "continue_action" : "block_action",
+    now,
+  );
 }
 
 export function agentModeLease(reason: string, now = new Date()): SurfaceLease {
@@ -221,6 +318,30 @@ export function approvalSurfaceCommand(widget: PeripheralWidget, sessionId: stri
     decision_required: true,
     reason: "Approval cards require focused routing and explicit confirmation.",
     created_at: now.toISOString(),
+  };
+}
+
+function approvalEvaluation(
+  decision: UserDecision,
+  risk: ApprovalRiskLevel,
+  requiredConfirmation: ConfirmationLevel[],
+  accepted: boolean,
+  reason: string,
+  nextAction: ApprovalPolicyEvaluation["nextAction"],
+  now: Date,
+): ApprovalPolicyEvaluation {
+  return {
+    schema: "peripheral-approval-policy-evaluation-v1",
+    eventId: decision.event_id,
+    sessionId: decision.session_id,
+    risk,
+    decision: decision.decision,
+    providedConfirmation: decision.confirmation_level,
+    requiredConfirmation,
+    accepted,
+    reason,
+    nextAction,
+    evaluatedAt: now.toISOString(),
   };
 }
 
