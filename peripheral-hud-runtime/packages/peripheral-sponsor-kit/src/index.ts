@@ -132,8 +132,11 @@ export type SponsorRuntimeAdapter = {
   configuredCredentials: string[];
   endpointEnv: string;
   endpointConfigured: boolean;
+  providerEndpointEnv: string;
+  providerEndpointConfigured: boolean;
   eventKinds: string[];
   dispatchCommand: string[];
+  realDispatchCommand: string[];
   output: "AgentEvent+PeripheralWidget+SurfaceCommand";
   safety: "phone_owned_surface_policy";
 };
@@ -216,6 +219,8 @@ export function buildSponsorEventDossier(now = new Date()): SponsorEventDossier 
 export function buildSponsorRuntimeAdapters(env: Record<string, string | undefined> = process.env): SponsorRuntimeAdapter[] {
   return sponsorIntegrations.map((sponsor) => {
     const endpointEnv = endpointEnvForSponsor(sponsor.id);
+    const providerEndpointEnv = providerEndpointEnvForSponsor(sponsor.id);
+    const dispatchCommand = ["peripheralctl", "sponsor-runtime", "dispatch", "--sponsor", sponsor.id, "--event", defaultEventForSponsor(sponsor.id)];
     const configuredCredentials = sponsor.env.filter((name) => Boolean(env[name]));
     return {
       id: sponsor.id,
@@ -225,8 +230,11 @@ export function buildSponsorRuntimeAdapters(env: Record<string, string | undefin
       configuredCredentials,
       endpointEnv,
       endpointConfigured: Boolean(env[endpointEnv]),
+      providerEndpointEnv,
+      providerEndpointConfigured: Boolean(env[providerEndpointEnv]),
       eventKinds: sponsor.agentEvents,
-      dispatchCommand: ["peripheralctl", "sponsor-runtime", "dispatch", "--sponsor", sponsor.id, "--event", defaultEventForSponsor(sponsor.id)],
+      dispatchCommand,
+      realDispatchCommand: [...dispatchCommand, "--" + realFlagForSponsor(sponsor.id)],
       output: "AgentEvent+PeripheralWidget+SurfaceCommand",
       safety: "phone_owned_surface_policy",
     };
@@ -461,15 +469,16 @@ export function sampleSponsorEvents(now = new Date()): SponsorEventInput[] {
 
 function sponsorWidget(input: SponsorEventInput, now: Date): PeripheralWidget {
   const title = input.title || titleForEvent(input.event, sponsorName(input.sponsorId));
-  if (input.event === "payment_intent_requires_action" || input.event === "memory_save_requested" || input.event === "draft_ready" || input.event === "browser_submit_requested" || input.event === "human_takeover_requested") {
+  const risk = input.risk || riskForEvent(input.event);
+  if (risk !== "low") {
     return assertWidget({
       id: "sponsor-" + slug(input.sponsorId + "-" + input.sessionId),
       type: "approval_card",
       title,
-      status: (input.risk || riskForEvent(input.event)).toUpperCase() + " RISK",
+      status: risk.toUpperCase() + " RISK",
       body: cleanText(input.summary, 180),
       choices: approvalChoices(),
-      footer: input.amount ? "Amount " + input.amount : input.sessionId,
+      footer: approvalFooter(input),
       source: sponsorName(input.sponsorId),
       created_at: now.toISOString(),
     });
@@ -545,9 +554,16 @@ function sponsorSurfaceCommand(input: SponsorEventInput, widget: PeripheralWidge
 
 function sponsorSurfaceForEvent(event: SponsorEventKind, risk: ApprovalRiskLevel, decisionRequired: boolean): SurfaceCommand["surface"] {
   if (event === "call_started" || event === "memory_saved") return "tiny_hud";
+  if (event === "verification_code_found" || event === "redaction_warning") return "pinned";
   if (risk === "high") return "pinned";
   if (decisionRequired) return "fullscreen";
   return "glance";
+}
+
+function approvalFooter(input: SponsorEventInput): string {
+  if (input.amount) return "Amount " + input.amount;
+  if (input.code) return "Code " + cleanText(input.code, 24);
+  return input.sessionId;
 }
 
 function endpointEnvForSponsor(id: SponsorId): string {
@@ -567,6 +583,29 @@ function endpointEnvForSponsor(id: SponsorId): string {
     case "gemini":
       return "GEMINI_PERIPHERAL_ENDPOINT";
   }
+}
+
+function providerEndpointEnvForSponsor(id: SponsorId): string {
+  switch (id) {
+    case "agentphone":
+      return "AGENTPHONE_API_URL";
+    case "stripe":
+      return "STRIPE_API_URL";
+    case "supermemory":
+      return "SUPERMEMORY_API_URL";
+    case "agentmail":
+      return "AGENTMAIL_API_URL";
+    case "browser_use":
+      return "BROWSER_USE_API_URL";
+    case "sponge":
+      return "SPONGE_API_URL";
+    case "gemini":
+      return "GEMINI_API_URL";
+  }
+}
+
+function realFlagForSponsor(id: SponsorId): string {
+  return "real-" + id.replace(/_/g, "-");
 }
 
 function runtimeHeaders(id: SponsorId, env: Record<string, string | undefined>): Record<string, string> {

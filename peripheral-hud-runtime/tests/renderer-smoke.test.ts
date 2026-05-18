@@ -410,6 +410,29 @@ for (const widget of buildSponsorWorkflowWidgets(new Date("2026-05-17T00:00:00Z"
 const sponsorEvents = buildSponsorEventDossier(new Date("2026-05-17T00:00:00Z"));
 assert.equal(sponsorEvents.events.length, 7);
 assert.equal(sponsorEvents.events.some((event) => event.command.decision_required), true);
+const redactionWarning = normalizeSponsorEvent({
+  sponsorId: "sponge",
+  event: "redaction_warning",
+  sessionId: "sponge-redaction",
+  summary: "Context contains sensitive details before persistence.",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(redactionWarning.event.kind, "approval_required");
+assert.equal(redactionWarning.widget.type, "approval_card");
+assert.equal(redactionWarning.command.surface, "pinned");
+assert.equal(redactionWarning.command.decision_required, true);
+const verificationCode = normalizeSponsorEvent({
+  sponsorId: "agentmail",
+  event: "verification_code_found",
+  sessionId: "mail-otp",
+  summary: "AgentMail found a short-lived sign-in code.",
+  code: "123456",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(verificationCode.event.kind, "approval_required");
+assert.equal(verificationCode.widget.type, "approval_card");
+assert.equal(verificationCode.widget.footer, "Code 123456");
+assert.equal(verificationCode.command.surface, "pinned");
 const sponsorRuntimeAdapters = buildSponsorRuntimeAdapters({
   STRIPE_SECRET_KEY: "set",
   STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe",
@@ -421,6 +444,22 @@ assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.
 const defaultSponsorRuntimeAdapters = buildSponsorRuntimeAdapters({});
 assert.equal(defaultSponsorRuntimeAdapters.every((adapter) => adapter.endpointConfigured === false), true);
 assert.equal(defaultSponsorRuntimeAdapters.every((adapter) => adapter.configuredCredentials.length === 0), true);
+const agentMailRuntimeAdapter = buildSponsorRuntimeAdapters({
+  AGENTMAIL_API_KEY: "set",
+  AGENTMAIL_API_URL: "https://example.invalid/agentmail",
+}).find((adapter) => adapter.id === "agentmail");
+assert.equal(agentMailRuntimeAdapter?.configuredCredentials.includes("AGENTMAIL_API_KEY"), true);
+assert.equal(agentMailRuntimeAdapter?.providerEndpointEnv, "AGENTMAIL_API_URL");
+assert.equal(agentMailRuntimeAdapter?.providerEndpointConfigured, true);
+assert.equal(agentMailRuntimeAdapter?.realDispatchCommand.includes("--real-agentmail"), true);
+const supermemoryRuntimeAdapter = buildSponsorRuntimeAdapters({
+  SUPERMEMORY_API_KEY: "set",
+  SUPERMEMORY_API_URL: "https://example.invalid/supermemory",
+}).find((adapter) => adapter.id === "supermemory");
+assert.equal(supermemoryRuntimeAdapter?.configuredCredentials.includes("SUPERMEMORY_API_KEY"), true);
+assert.equal(supermemoryRuntimeAdapter?.providerEndpointEnv, "SUPERMEMORY_API_URL");
+assert.equal(supermemoryRuntimeAdapter?.providerEndpointConfigured, true);
+assert.equal(supermemoryRuntimeAdapter?.realDispatchCommand.includes("--real-supermemory"), true);
 const sponsorRuntimeRequest = buildSponsorRuntimeRequest({
   sponsorId: "stripe",
   event: "payment_intent_requires_action",
@@ -637,6 +676,27 @@ const spongeContext = await submitSpongeContext({
 assert.equal(spongeContext.mode, "phone_gateway");
 assert.equal(spongeContext.requestBody.schema, "peripheral-sponge-context-v1");
 assert.equal(spongeContext.requestBody.project_id, "peripheral-score");
+const spongeRedactionRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "sponge-context",
+  "--context-text",
+  "Sensitive source context should pause before persistence.",
+  "--mode",
+  "redaction_warning",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(spongeRedactionRun.status, 0, spongeRedactionRun.stderr);
+const spongeRedactionResult = JSON.parse(spongeRedactionRun.stdout.slice(spongeRedactionRun.stdout.indexOf("{"))) as { mode: string; event: { kind: string }; widget: { type: string }; command: { surface: string; decision_required?: boolean } };
+assert.equal(spongeRedactionResult.mode, "phone_gateway");
+assert.equal(spongeRedactionResult.event.kind, "approval_required");
+assert.equal(spongeRedactionResult.widget.type, "approval_card");
+assert.equal(spongeRedactionResult.command.surface, "pinned");
+assert.equal(spongeRedactionResult.command.decision_required, true);
 const spongeReal = await submitSpongeContext({
   sessionId: "sponge-context",
   text: "Summarize the safe context.",
@@ -881,6 +941,60 @@ assert.equal(followupPackResult.pack.commands.length, 2);
 assert.equal(followupPackResult.artifacts.length, 2);
 assert.ok(existsSync(followupPackResult.frameDir));
 assert.ok(existsSync(followupPackResult.packPath));
+const dinnerFollowupsRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "dinner-followups",
+  "--restaurant-name",
+  "Sato Table",
+  "--preferred-window",
+  "7:45",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(dinnerFollowupsRun.status, 0, dinnerFollowupsRun.stderr);
+const dinnerFollowups = JSON.parse(dinnerFollowupsRun.stdout.slice(dinnerFollowupsRun.stdout.indexOf("{"))) as { schema: string; providerCalls: boolean; adapters: Array<{ sponsor: string; command: { decision_required?: boolean }; requestBody: { schema?: string } }> };
+assert.equal(dinnerFollowups.schema, "peripheral-dinner-followups-evidence-v1");
+assert.equal(dinnerFollowups.providerCalls, false);
+assert.equal(dinnerFollowups.adapters.length, 2);
+assert.equal(dinnerFollowups.adapters.every((adapter) => adapter.command.decision_required === true), true);
+assert.equal(dinnerFollowups.adapters.find((adapter) => adapter.sponsor === "agentmail")?.requestBody.schema, "peripheral-agentmail-confirmation-v1");
+assert.equal(dinnerFollowups.adapters.find((adapter) => adapter.sponsor === "supermemory")?.requestBody.schema, "peripheral-supermemory-save-v1");
+const agentMailCommandRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "agentmail-confirmation",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(agentMailCommandRun.status, 0, agentMailCommandRun.stderr);
+const agentMailCommand = JSON.parse(agentMailCommandRun.stdout.slice(agentMailCommandRun.stdout.indexOf("{"))) as { mode: string; providerCallRequested: boolean; command: { decision_required?: boolean }; agentmail: { requestBody: { schema?: string } } };
+assert.equal(agentMailCommand.mode, "phone_gateway");
+assert.equal(agentMailCommand.providerCallRequested, false);
+assert.equal(agentMailCommand.command.decision_required, true);
+assert.equal(agentMailCommand.agentmail.requestBody.schema, "peripheral-agentmail-confirmation-v1");
+const supermemoryCommandRun = spawnSync(process.execPath, [
+  "dist/apps/peripheralctl/src/index.js",
+  "sponsor-runtime",
+  "supermemory-preference",
+  "--json",
+], {
+  cwd: root,
+  encoding: "utf8",
+  timeout: 10_000,
+});
+assert.equal(supermemoryCommandRun.status, 0, supermemoryCommandRun.stderr);
+const supermemoryCommand = JSON.parse(supermemoryCommandRun.stdout.slice(supermemoryCommandRun.stdout.indexOf("{"))) as { mode: string; providerCallRequested: boolean; command: { decision_required?: boolean }; supermemory: { requestBody: { schema?: string } } };
+assert.equal(supermemoryCommand.mode, "phone_gateway");
+assert.equal(supermemoryCommand.providerCallRequested, false);
+assert.equal(supermemoryCommand.command.decision_required, true);
+assert.equal(supermemoryCommand.supermemory.requestBody.schema, "peripheral-supermemory-save-v1");
 const dinnerDemoRun = spawnSync(process.execPath, [
   "dist/apps/peripheralctl/src/index.js",
   "demo",
@@ -916,7 +1030,7 @@ const reviewBundle = JSON.parse(reviewBundleRun.stdout.slice(reviewBundleRun.std
   schema: string;
   artifacts: { frameCount: number; video: { exists: boolean; sha256?: string } };
   experience: { primarySurface: string; browserPreviewSurface: boolean; reviewSurface: string; accessSurface: string };
-  commands: { connectedState: string; phoneRuntime: string; agentRoute: string; support: string; liveAdapters: string };
+  commands: { connectedState: string; phoneRuntime: string; agentRoute: string; support: string; liveAdapters: string; liveProof: string };
   timeline: { stepCount: number; approvalSteps: number };
   runtime: {
     hardwareAccessRequired: boolean;
@@ -927,6 +1041,14 @@ const reviewBundle = JSON.parse(reviewBundleRun.stdout.slice(reviewBundleRun.std
       surfaceCommandCount: number;
     };
     phoneRuntime: { schema: string; activeLeaseId: string; routingOrder: string[] };
+    liveProof: {
+      schema: string;
+      complete: boolean;
+      command: string;
+      serviceSummary: { observed: number; total: number };
+      services: Record<string, { status: string; mode: string; credentialNames: string[] }>;
+      glassesTransport: { status: string; realFramePushes: number; runtimeFramePushes: number; command: string };
+    };
     adapterCoverage: {
       integrations: number;
       supported: number;
@@ -960,6 +1082,7 @@ assert.match(reviewBundle.commands.phoneRuntime, /phone-runtime snapshot/);
 assert.match(reviewBundle.commands.agentRoute, /agent-bridge route/);
 assert.match(reviewBundle.commands.support, /integrations support/);
 assert.match(reviewBundle.commands.liveAdapters, /integrations live-adapters/);
+assert.match(reviewBundle.commands.liveProof, /live-proof dinner-booking/);
 assert.equal(reviewBundle.timeline.stepCount, dinnerDemoResult.steps);
 assert.equal(reviewBundle.timeline.approvalSteps >= 1, true);
 assert.equal(reviewBundle.runtime.hardwareAccessRequired, false);
@@ -971,6 +1094,14 @@ assert.equal(reviewBundle.runtime.connectedState.surfaceCommandCount >= 3, true)
 assert.equal(reviewBundle.runtime.phoneRuntime.schema, "peripheral-phone-runtime-snapshot-v1");
 assert.equal(reviewBundle.runtime.phoneRuntime.activeLeaseId, "lease-current-stage");
 assert.deepEqual(reviewBundle.runtime.phoneRuntime.routingOrder, ["focused_card", "focused_widget", "named_agent", "mode_manager", "broker"]);
+assert.equal(reviewBundle.runtime.liveProof.schema, "peripheral-dinner-booking-live-proof-v1");
+assert.equal(reviewBundle.runtime.liveProof.command.includes("live-proof dinner-booking"), true);
+assert.equal(reviewBundle.runtime.liveProof.serviceSummary.total, 3);
+assert.equal(reviewBundle.runtime.liveProof.services.agentphone.mode, "phone_gateway");
+assert.equal(reviewBundle.runtime.liveProof.services.agentphone.credentialNames.includes("AGENTPHONE_API_KEY"), true);
+assert.equal(reviewBundle.runtime.liveProof.glassesTransport.runtimeFramePushes >= 5, true);
+assert.equal(reviewBundle.runtime.liveProof.glassesTransport.realFramePushes, 0);
+assert.equal(reviewBundle.runtime.liveProof.glassesTransport.command.includes("--real-hardware-ok"), true);
 assert.equal(reviewBundle.runtime.adapterCoverage.integrations, 13);
 assert.equal(reviewBundle.runtime.adapterCoverage.supported, 13);
 assert.equal(reviewBundle.runtime.adapterCoverage.credentialNames, 21);

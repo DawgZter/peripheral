@@ -65,8 +65,10 @@ import {
 import {
   agentModeLease,
   applySurfaceCommand,
+  buildPhoneApprovalPolicy,
   buildPhoneRuntimeSnapshot,
   createPhoneSurfaceRuntime,
+  evaluateApprovalDecision,
   routeInputEvent,
 } from "../../../packages/peripheral-phone-runtime/src/index.js";
 import {
@@ -156,6 +158,7 @@ const VALUE_FLAGS = new Set([
   "focused-card",
   "active-agents",
   "risk",
+  "confirmation",
   "amount",
   "currency",
   "description",
@@ -247,6 +250,12 @@ async function main(): Promise<void> {
       break;
     case "review-bundle":
       result = commandReviewBundle(projectRoot, repoRoot);
+      break;
+    case "live-proof":
+      result = await commandLiveProof(cli, projectRoot, driverOptions);
+      break;
+    case "live-proof":
+      result = await commandLiveProof(cli, projectRoot, driverOptions);
       break;
     case "walkthrough":
       result = await commandWalkthrough(cli, projectRoot, driverOptions);
@@ -383,9 +392,9 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
   const logLineCount = existsSync(logPath) ? readFileSync(logPath, "utf8").trim().split(/\r?\n/).filter(Boolean).length : 0;
   const connectedState = buildConnectedGlassesState(now, buildConnectedGlassesEvidence(process.env, now));
   const phoneRuntime = buildPhoneRuntimeSnapshot(now);
-  const integrationSummary = buildIntegrationSummary();
   const supportReport = buildIntegrationSupportReport(process.env, now);
   const liveAdapterCatalog = buildLiveAdapterCatalog(now);
+  const liveProof = buildDinnerBookingLiveProof(timelineRecords, connectedState, supportReport, now);
   const agentRoute = routeAgentBridgeLine({
     agentId: "codex_cli",
     sessionId: "review-bundle",
@@ -393,6 +402,24 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     now,
   });
   const agentPhoneDecision = applySurfaceCommand(createPhoneSurfaceRuntime(now), agentRoute.command, now);
+  const highRiskVoiceDecision = evaluateApprovalDecision({
+    kind: "approval_decision",
+    event_id: "stripe-review-approval",
+    session_id: "review-bundle",
+    decision: "approve",
+    choice_id: "approve",
+    confirmation_level: "voice",
+    timestamp: now.toISOString(),
+  }, "high", now);
+  const highRiskPhoneDecision = evaluateApprovalDecision({
+    kind: "approval_decision",
+    event_id: "stripe-review-approval",
+    session_id: "review-bundle",
+    decision: "approve",
+    choice_id: "approve",
+    confirmation_level: "phone",
+    timestamp: now.toISOString(),
+  }, "high", now);
   const artifacts = {
     frameDir,
     frameCount: frames.length,
@@ -411,6 +438,9 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     { id: "connected_state_included", ok: connectedState.schema === "peripheral-connected-state-v1", detail: "phone-gateway glasses state is embedded" },
     { id: "phone_runtime_included", ok: phoneRuntime.schema === "peripheral-phone-runtime-snapshot-v1", detail: "phone surface runtime is embedded" },
     { id: "agent_route_included", ok: agentPhoneDecision.accepted, detail: "agent CLI route passes through the phone lease arbiter" },
+    { id: "approval_policy_enforced", ok: !highRiskVoiceDecision.accepted && highRiskPhoneDecision.accepted, detail: "high-risk approvals require phone or desktop confirmation" },
+    { id: "adapter_catalog_included", ok: supportReport.totals.integrations === 13 && liveAdapterCatalog.totals.liveReady === 13, detail: String(liveAdapterCatalog.totals.operationCataloged) + " credential-bound operations" },
+    { id: "live_proof_path_included", ok: liveProof.schema === "peripheral-dinner-booking-live-proof-v1", detail: liveProof.command },
   ];
   return {
     ok: checks.every((check) => check.ok),
@@ -428,16 +458,19 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     },
     commands: {
       generate: "npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json",
+      liveProof: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json",
       inspect: "npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json",
       approve: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime decide --event booking-approval-1 --choice approve",
       connectedState: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json",
       phoneRuntime: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json",
-      support: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json",
-      liveAdapters: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json",
+      approvalPolicy: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime approval-policy --json",
+      approvalPolicyCheck: "npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime evaluate-decision --risk high --confirmation voice --choice approve --json",
       agentPhoneCall: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt \"Book dinner for two and pause before confirming\" --json",
       agentMailSend: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name \"Sato Table\" --preferred-window 7:45 --booking-name Karim --json",
       supermemorySave: "npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference \"Prefers 7-8pm dinner slots\" --memory-container dinner-preferences --json",
       agentRoute: "npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line \"Codex needs approval to run npm test.\" --json",
+      support: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json",
+      liveAdapters: "npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json",
     },
     artifacts,
     timeline: {
@@ -446,6 +479,7 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
     },
     runtime: {
       hardwareAccessRequired: false,
+      liveProof,
       connectedState: {
         schema: connectedState.schema,
         mode: connectedState.mode,
@@ -464,17 +498,28 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
         mode: phoneRuntime.state.mode,
         activeLeaseId: phoneRuntime.state.activeLease.id,
         routingOrder: phoneRuntime.routingOrder,
+        approvalPolicy: {
+          schema: phoneRuntime.approvalPolicy.schema,
+          rules: phoneRuntime.approvalPolicy.rules.map((rule) => ({
+            risk: rule.risk,
+            requiredConfirmation: rule.requiredConfirmation,
+          })),
+          highRiskVoiceAccepted: highRiskVoiceDecision.accepted,
+          highRiskPhoneAccepted: highRiskPhoneDecision.accepted,
+        },
       },
       adapterCoverage: {
+        supportSchema: supportReport.schema,
+        liveAdapterSchema: liveAdapterCatalog.schema,
         integrations: supportReport.totals.integrations,
         supported: supportReport.totals.supported,
         credentialNames: supportReport.totals.credentialNames,
-        liveReady: supportReport.totals.liveReady,
+        liveReady: liveAdapterCatalog.totals.liveReady,
         operationCataloged: liveAdapterCatalog.totals.operationCataloged,
-        sponsorAdapters: integrationSummary.counts.sponsorCount,
-        agentCliAdapters: integrationSummary.counts.agentCliCount,
-        sponsorIds: integrationSummary.sponsors.map((sponsor) => sponsor.id),
-        agentCliIds: integrationSummary.agentClis.map((agent) => agent.id),
+        sponsorAdapters: liveAdapterCatalog.totals.sponsorAdapters,
+        agentCliAdapters: liveAdapterCatalog.totals.agentCliAdapters,
+        sponsorIds: liveAdapterCatalog.adapters.filter((adapter) => adapter.kind === "sponsor").map((adapter) => adapter.id),
+        agentCliIds: liveAdapterCatalog.adapters.filter((adapter) => adapter.kind === "agent_cli").map((adapter) => adapter.id),
         credentialMode: "operator_environment_bound",
       },
       agentBridge: {
@@ -493,6 +538,164 @@ function commandReviewBundle(projectRoot: string, repoRoot: string): unknown {
       },
     },
     checks,
+  };
+}
+
+type DinnerBookingLiveProof = {
+  schema: "peripheral-dinner-booking-live-proof-v1";
+  generatedAt: string;
+  workflow: "dinner-booking";
+  complete: boolean;
+  command: string;
+  serviceSummary: {
+    observed: number;
+    total: number;
+  };
+  services: Record<string, {
+    id: string;
+    status: "observed" | "operator_run";
+    mode: string;
+    ok: boolean;
+    endpoint?: string;
+    statusCode?: number;
+    evidenceStep?: string;
+    credentialNames: string[];
+    configuredCredentialNames: string[];
+  }>;
+  glassesTransport: {
+    status: "observed" | "operator_run";
+    display: string;
+    transport: string;
+    telemetrySource: string;
+    realFramePushes: number;
+    runtimeFramePushes: number;
+    latestDeviceSha256?: string;
+    latestFrameSha256?: string;
+    command: string;
+  };
+};
+
+async function commandLiveProof(cli: ParsedCli, projectRoot: string, driverOptions: DriverOptions): Promise<unknown> {
+  void driverOptions;
+  const flow = cli.positionals[0] || "dinner-booking";
+  if (flow !== "dinner-booking") {
+    throw new Error("live-proof requires dinner-booking.");
+  }
+  if (!cli.options["real-hardware-ok"]) {
+    throw new Error("live-proof dinner-booking requires --real-hardware-ok to confirm the operator-gated glasses path.");
+  }
+  const proofCli: ParsedCli = {
+    ...cli,
+    command: "demo",
+    positionals: ["dinner-booking"],
+    options: {
+      ...cli.options,
+      real: true,
+      "real-agentphone": true,
+      "real-agentmail": true,
+      "real-supermemory": true,
+      "auto-approve": cli.options["wait-for-approval"] ? cli.options["auto-approve"] || false : true,
+    },
+  };
+  const result = await commandDinnerBookingDemo(proofCli, projectRoot, {
+    ...driverOptions,
+    local: Boolean(cli.options.local || cli.options["local-display"]),
+  });
+  const record = asRecord(result);
+  const timeline = readJsonIfPresent(String(record.timelinePath || join(projectRoot, "out", "demo", "dinner-booking-timeline.json")));
+  const timelineRecords = Array.isArray(timeline)
+    ? timeline
+    : isRecord(timeline) && Array.isArray(timeline.steps) ? timeline.steps
+      : isRecord(timeline) && Array.isArray(timeline.timeline) ? timeline.timeline : [];
+  const now = new Date();
+  const connectedState = buildConnectedGlassesState(now, buildConnectedGlassesEvidence(process.env, now));
+  const supportReport = buildIntegrationSupportReport(process.env, now);
+  const proof = buildDinnerBookingLiveProof(timelineRecords, connectedState, supportReport, now);
+  const proofPath = join(projectRoot, "out", "demo", "dinner-booking-live-proof.json");
+  mkdirSync(dirname(proofPath), { recursive: true });
+  writeFileSync(proofPath, JSON.stringify(proof, null, 2) + "\n", "utf8");
+  await appendJsonl(defaultLogPath(projectRoot, "dinner-booking-live-proof"), {
+    event: "live_proof.dinner_booking",
+    complete: proof.complete,
+    serviceSummary: proof.serviceSummary,
+    glassesTransport: proof.glassesTransport,
+    proofPath,
+  });
+  return {
+    ...record,
+    ok: proof.complete,
+    proofPath,
+    proof,
+  };
+}
+
+function buildDinnerBookingLiveProof(
+  timelineRecords: unknown[],
+  connectedState: ReturnType<typeof buildConnectedGlassesState>,
+  supportReport: ReturnType<typeof buildIntegrationSupportReport>,
+  now: Date,
+): DinnerBookingLiveProof {
+  const records = timelineRecords.map(asRecord);
+  const services = {
+    agentphone: liveProofService("agentphone", records, ["agentphone_call_started", "agentphone_transcript", "approval_required"], supportReport),
+    agentmail: liveProofService("agentmail", records, ["agentmail_confirmation"], supportReport),
+    supermemory: liveProofService("supermemory", records, ["supermemory_saved"], supportReport),
+  };
+  const serviceValues = Object.values(services);
+  const pushRecords = records.map((record) => asRecord(record.push)).filter((record) => Object.keys(record).length > 0);
+  const realPushes = pushRecords.filter((push) => push.ok === true && push.local !== true && Object.keys(asRecord(push.result)).length > 0);
+  const runtimePushes = pushRecords.filter((push) => push.local === true);
+  const latestRealPush = realPushes[realPushes.length - 1];
+  const glassesObserved = connectedState.glasses.connected || realPushes.length > 0;
+  return {
+    schema: "peripheral-dinner-booking-live-proof-v1",
+    generatedAt: now.toISOString(),
+    workflow: "dinner-booking",
+    complete: serviceValues.every((service) => service.status === "observed") && glassesObserved,
+    command: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json",
+    serviceSummary: {
+      observed: serviceValues.filter((service) => service.status === "observed").length,
+      total: serviceValues.length,
+    },
+    services,
+    glassesTransport: {
+      status: glassesObserved ? "observed" : "operator_run",
+      display: connectedState.glasses.display,
+      transport: connectedState.glasses.transport,
+      telemetrySource: connectedState.glasses.telemetry.source,
+      realFramePushes: realPushes.length,
+      runtimeFramePushes: runtimePushes.length,
+      latestDeviceSha256: stringValue(latestRealPush?.deviceSha256),
+      latestFrameSha256: stringValue(latestRealPush?.sha256),
+      command: "npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json",
+    },
+  };
+}
+
+function liveProofService(
+  sponsorId: "agentphone" | "agentmail" | "supermemory",
+  records: Record<string, unknown>[],
+  steps: string[],
+  supportReport: ReturnType<typeof buildIntegrationSupportReport>,
+): DinnerBookingLiveProof["services"][string] {
+  const support = supportReport.integrations.find((item) => item.id === sponsorId);
+  const match = records.find((record) => {
+    const step = String(record.step || "");
+    return steps.some((candidate) => step === candidate || step.startsWith(candidate));
+  });
+  const dispatch = asRecord(match?.dispatch);
+  const mode = String(dispatch.mode || "operator_run");
+  const observed = mode === "real" && dispatch.ok !== false;
+  return {
+    id: sponsorId,
+    status: observed ? "observed" : "operator_run",
+    mode,
+    ok: observed,
+    endpoint: stringValue(dispatch.endpoint),
+    statusCode: numberValue(dispatch.status),
+    evidenceStep: stringValue(match?.step),
+    credentialNames: support?.credentialNames || [],
+    configuredCredentialNames: support?.configuredCredentialNames || [],
   };
 }
 
@@ -707,6 +910,13 @@ async function commandPhoneRuntime(cli: ParsedCli, projectRoot: string): Promise
     }
     case "agent-mode-lease":
       return { ok: true, lease: agentModeLease(String(cli.options.line || "User entered Agent Mode."), now) };
+    case "approval-policy":
+      return { ok: true, policy: buildPhoneApprovalPolicy(now) };
+    case "evaluate-decision": {
+      const decision = buildApprovalDecision(cli, now);
+      const policy = evaluateApprovalDecision(decision, approvalRisk(cli), now);
+      return { ok: approvalContinuesAction(policy), decision, policy };
+    }
     case "ingest": {
       const route = phoneRuntimeIngestRoute(cli, now);
       const initialState = createPhoneSurfaceRuntime(now);
@@ -732,19 +942,22 @@ async function commandPhoneRuntime(cli: ParsedCli, projectRoot: string): Promise
     }
     case "decide": {
       const decision = buildApprovalDecision(cli, now);
-      const decisionPath = writeApprovalDecision(projectRoot, decision);
+      const policy = evaluateApprovalDecision(decision, approvalRisk(cli), now);
+      const continuesAction = approvalContinuesAction(policy);
+      const decisionPath = continuesAction ? writeApprovalDecision(projectRoot, decision) : undefined;
       const decisionLogPath = join(projectRoot, "out", "demo", "approval-decisions.jsonl");
-      await appendJsonl(decisionLogPath, { event: "phone_runtime.decision", decision, decisionPath });
+      await appendJsonl(decisionLogPath, { event: "phone_runtime.decision", decision, decisionPath, policy });
       return {
-        ok: true,
+        ok: continuesAction,
         decision,
+        policy,
         decisionPath,
         decisionLogPath,
         appliesTo: decision.event_id,
       };
     }
     default:
-      throw new Error("Unknown phone-runtime view. Use one of: snapshot, lease, route, agent-mode-lease, ingest, decide");
+      throw new Error("Unknown phone-runtime view. Use one of: snapshot, lease, route, agent-mode-lease, approval-policy, evaluate-decision, ingest, decide");
   }
 }
 
@@ -807,17 +1020,34 @@ function stringFromUnknown(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function approvalRisk(cli: ParsedCli): "low" | "medium" | "high" {
+  const risk = String(cli.options.risk || "low").toLowerCase();
+  return risk === "high" ? "high" : risk === "medium" ? "medium" : "low";
+}
+
+function approvalConfirmation(cli: ParsedCli): UserDecision["confirmation_level"] {
+  const value = String(typeof cli.options.confirmation === "string"
+    ? cli.options.confirmation
+    : cli.options.phone ? "phone" : "voice_and_tap").toLowerCase();
+  if (value === "voice" || value === "tap" || value === "voice_and_tap" || value === "phone" || value === "desktop") return value;
+  return "voice_and_tap";
+}
+
+function approvalContinuesAction(policy: ReturnType<typeof evaluateApprovalDecision>): boolean {
+  return policy.accepted && policy.nextAction === "continue_action";
+}
+
 function buildApprovalDecision(cli: ParsedCli, now: Date): UserDecision {
   const eventId = String(cli.options.event || cli.positionals[1] || "booking-approval-1");
   const choice = String(cli.options.choice || cli.positionals[2] || "approve");
-  const decision = choice === "deny" ? "deny" : choice === "details" ? "details" : "approve";
+  const decision = choice === "deny" ? "deny" : choice === "details" ? "details" : choice === "dismiss" ? "dismiss" : "approve";
   return {
     kind: "approval_decision",
     event_id: eventId,
     session_id: String(cli.options["session-id"] || "dinner-booking"),
     decision,
     choice_id: decision,
-    confirmation_level: cli.options.phone ? "phone" : "voice_and_tap",
+    confirmation_level: approvalConfirmation(cli),
     reason: String(cli.options.summary || "Decision captured by phone runtime."),
     source: {
       id: "phone-runtime",
@@ -992,6 +1222,26 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
       writeFileSync(packPath, JSON.stringify(pack, null, 2));
       return { ok: mailResult.ok && memoryResult.ok, mode: { agentMail: mailResult.mode, supermemory: memoryResult.mode }, pack, frameDir, packPath, artifacts };
     }
+    case "dinner-followups": {
+      const agentmail = await commandAgentMailConfirmation(cli, now, false);
+      const supermemory = await commandSupermemoryPreference(cli, now, false);
+      return {
+        ok: agentmail.ok && supermemory.ok,
+        schema: "peripheral-dinner-followups-evidence-v1",
+        generatedAt: now.toISOString(),
+        providerCalls: false,
+        adapters: [
+          { sponsor: "agentmail", mode: agentmail.mode, credentials: agentmail.credentials, requestBody: agentmail.agentmail.requestBody, event: agentmail.event, command: agentmail.command },
+          { sponsor: "supermemory", mode: supermemory.mode, credentials: supermemory.credentials, requestBody: supermemory.supermemory.requestBody, event: supermemory.event, command: supermemory.command },
+        ],
+        agentmail,
+        supermemory,
+      };
+    }
+    case "agentmail-confirmation":
+      return commandAgentMailConfirmation(cli, now);
+    case "supermemory-preference":
+      return commandSupermemoryPreference(cli, now);
     case "stripe-hold": {
       const sessionId = String(cli.options["session-id"] || "stripe-card-hold");
       const amountCents = parseMoneyCents(cli.options["hold-amount"] || cli.options.amount || "25.00", "--hold-amount");
@@ -1006,7 +1256,7 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
         paymentMethod: typeof cli.options["payment-method"] === "string" ? cli.options["payment-method"] : undefined,
         now,
       }, {
-        forceReal: Boolean(cli.options["real-stripe"]),
+        forceReal: sponsorRuntimeForceReal(cli, "stripe"),
         env: process.env,
       });
       const normalized = normalizeSponsorEvent({
@@ -1042,7 +1292,7 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
           : typeof cli.options["approval-policy"] === "string" ? "Approval policy: " + cli.options["approval-policy"] : undefined,
         now,
       }, {
-        forceReal: Boolean(cli.options["real-browser-use"]),
+        forceReal: sponsorRuntimeForceReal(cli, "browser_use"),
         env: process.env,
       });
       const normalizedEvents = result.events.map(normalizeBrowserUseEvent);
@@ -1072,23 +1322,25 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
     case "sponge-context": {
       const sessionId = String(cli.options["session-id"] || "sponge-context");
       const text = String(cli.options["context-text"] || cli.options.summary || cli.options.line || "Summarize sensitive context for a wearer-safe glasses surface.");
+      const redactionMode = sponsorSpongeMode(cli.options.mode);
       const result = await submitSpongeContext({
         sessionId,
         text,
         projectId: typeof cli.options["project-id"] === "string" ? cli.options["project-id"] : undefined,
-        redactionMode: typeof cli.options.mode === "string" ? cli.options.mode as "context_digest" | "redaction_warning" | "safe_summary" : undefined,
+        redactionMode,
         now,
       }, {
-        forceReal: Boolean(cli.options["real-sponge"]),
+        forceReal: sponsorRuntimeForceReal(cli, "sponge"),
         env: process.env,
       });
+      const event = redactionMode === "redaction_warning" ? "redaction_warning" : "context_clustered";
       const normalized = normalizeSponsorEvent({
         sponsorId: "sponge",
-        event: "context_clustered",
+        event,
         sessionId,
-        title: "Context Digest",
+        title: event === "redaction_warning" ? "Redaction Warning" : "Context Digest",
         summary: text,
-        risk: "low",
+        risk: event === "redaction_warning" ? "medium" : "low",
         now,
       });
       return { ok: result.ok, mode: result.mode, sponge: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
@@ -1108,14 +1360,14 @@ async function commandSponsorRuntime(cli: ParsedCli, projectRoot: string): Promi
         now,
       };
       const result = await routeWithGemini(request, {
-        forceReal: Boolean(cli.options["real-gemini"]),
+        forceReal: sponsorRuntimeForceReal(cli, "gemini"),
         env: process.env,
       });
       const normalized = normalizeGeminiRoute(result, request);
       return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command, decision: normalized.decision };
     }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, followup-pack, stripe-hold, browser-task, sponge-context, gemini-route");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, agentphone-call, agentmail-send, supermemory-save, followup-pack, dinner-followups, agentmail-confirmation, supermemory-preference, stripe-hold, browser-task, sponge-context, gemini-route");
   }
 }
 
@@ -1152,6 +1404,131 @@ function supermemoryRuntimeEnv(cli: ParsedCli): Record<string, string | undefine
   };
 }
 
+type DinnerFollowupInput = {
+  sessionId: string;
+  mailSessionId: string;
+  memorySessionId: string;
+  restaurantName: string;
+  bookingTime: string;
+  partySize: number;
+  bookingName: string;
+  wearerName: string;
+  preference: string;
+  emailTo?: string;
+  emailFrom?: string;
+  memoryContainer?: string;
+  now: Date;
+};
+
+async function commandAgentMailConfirmation(cli: ParsedCli, now: Date, forceReal = Boolean(cli.options["real-agentmail"])): Promise<Record<string, unknown> & { ok: boolean; mode: string; agentmail: Awaited<ReturnType<typeof sendAgentMailConfirmation>>; event: unknown; command: unknown; credentials: Record<string, unknown> }> {
+  const input = dinnerFollowupInput(cli, now);
+  const result = await sendAgentMailConfirmation({
+    sessionId: input.mailSessionId,
+    restaurantName: input.restaurantName,
+    bookingTime: input.bookingTime,
+    partySize: input.partySize,
+    bookingName: input.bookingName,
+    to: input.emailTo,
+    from: input.emailFrom,
+    now,
+  }, {
+    forceReal,
+    env: process.env,
+  });
+  const eventKind = result.mode === "real" && result.ok ? "reply_sent" : "draft_ready";
+  const normalized = normalizeSponsorEvent({
+    sponsorId: "agentmail",
+    event: eventKind,
+    sessionId: input.mailSessionId,
+    title: eventKind === "reply_sent" ? "Confirmation Sent" : "Review Confirmation Email",
+    summary: "Confirmation email for " + input.bookingTime + " dinner at " + input.restaurantName + ".",
+    target: input.restaurantName,
+    risk: eventKind === "reply_sent" ? "low" : "medium",
+    now,
+  });
+  return {
+    ok: result.ok,
+    mode: result.mode,
+    providerCallRequested: forceReal,
+    providerCallUsed: result.mode === "real",
+    commands: {
+      local: ["peripheralctl", "sponsor-runtime", "agentmail-confirmation", "--json"],
+      real: ["peripheralctl", "sponsor-runtime", "agentmail-confirmation", "--real-agentmail", "--json"],
+    },
+    credentials: sponsorRuntimeCredentialEvidence("agentmail"),
+    agentmail: result,
+    event: normalized.event,
+    widget: normalized.widget,
+    command: normalized.command,
+  };
+}
+
+async function commandSupermemoryPreference(cli: ParsedCli, now: Date, forceReal = Boolean(cli.options["real-supermemory"])): Promise<Record<string, unknown> & { ok: boolean; mode: string; supermemory: Awaited<ReturnType<typeof saveDinnerPreference>>; event: unknown; command: unknown; credentials: Record<string, unknown> }> {
+  const input = dinnerFollowupInput(cli, now);
+  const result = await saveDinnerPreference({
+    sessionId: input.memorySessionId,
+    wearerName: input.wearerName,
+    preference: input.preference,
+    restaurantName: input.restaurantName,
+    bookingTime: input.bookingTime,
+    now,
+  }, {
+    forceReal,
+    env: {
+      ...process.env,
+      ...(input.memoryContainer ? { SUPERMEMORY_CONTAINER: input.memoryContainer } : {}),
+    },
+  });
+  const eventKind = result.mode === "real" && result.ok ? "memory_saved" : "memory_save_requested";
+  const normalized = normalizeSponsorEvent({
+    sponsorId: "supermemory",
+    event: eventKind,
+    sessionId: input.memorySessionId,
+    title: eventKind === "memory_saved" ? "Preference Saved" : "Review Memory Save",
+    summary: input.preference,
+    target: input.restaurantName,
+    risk: eventKind === "memory_saved" ? "low" : "medium",
+    now,
+  });
+  return {
+    ok: result.ok,
+    mode: result.mode,
+    providerCallRequested: forceReal,
+    providerCallUsed: result.mode === "real",
+    commands: {
+      local: ["peripheralctl", "sponsor-runtime", "supermemory-preference", "--json"],
+      real: ["peripheralctl", "sponsor-runtime", "supermemory-preference", "--real-supermemory", "--json"],
+    },
+    credentials: sponsorRuntimeCredentialEvidence("supermemory"),
+    supermemory: result,
+    event: normalized.event,
+    widget: normalized.widget,
+    command: normalized.command,
+  };
+}
+
+function dinnerFollowupInput(cli: ParsedCli, now: Date): DinnerFollowupInput {
+  const sessionId = String(cli.options["session-id"] || "dinner-booking");
+  const bookingTime = String(cli.options["preferred-window"] || "7:45");
+  const bookingName = String(cli.options["booking-name"] || cli.options["wearer-name"] || "Wearer");
+  const partySize = Number(cli.options["party-size"] || 2);
+  return {
+    sessionId,
+    mailSessionId: sessionId + "-agentmail",
+    memorySessionId: sessionId + "-supermemory",
+    restaurantName: String(cli.options["restaurant-name"] || cli.options.target || "Sato Table"),
+    bookingTime,
+    partySize: Number.isFinite(partySize) ? Math.max(1, partySize) : 2,
+    bookingName,
+    wearerName: String(cli.options["wearer-name"] || bookingName),
+    preference: String(cli.options.preference || cli.options.summary || "Saved preference: prefers 7-8pm dinner slots."),
+    emailTo: typeof cli.options["email-to"] === "string" ? cli.options["email-to"] : undefined,
+    emailFrom: typeof cli.options["email-from"] === "string" ? cli.options["email-from"] : undefined,
+    memoryContainer: typeof cli.options["memory-container"] === "string" ? cli.options["memory-container"] : undefined,
+    now,
+  };
+}
+
 function sponsorRuntimeInput(cli: ParsedCli, now: Date): SponsorEventInput {
   const sponsorId = String(cli.options.sponsor || cli.positionals[1] || "stripe");
   const event = String(cli.options.event || cli.positionals[2] || "payment_intent_requires_action");
@@ -1176,6 +1553,26 @@ function splitList(value: string): string[] {
 function sponsorRuntimeForceReal(cli: ParsedCli, sponsorId: SponsorEventInput["sponsorId"]): boolean {
   const sponsorFlag = "real-" + sponsorId.replace(/_/g, "-");
   return Boolean(cli.options.real || cli.options["real-sponsor"] || cli.options[sponsorFlag]);
+}
+
+function sponsorSpongeMode(value: string | boolean | undefined): "context_digest" | "redaction_warning" | "safe_summary" | undefined {
+  if (typeof value !== "string") return undefined;
+  if (value === "context_digest" || value === "redaction_warning" || value === "safe_summary") return value;
+  throw new Error("--mode for sponsor-runtime sponge-context must be one of: context_digest, redaction_warning, safe_summary");
+}
+
+function sponsorRuntimeCredentialEvidence(sponsorId: SponsorEventInput["sponsorId"]): Record<string, unknown> {
+  const adapter = buildSponsorRuntimeAdapters(process.env).find((item) => item.id === sponsorId);
+  return {
+    credentialNames: adapter?.credentialNames || [],
+    configuredCredentialNames: adapter?.configuredCredentials || [],
+    brokerEndpointEnv: adapter?.endpointEnv,
+    brokerEndpointConfigured: adapter?.endpointConfigured || false,
+    providerEndpointEnv: adapter?.providerEndpointEnv,
+    providerEndpointConfigured: adapter?.providerEndpointConfigured || false,
+    genericDispatchCommand: adapter?.dispatchCommand || [],
+    realDispatchCommand: adapter?.realDispatchCommand || [],
+  };
 }
 
 function redactSponsorRuntimeRequest(request: SponsorRuntimeRequest): SponsorRuntimeRequest {
@@ -1336,6 +1733,7 @@ async function commandDinnerBookingDemo(cli: ParsedCli, projectRoot: string, dri
       text: String(item.event.summary || item.event.title || "AgentPhone call update."),
       event: item.event,
       command: item.command,
+      dispatch: callSession,
       widget: item.widget,
     }, timeline, artifacts, frameDir, displayOptions);
   }
@@ -2021,6 +2419,7 @@ function capabilities(): unknown {
       "demo dinner-booking",
       "demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display",
       "review-bundle",
+      "live-proof dinner-booking --real-hardware-ok",
       "hud --local-display --text",
       "hud --local-display --mic mac",
       "hud --local-display --mic mac --asr-provider openai-realtime",
@@ -2061,6 +2460,8 @@ function capabilities(): unknown {
       "phone-runtime lease",
       "phone-runtime route",
       "phone-runtime agent-mode-lease",
+      "phone-runtime approval-policy",
+      "phone-runtime evaluate-decision --risk high --confirmation voice --choice approve",
       "phone-runtime ingest --sponsor agentphone --event call_connected",
       "sponsor-workflows dossier",
       "sponsor-workflows list",
@@ -2073,6 +2474,9 @@ function capabilities(): unknown {
       "sponsor-runtime agentmail-send --restaurant-name <name> --preferred-window <time>",
       "sponsor-runtime supermemory-save --preference <text>",
       "sponsor-runtime followup-pack --restaurant-name <name> --preferred-window <time>",
+      "sponsor-runtime dinner-followups",
+      "sponsor-runtime agentmail-confirmation",
+      "sponsor-runtime supermemory-preference",
       "sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd",
       "sponsor-runtime browser-task --task <text> --start-url <url>",
       "sponsor-runtime browser-task --goal \"Check restaurant availability\"",
@@ -2275,6 +2679,7 @@ Usage:
   peripheralctl measure-latency [--local]
   peripheralctl demo dinner-booking [--local] [--json]
   peripheralctl review-bundle --json
+  peripheralctl live-proof dinner-booking --real-hardware-ok --json
   peripheralctl hud --local-display --text
   peripheralctl hud --local-display --text --hermes-cli
   peripheralctl hud --local-display --mic mac
@@ -2313,6 +2718,8 @@ Usage:
   peripheralctl phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test"
   peripheralctl phone-runtime route --line "hey codex show status"
   peripheralctl phone-runtime agent-mode-lease --line "User looked up into Agent Mode"
+  peripheralctl phone-runtime approval-policy
+  peripheralctl phone-runtime evaluate-decision --risk high --confirmation voice --choice approve
   peripheralctl phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
   peripheralctl sponsor-workflows dossier
   peripheralctl sponsor-workflows list
@@ -2325,6 +2732,9 @@ Usage:
   peripheralctl sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim
   peripheralctl sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences
   peripheralctl sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim
+  peripheralctl sponsor-runtime dinner-followups --json
+  peripheralctl sponsor-runtime agentmail-confirmation --json
+  peripheralctl sponsor-runtime supermemory-preference --json
   peripheralctl sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold"
   peripheralctl sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com
   peripheralctl sponsor-runtime browser-task --goal "Check restaurant availability" --url https://example.com
@@ -2333,6 +2743,7 @@ Usage:
   peripheralctl sponsor-runtime gemini-route --line "hey codex show status"
   peripheralctl demo dinner-booking --local
   peripheralctl demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
+  peripheralctl live-proof dinner-booking --real-hardware-ok --json
   peripheralctl phone-runtime decide --event booking-approval-1 --choice approve
   peripheralctl walkthrough live-call [--local]
   peripheralctl walkthrough blackjack [--local]
@@ -2363,6 +2774,8 @@ Global options:
   --session-id <id>       Stable session id for the normalized event.
   --session-prefix <id>   For agent-bridge session-pack: shared prefix for six agent sessions.
   --line <text>           Bounded CLI transcript, input line, or fallback sponsor summary to normalize.
+  --risk <level>          For approval policy: low, medium, or high.
+  --confirmation <level>  For approval policy: voice, tap, voice_and_tap, phone, or desktop.
   --payload-json <json>   For phone-runtime ingest: inbound sponsor or agent event payload.
   --payload-file <path>   For phone-runtime ingest: JSON file containing an inbound payload.
   --execute               For agent-bridge launch: start the local CLI process instead of returning the phone-gateway route.
@@ -2376,6 +2789,8 @@ Global options:
   --booking-time <t>      For sponsor-runtime AgentMail/Supermemory: confirmed booking time.
   --wearer-name <name>    For sponsor-runtime Supermemory: wearer identity label.
   --preference <text>     For sponsor-runtime Supermemory: preference content to store.
+  --real-sponsor          For sponsor-runtime: call the credential-bound provider adapter instead of phone-gateway review mode.
+  --real-<sponsor>        Same as --real-sponsor for one adapter, e.g. --real-stripe or --real-browser-use.
   --hold-amount <amount>  For sponsor-runtime stripe-hold: card-hold amount, e.g. 25.00 or cents.
   --currency <code>       For sponsor-runtime stripe-hold: currency code, default usd.
   --customer <id>         For sponsor-runtime stripe-hold: optional Stripe customer id.
@@ -2391,6 +2806,7 @@ Global options:
   --goal <text>           For sponsor-runtime browser-task: browser agent task goal.
   --url <url>             For sponsor-runtime browser-task: starting URL.
   --context-text <text>   For sponsor-runtime sponge-context: context text.
+  --mode <mode>           For sponsor-runtime sponge-context: context_digest, redaction_warning, or safe_summary.
   --prompt <text>         For sponsor-runtime gemini-route: broker routing prompt.
   --context <text>        For sponsor-runtime gemini-route: extra routing context.
   --model <name>          For sponsor-runtime gemini-route: Gemini model name.
@@ -2459,7 +2875,7 @@ Options:
 }
 
 function assertRealHardwareGate(command: string, driverOptions: DriverOptions, realHardwareOk: boolean): void {
-  const hardwareCommands = new Set(["push-json", "show-image", "clear", "walkthrough", "measure-latency", "demo"]);
+  const hardwareCommands = new Set(["push-json", "show-image", "clear", "walkthrough", "measure-latency", "demo", "live-proof"]);
   if (!hardwareCommands.has(command)) return;
   if (driverOptions.local || driverOptions.dryRun || realHardwareOk) return;
   throw new Error(`${command} in live transport mode requires --real-hardware-ok after explicit live-glasses permission.`);

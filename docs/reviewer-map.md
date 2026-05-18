@@ -10,9 +10,10 @@ npm run check
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --local --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
 ```
 
-The review bundle returns both artifact checks and runtime evidence: connected-state, phone-runtime, and agent-bridge route summaries are embedded in the same JSON, so reviewers can inspect the phone-gateway contract before any operator-driven glasses access.
+The review bundle returns both artifact checks and runtime evidence: connected-state, phone-runtime, agent-bridge, and `liveProof` route summaries are embedded in the same JSON. `live-proof` is the glasses-first operator path for AgentPhone, AgentMail, Supermemory, and real display transport, but the proof command records readiness without initiating those calls during review.
 
 Expected artifacts:
 
@@ -21,6 +22,7 @@ Expected artifacts:
 - `peripheral-hud-runtime/out/logs/dinner-booking.jsonl`
 - `peripheral-hud-runtime/out/frames/sponsor-followup/`
 - `peripheral-hud-runtime/out/sponsor-runtime/followup-pack.json`
+- `peripheral-hud-runtime/out/demo/dinner-booking-live-proof.json`
 - `docs/media/peripheral-demo-dinner-booking.mp4`
 
 ## Single Flow
@@ -33,6 +35,7 @@ Expected artifacts:
 | Booking pauses for approval | Implemented | `out/frames/dinner-booking/04-approval-required.png` |
 | User decision changes flow | Implemented | `phone-runtime decide --event booking-approval-1 --choice approve` |
 | Follow-up adapters dispatch | Adapter path | AgentMail and Supermemory dispatch records in `dinner-booking-timeline.json` |
+| End-to-end operator proof | Implemented | `peripheralctl live-proof dinner-booking --real-hardware-ok --json` |
 | Proof bundle verifies artifacts and runtime evidence | Implemented | `peripheralctl review-bundle --json` |
 
 ## Runtime Evidence
@@ -41,8 +44,12 @@ Expected artifacts:
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime dinner-followups --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime approval-policy --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime evaluate-decision --risk high --confirmation voice --choice approve --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-proof dinner-booking --real-hardware-ok --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json
@@ -50,7 +57,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime followu
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --session-id review-bundle --line "Codex needs approval to run npm test." --json
 ```
 
-The support and live-adapter reports expose 13 supported integration records, 13 live-ready adapters, and 48 cataloged operations; secret values stay outside the repo while the reports name the external runtime bindings. The connected-state, phone-runtime, and agent-bridge route summaries are also embedded under `runtime` in `review-bundle --json`.
+The support and live-adapter reports expose 13 supported integration records, 13 live-ready adapters, and 48 cataloged operations; secret values stay outside the repo while the reports name the external runtime bindings. The adapter totals, connected-state, phone-runtime, agent-bridge route summaries, and last-run service/display proof are embedded under `runtime` in `review-bundle --json`.
 
 ## Real Mode Env Surface
 
@@ -70,11 +77,13 @@ The support and live-adapter reports expose 13 supported integration records, 13
 | Area | Where to inspect |
 | --- | --- |
 | Phone-owned surface runtime | `peripheral-hud-runtime/packages/peripheral-phone-runtime/src/index.ts` |
+| Approval policy enforcement | `peripheralctl phone-runtime evaluate-decision --risk high --confirmation voice --choice approve --json` |
 | Inbound runtime ingest | `peripheralctl phone-runtime ingest --sponsor agentphone --event call_connected --json` |
 | AgentPhone call adapter | `peripheralctl sponsor-runtime agentphone-call --restaurant-phone +14155550137 --prompt "Book dinner for two and pause before confirming" --json` |
 | AgentMail send adapter | `peripheralctl sponsor-runtime agentmail-send --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json` |
 | Supermemory save adapter | `peripheralctl sponsor-runtime supermemory-save --preference "Prefers 7-8pm dinner slots" --memory-container dinner-preferences --json` |
 | Follow-up sponsor frames | `peripheralctl sponsor-runtime followup-pack --restaurant-name "Sato Table" --preferred-window 7:45 --booking-name Karim --json` |
+| Live proof path | `peripheralctl live-proof dinner-booking --real-hardware-ok --json` |
 | Peripheral hardware profile | `docs/peripheral-glasses.md` and `peripheralctl integrations hardware-profile --json` |
 | Agent Mode protocol | `peripheral-hud-runtime/packages/peripheral-protocol/src/index.ts` |
 | Sponsor registry | `peripheral-hud-runtime/packages/peripheral-integrations/src/index.ts` |
@@ -91,4 +100,5 @@ The support and live-adapter reports expose 13 supported integration records, 13
 - Agents and sponsors emit semantic events, not transport packets.
 - The phone owns BLE, renderer state, input capture, and display leases.
 - Payment, browser submit, email send, memory save, and high-risk tool actions are approval gated.
+- High-risk approvals require phone or desktop confirmation before the external action can continue.
 - Real display transport is explicit and operator controlled.
