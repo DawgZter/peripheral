@@ -1,0 +1,72 @@
+{
+  "schema": "peripheral-agent-mode-walkthrough-v1",
+  "name": "Connected Agent Mode walkthrough",
+  "mode": "agent",
+  "runtime": "phone_owned_glasses_surface",
+  "generated_at": "2026-05-17T17:40:00-07:00",
+  "connected_state": {
+    "schema": "peripheral-connected-state-v1",
+    "glasses": {
+      "connected": true,
+      "transport": "peripheral_phone_gateway",
+      "display": "540x280_2bpp",
+      "battery_percent": 86,
+      "rssi": -47,
+      "firmware": "peripheral.connected.0"
+    },
+    "phone": {
+      "connected": true,
+      "app_mode": "agent",
+      "renderer": "semantic_widget_to_monochrome_bitmap",
+      "input_router": "voice_tap_head_pose"
+    },
+    "broker": {
+      "connected": true,
+      "policy": "surface_lease_arbiter",
+      "active_lease": {
+        "surface": "pinned",
+        "holder": "agentphone",
+        "reason": "call_handoff_active",
+        "expires_in_ms": 90000
+      }
+    }
+  },
+  "walkthrough": [
+    {
+      "id": "step-01-connected",
+      "speaker_note": "Start with connected glasses, the phone surface owner, and Agent Mode already active.",
+      "surface": "pinned",
+      "fixture": "fixtures/ui/agent_mode_connected_status.json"
+    },
+    {
+      "id": "step-02-sponsor-cards",
+      "speaker_note": "Show that sponsors are represented as semantic surfaces, not raw BLE streams.",
+      "surface": "glance",
+      "fixture": "fixtures/ui/agent_mode_sponsor_cards.json"
+    },
+    {
+      "id": "step-03-cli-status",
+      "speaker_note": "Show an agent CLI session waiting on a bounded approval instead of silently mutating the workspace.",
+      "surface": "pinned",
+      "fixture": "fixtures/ui/agent_mode_cli_status.json"
+    },
+    {
+      "id": "step-04-approval",
+      "speaker_note": "End on the explicit approval gate for a Stripe card hold requested during an AgentPhone booking.",
+      "surface": "fullscreen",
+      "fixture": "fixtures/ui/agent_mode_approval_gate.json"
+    }
+  ],
+  "operator_lines": [
+    "Glasses are connected through the Peripheral phone gateway.",
+    "AgentPhone owns the call, Browser Use owns the page state, Stripe is waiting for approval.",
+    "Codex CLI is visible as terminal fallback, but the broker still owns the approval gate."
+  ],
+  "commands": [
+    "npm run peripheralctl -- integrations connected-state --json",
+    "npm run peripheralctl -- render-json fixtures/ui/agent_mode_connected_status.json --out out/frames/agent-mode-connected-status.png",
+    "npm run peripheralctl -- render-json fixtures/ui/agent_mode_sponsor_cards.json --out out/frames/agent-mode-sponsor-cards.png",
+    "npm run peripheralctl -- render-json fixtures/ui/agent_mode_cli_status.json --out out/frames/agent-mode-cli-status.png",
+    "npm run peripheralctl -- render-json fixtures/ui/agent_mode_approval_gate.json --out out/frames/agent-mode-approval-gate.png"
+  ]
+}

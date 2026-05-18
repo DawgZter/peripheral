@@ -1,4 +1,4 @@
-# Plain mock-ASR transcript replay. @wait applies after the previous line.
+# Plain scripted ASR transcript replay. @wait applies after the previous line.
 Hermes CLI
 @wait 350
 Hermes what is the HUD doing?

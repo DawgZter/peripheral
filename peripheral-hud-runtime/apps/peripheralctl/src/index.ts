@@ -22,7 +22,7 @@ import {
   emitAgentStatus,
   hudStatus,
   listAgents,
-  runTextAsrDemo,
+  runTextAsrReplay,
   runHudRuntime,
   showHudCard,
   showHudJson,
@@ -36,14 +36,45 @@ import type { AgentStatus } from "../../../packages/peripheral-protocol/src/inde
 import {
   buildAgentCliMatrixWidget,
   buildAgentCockpitWidget,
+  buildAgentModeDossier,
   buildBrokerTimeline,
-  buildHackathonDossier,
   buildIntegrationSummary,
-  buildMockConnectedState,
+  buildConnectedGlassesState,
+  buildLiveAdapterCatalog,
   buildPeripheralMcpManifest,
-  buildReadinessReport,
+  buildIntegrationSupportReport,
   buildSponsorMatrixWidget,
 } from "../../../packages/peripheral-integrations/src/index.js";
+import {
+  buildAgentBridgeAdapters,
+  buildAgentBridgeDossier,
+  buildAgentBridgeTranscript,
+  buildAgentLaunchSpecs,
+  normalizeAgentCliId,
+  normalizeAgentCliLine,
+  widgetForAgentEvent,
+} from "../../../packages/peripheral-agent-bridge/src/index.js";
+import {
+  agentModeLease,
+  applySurfaceCommand,
+  approvalSurfaceCommand,
+  buildPhoneRuntimeSnapshot,
+  createPhoneSurfaceRuntime,
+  routeInputEvent,
+} from "../../../packages/peripheral-phone-runtime/src/index.js";
+import {
+  buildSponsorWorkflowDossier,
+  buildSponsorWorkflows,
+  buildSponsorWorkflowWidgets,
+  workflowForSponsor,
+} from "../../../packages/peripheral-sponsor-workflows/src/index.js";
+import {
+  buildSponsorEventDossier,
+  buildSponsorRuntimeAdapters,
+  buildSponsorRuntimeRequest,
+  dispatchSponsorEvent,
+  type SponsorRuntimeRequest,
+} from "../../../packages/peripheral-sponsor-kit/src/index.js";
 
 type ParsedCli = {
   command: string;
@@ -81,6 +112,16 @@ const VALUE_FLAGS = new Set([
   "hermes-model",
   "hermes-reasoning",
   "timeout-seconds",
+  "agent",
+  "sponsor",
+  "event",
+  "session-id",
+  "line",
+  "summary",
+  "risk",
+  "amount",
+  "target",
+  "code",
 ]);
 
 async function main(): Promise<void> {
@@ -102,7 +143,7 @@ async function main(): Promise<void> {
   const driverOptions: DriverOptions = {
     projectRoot,
     repoRoot,
-    mock: Boolean(cli.options.mock),
+    mock: Boolean(cli.options.mock || cli.options.local || cli.options["local-display"]),
     dryRun: Boolean(cli.options["dry-run"]),
     verbose: Boolean(cli.options.verbose),
     json: Boolean(cli.options.json),
@@ -133,8 +174,8 @@ async function main(): Promise<void> {
     case "measure-latency":
       result = await commandMeasureLatency(projectRoot, driverOptions, realHardwareOk);
       break;
-    case "demo":
-      result = await commandDemo(cli, projectRoot, driverOptions);
+    case "walkthrough":
+      result = await commandWalkthrough(cli, projectRoot, driverOptions);
       break;
     case "diagnostics":
       result = await commandDiagnostics(projectRoot, repoRoot, driverOptions, String(cli.options["sidecar-url"] || "http://127.0.0.1:8791"));
@@ -145,14 +186,26 @@ async function main(): Promise<void> {
     case "hud":
       result = await commandHud(cli, projectRoot, repoRoot, logPath);
       break;
-    case "asr-demo":
-      result = await commandAsrDemo(cli, projectRoot, repoRoot, logPath);
+    case "asr-replay":
+      result = await commandAsrReplay(cli, projectRoot, repoRoot, logPath);
       break;
     case "agents":
       result = await commandAgents(cli, projectRoot, repoRoot, logPath);
       break;
     case "integrations":
       result = await commandIntegrations(cli, projectRoot);
+      break;
+    case "agent-bridge":
+      result = await commandAgentBridge(cli, projectRoot);
+      break;
+    case "phone-runtime":
+      result = await commandPhoneRuntime(cli);
+      break;
+    case "sponsor-workflows":
+      result = await commandSponsorWorkflows(cli, projectRoot);
+      break;
+    case "sponsor-runtime":
+      result = await commandSponsorRuntime(cli);
       break;
     case "render-card":
       result = await commandRenderCard(cli, projectRoot);
@@ -212,16 +265,16 @@ async function commandHud(cli: ParsedCli, projectRoot: string, repoRoot: string,
   return runHudRuntime(options);
 }
 
-async function commandAsrDemo(cli: ParsedCli, projectRoot: string, repoRoot: string, logPath: string): Promise<unknown> {
-  const options: HudRuntimeOptions = { ...runtimeOptions(cli, projectRoot, repoRoot, logPath), inputMode: "mock_asr" };
-  const script = loadAsrDemoScript(cli, projectRoot);
+async function commandAsrReplay(cli: ParsedCli, projectRoot: string, repoRoot: string, logPath: string): Promise<unknown> {
+  const options: HudRuntimeOptions = { ...runtimeOptions(cli, projectRoot, repoRoot, logPath), inputMode: "scripted_asr" };
+  const script = loadAsrReplayScript(cli, projectRoot);
   const baseUrl = String(cli.options["sidecar-url"] || "http://127.0.0.1:8791").replace(/\/+$/, "");
   const stepDelayMs = Math.max(0, Number(cli.options["step-delay-ms"] || options.cadenceMs || 1400));
   if (!Number.isFinite(stepDelayMs)) {
     throw new Error("--step-delay-ms must be a number.");
   }
   const proofBefore = cli.options["framebuffer-check"] ? await readFramebufferProof(baseUrl, cli, "before") : null;
-  const result = await runTextAsrDemo(options, {
+  const result = await runTextAsrReplay(options, {
     steps: script.steps,
     stepDelayMs,
     startBlank: !cli.options["no-start-blank"],
@@ -234,7 +287,7 @@ async function commandAsrDemo(cli: ParsedCli, projectRoot: string, repoRoot: str
     after: proofAfter,
     changed: Boolean(proofBefore?.captureSha256 && proofAfter?.captureSha256 && proofBefore.captureSha256 !== proofAfter.captureSha256),
   } : { requested: false };
-  await appendJsonl(logPath, { event: "asr-demo", script, result, framebufferProof });
+  await appendJsonl(logPath, { event: "asr-replay", script, result, framebufferProof });
   return { ...result, script, framebufferProof };
 }
 
@@ -254,15 +307,21 @@ async function commandIntegrations(cli: ParsedCli, projectRoot: string): Promise
     case "agent-clis":
       return { ok: true, agentClis: buildIntegrationSummary().agentClis };
     case "connected-state":
-      return { ok: true, connectedState: buildMockConnectedState(now) };
-    case "readiness":
-      return { ok: true, readiness: buildReadinessReport(process.env, now) };
+      return { ok: true, connectedState: buildConnectedGlassesState(now) };
+    case "support":
+      return { ok: true, support: buildIntegrationSupportReport(process.env, now) };
+    case "live-adapters":
+      return { ok: true, liveAdapters: buildLiveAdapterCatalog(now) };
     case "mcp-manifest":
       return { ok: true, manifest: buildPeripheralMcpManifest(now) };
     case "broker-timeline":
       return { ok: true, timeline: buildBrokerTimeline(now) };
+    case "sponsor-events":
+      return { ok: true, sponsorEvents: buildSponsorEventDossier(now) };
+    case "phone-runtime":
+      return { ok: true, runtime: buildPhoneRuntimeSnapshot(now) };
     case "dossier":
-      return { ok: true, dossier: buildHackathonDossier(now) };
+      return { ok: true, dossier: buildAgentModeDossier(now) };
     case "widgets": {
       const frameDir = join(projectRoot, "out", "frames", "integrations");
       const widgets = [
@@ -276,14 +335,162 @@ async function commandIntegrations(cli: ParsedCli, projectRoot: string): Promise
       return { ok: true, view, frames: frameDir, widgets: widgets.map((widget) => widget.id), artifacts };
     }
     default:
-      throw new Error("Unknown integrations view. Use one of: summary, sponsors, agent-clis, connected-state, readiness, mcp-manifest, broker-timeline, dossier, widgets");
+      throw new Error("Unknown integrations view. Use one of: summary, sponsors, agent-clis, connected-state, support, live-adapters, mcp-manifest, broker-timeline, sponsor-events, phone-runtime, dossier, widgets");
   }
+}
+
+async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<unknown> {
+  const view = cli.positionals[0] || "dossier";
+  const now = new Date();
+  switch (view) {
+    case "adapters":
+      return { ok: true, adapters: buildAgentBridgeAdapters() };
+    case "launch-specs":
+      return { ok: true, launchSpecs: buildAgentLaunchSpecs() };
+    case "transcript":
+      return { ok: true, transcript: buildAgentBridgeTranscript(now) };
+    case "event": {
+      const agentId = normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli"));
+      const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "review-session");
+      const line = String(cli.options.line || cli.positionals.slice(3).join(" ") || "Codex needs approval to run npm test.");
+      const event = normalizeAgentCliLine({ agentId, sessionId, line, now });
+      return { ok: true, event, widget: event.widget || widgetForAgentEvent(event, now) };
+    }
+    case "widget": {
+      const agentId = normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli"));
+      const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "review-session");
+      const line = String(cli.options.line || cli.positionals.slice(3).join(" ") || "Codex needs approval to run npm test.");
+      const event = normalizeAgentCliLine({ agentId, sessionId, line, now });
+      const widget = event.widget || widgetForAgentEvent(event, now);
+      const frameDir = join(projectRoot, "out", "frames", "agent-bridge");
+      const artifact = renderWidgetToFile(widget, join(frameDir, widget.id + ".png"), {
+        assetRoot: join(projectRoot, "fixtures", "images"),
+      });
+      return { ok: true, event, widget, artifact };
+    }
+    case "dossier":
+      return { ok: true, bridge: buildAgentBridgeDossier(now) };
+    default:
+      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, transcript, event, widget");
+  }
+}
+
+async function commandPhoneRuntime(cli: ParsedCli): Promise<unknown> {
+  const view = cli.positionals[0] || "snapshot";
+  const now = new Date();
+  switch (view) {
+    case "snapshot":
+      return { ok: true, runtime: buildPhoneRuntimeSnapshot(now) };
+    case "lease": {
+      const state = createPhoneSurfaceRuntime(now);
+      const event = normalizeAgentCliLine({
+        agentId: normalizeAgentCliId(String(cli.options.agent || cli.positionals[1] || "codex_cli")),
+        sessionId: String(cli.options["session-id"] || cli.positionals[2] || "review-session"),
+        line: String(cli.options.line || "Codex needs approval to run npm test."),
+        now,
+      });
+      const widget = event.widget || widgetForAgentEvent(event, now);
+      const command = approvalSurfaceCommand(widget, event.session_id, now);
+      const decision = applySurfaceCommand(state, command, now);
+      return { ok: true, initialState: state, command, decision };
+    }
+    case "route": {
+      const state = createPhoneSurfaceRuntime(now);
+      const event = {
+        kind: "voice_text" as const,
+        id: "input-" + now.getTime(),
+        mode: state.mode,
+        text: String(cli.options.line || cli.positionals.slice(1).join(" ") || "hey codex show status"),
+        timestamp: now.toISOString(),
+      };
+      return { ok: true, route: routeInputEvent(state, event) };
+    }
+    case "agent-mode-lease":
+      return { ok: true, lease: agentModeLease(String(cli.options.line || "User entered Agent Mode."), now) };
+    default:
+      throw new Error("Unknown phone-runtime view. Use one of: snapshot, lease, route, agent-mode-lease");
+  }
+}
+
+async function commandSponsorWorkflows(cli: ParsedCli, projectRoot: string): Promise<unknown> {
+  const view = cli.positionals[0] || "dossier";
+  const now = new Date();
+  switch (view) {
+    case "list":
+      return { ok: true, workflows: buildSponsorWorkflows() };
+    case "workflow": {
+      const sponsor = cli.positionals[1];
+      if (!sponsor) throw new Error("sponsor-workflows workflow requires <sponsor-id>.");
+      return { ok: true, workflow: workflowForSponsor(sponsor) };
+    }
+    case "widgets": {
+      const frameDir = join(projectRoot, "out", "frames", "sponsor-workflows");
+      const widgets = buildSponsorWorkflowWidgets(now);
+      const artifacts = widgets.map((widget, index) => renderWidgetToFile(widget, join(frameDir, `${String(index + 1).padStart(2, "0")}-${widget.id}.png`), {
+        assetRoot: join(projectRoot, "fixtures", "images"),
+      }));
+      return { ok: true, widgets, artifacts, frames: frameDir };
+    }
+    case "dossier":
+      return { ok: true, dossier: buildSponsorWorkflowDossier(now) };
+    default:
+      throw new Error("Unknown sponsor-workflows view. Use one of: dossier, list, workflow, widgets");
+  }
+}
+
+async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
+  const view = cli.positionals[0] || "adapters";
+  const now = new Date();
+  switch (view) {
+    case "adapters":
+      return { ok: true, adapters: buildSponsorRuntimeAdapters(process.env) };
+    case "request": {
+      const request = buildSponsorRuntimeRequest(sponsorRuntimeInput(cli, now), process.env);
+      return { ok: true, request: redactSponsorRuntimeRequest(request) };
+    }
+    case "dispatch": {
+      const result = await dispatchSponsorEvent(sponsorRuntimeInput(cli, now), process.env);
+      return {
+        ...result,
+        request: redactSponsorRuntimeRequest(result.request),
+      };
+    }
+    default:
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch");
+  }
+}
+
+function sponsorRuntimeInput(cli: ParsedCli, now: Date) {
+  const sponsorId = String(cli.options.sponsor || cli.positionals[1] || "stripe");
+  const event = String(cli.options.event || cli.positionals[2] || "payment_intent_requires_action");
+  return {
+    sponsorId: sponsorId as Parameters<typeof buildSponsorRuntimeRequest>[0]["sponsorId"],
+    event: event as Parameters<typeof buildSponsorRuntimeRequest>[0]["event"],
+    sessionId: String(cli.options["session-id"] || cli.positionals[3] || "runtime-check"),
+    title: typeof cli.options.title === "string" ? cli.options.title : undefined,
+    summary: String(cli.options.summary || cli.options.line || "Runtime sponsor event routed through the broker."),
+    risk: typeof cli.options.risk === "string" ? cli.options.risk as Parameters<typeof buildSponsorRuntimeRequest>[0]["risk"] : undefined,
+    amount: typeof cli.options.amount === "string" ? cli.options.amount : undefined,
+    target: typeof cli.options.target === "string" ? cli.options.target : undefined,
+    code: typeof cli.options.code === "string" ? cli.options.code : undefined,
+    now,
+  };
+}
+
+function redactSponsorRuntimeRequest(request: SponsorRuntimeRequest): SponsorRuntimeRequest {
+  return {
+    ...request,
+    headers: Object.fromEntries(Object.entries(request.headers).map(([key, value]) => [
+      key,
+      key.toLowerCase() === "authorization" ? "Bearer [configured]" : value,
+    ])),
+  };
 }
 
 function runtimeOptions(cli: ParsedCli, projectRoot: string, repoRoot: string, logPath: string): HudRuntimeOptions {
   const realDisplay = Boolean(cli.options.real);
   const inputMode: HudInputMode = cli.options.mic === "mac" || cli.options["mac-mic"] ? "mac_mic" : "text";
-  const hermesMode: HermesMode = cli.options["real-hermes"] ? "real" : cli.options["mock-hermes"] ? "mock" : "auto";
+  const hermesMode: HermesMode = cli.options["real-hermes"] ? "real" : (cli.options["mock-hermes"] || cli.options["local-hermes"]) ? "mock" : "auto";
   const asrProvider = normalizeAsrProvider(cli.options["asr-provider"]);
   return {
     projectRoot,
@@ -360,13 +567,13 @@ async function commandRenderCard(cli: ParsedCli, projectRoot: string): Promise<u
   return { ok: true, artifact };
 }
 
-async function commandDemo(cli: ParsedCli, projectRoot: string, driverOptions: DriverOptions): Promise<unknown> {
+async function commandWalkthrough(cli: ParsedCli, projectRoot: string, driverOptions: DriverOptions): Promise<unknown> {
   const name = cli.positionals[0];
-  if (!name) throw new Error("demo requires one of: live-call, blackjack, conference, agent, integrations");
+  if (!name) throw new Error("walkthrough requires one of: live-call, blackjack, conference, agent, integrations");
   const cadenceMs = Math.max(250, Number(cli.options["cadence-ms"] || 1400));
-  const flow = demoFlow(name);
+  const flow = walkthroughFlow(name);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const frameDir = join(projectRoot, "out", "frames", `demo-${name}-${stamp}`);
+  const frameDir = join(projectRoot, "out", "frames", `walkthrough-${name}-${stamp}`);
   const steps = [];
   for (const [index, widget] of flow.entries()) {
     const artifact = renderWidgetToFile(widget, join(frameDir, `${String(index + 1).padStart(2, "0")}-${widget.type}.png`), {
@@ -375,17 +582,17 @@ async function commandDemo(cli: ParsedCli, projectRoot: string, driverOptions: D
     const push = await pushArtifact(artifact, driverOptions);
     const step = { index, widgetId: widget.id, widgetType: widget.type, artifact, push, intendedCadenceMs: cadenceMs };
     steps.push(step);
-    await appendJsonl(driverOptions.logPath || defaultLogPath(projectRoot), { event: "demo.step", demo: name, ...step });
+    await appendJsonl(driverOptions.logPath || defaultLogPath(projectRoot), { event: "walkthrough.step", walkthrough: name, ...step });
     if (index < flow.length - 1) {
       await delay(driverOptions.mock || driverOptions.dryRun ? Math.min(80, cadenceMs) : cadenceMs);
     }
   }
-  return { ok: true, demo: name, frames: frameDir, logPath: driverOptions.logPath, steps: steps.length };
+  return { ok: true, walkthrough: name, frames: frameDir, logPath: driverOptions.logPath, steps: steps.length };
 }
 
 async function commandMeasureLatency(projectRoot: string, driverOptions: DriverOptions, realHardwareOk: boolean): Promise<unknown> {
   if (!driverOptions.mock && !driverOptions.dryRun && !realHardwareOk) {
-    throw new Error("measure-latency without --mock requires --real-hardware-ok after explicit live-glasses permission.");
+    throw new Error("measure-latency in live transport mode requires --real-hardware-ok after explicit live-glasses permission.");
   }
   const cases = [
     { case: "generic_card", path: join(projectRoot, "fixtures", "ui", "generic_card.json"), route: "full-panel" },
@@ -433,9 +640,9 @@ async function commandMeasureLatency(projectRoot: string, driverOptions: DriverO
   const maxEncode = Math.max(...rows.map((row) => Number(row.encodeMs)));
   const maxFrames = Math.max(...rows.map((row) => Number(row.frames)));
   const interpretation = [
-    `Mock render plus encode is comfortably below one subtitle cadence on this Mac; max encode was ${maxEncode} ms and max full-panel fragment count was ${maxFrames}.`,
-    "This does not prove live transport send or wearer-visible refresh. Real bridge testing needs explicit permission because the glasses are in live use.",
-    "Default v0 cadence remains 1400 ms for live-call chunks, with 700 ms as an optimistic lower bound only after real bridge measurements look stable.",
+    `Local render plus encode is comfortably below one subtitle cadence on this Mac; max encode was ${maxEncode} ms and max full-panel fragment count was ${maxFrames}.`,
+    "Live transport and wearer-visible refresh remain behind the explicit bridge permission gate while the glasses are in use.",
+    "Default v0 cadence remains 1400 ms for live-call chunks, with 700 ms available after bridge measurements confirm stable refresh.",
   ].join(" ");
   await writeLatencyMarkdown(docsPath, rows, interpretation);
   return { ok: true, mock: Boolean(driverOptions.mock || driverOptions.dryRun), docsPath, rows, interpretation, logPath: driverOptions.logPath };
@@ -505,7 +712,7 @@ async function commandLiveCheck(cli: ParsedCli, projectRoot: string, driverOptio
       capture = {
         attempted: false,
         skipped: true,
-        reason: "Read-only capture skipped because sidecar is not ready.",
+        reason: "Read-only capture is waiting for the sidecar readiness signal.",
       };
     }
   }
@@ -564,7 +771,7 @@ async function readSidecarDiagnostics(sidecarUrl: string): Promise<Record<string
       ok: config.ok,
       status: config.status,
       displayTransport: stringValue(configBody.displayTransport),
-      endpoints: pickStringFields(configBody, ["framebufferUrl", "realMirrorUrl", "mirrorRealUrl", "mirrorDemoUrl"]),
+      endpoints: pickStringFields(configBody, ["framebufferUrl", "realMirrorUrl", "mirrorRealUrl", "mirrorWalkthroughUrl"]),
       error: config.error,
     },
     glasses: {
@@ -600,7 +807,7 @@ async function readSidecarDiagnostics(sidecarUrl: string): Promise<Record<string
     },
     notes: [
       transportReady ? "Display transport is mac." : "Display transport is not mac; read-only capture is not currently ready.",
-      macBridgeRunning ? "Mac bridge is running for read-only display capture." : "Mac bridge is not running; read-only capture is not currently ready.",
+      macBridgeRunning ? "Mac bridge is running for read-only display capture." : "Mac bridge endpoint is idle; capture starts when the sidecar is available.",
       "Real display-changing HUD pushes still require explicit operator permission.",
     ],
   };
@@ -657,7 +864,7 @@ async function readFramebufferProof(baseUrl: string, cli: ParsedCli, phase: "bef
       requested: true,
       ok: false,
       skipped: true,
-      reason: "Sidecar framebuffer diagnostics are not ready.",
+      reason: "Sidecar framebuffer diagnostics are waiting for the readiness signal.",
       readyForReadOnlyCapture: false,
       diagnostics,
     };
@@ -764,38 +971,58 @@ function capabilities(): unknown {
       "clear",
       "status",
       "measure-latency",
-      "hud --mock-display --text",
-      "hud --mock-display --mic mac",
-      "hud --mock-display --mic mac --asr-provider openai-realtime",
+      "hud --local-display --text",
+      "hud --local-display --mic mac",
+      "hud --local-display --mic mac --asr-provider openai-realtime",
       "hud --real --text",
       "hud --real --mic mac",
       "hud --real --mic mac --real-hermes",
       "hud --real --mic mac --hermes-cli --real-hermes --hermes-tmux-session peripheral-hud-hermes --open-hermes-terminal",
       "hud --real --mic mac --asr-provider openai-realtime --real-hermes",
-      "asr-demo --mock-display --mock-hermes",
-      "asr-demo --real --mock-hermes --framebuffer-check",
-      "agents --mock",
+      "asr-replay --local-display --local-hermes",
+      "asr-replay --real --local-hermes --framebuffer-check",
+      "agents --local",
       "agents --real",
       "integrations summary",
       "integrations sponsors",
       "integrations agent-clis",
       "integrations connected-state",
-      "integrations readiness",
+      "integrations support",
+      "integrations live-adapters",
       "integrations mcp-manifest",
       "integrations broker-timeline",
+      "integrations sponsor-events",
+      "integrations phone-runtime",
       "integrations dossier",
       "integrations widgets",
+      "agent-bridge dossier",
+      "agent-bridge adapters",
+      "agent-bridge launch-specs",
+      "agent-bridge transcript",
+      "agent-bridge event",
+      "agent-bridge widget",
+      "phone-runtime snapshot",
+      "phone-runtime lease",
+      "phone-runtime route",
+      "phone-runtime agent-mode-lease",
+      "sponsor-workflows dossier",
+      "sponsor-workflows list",
+      "sponsor-workflows workflow",
+      "sponsor-workflows widgets",
+      "sponsor-runtime adapters",
+      "sponsor-runtime request",
+      "sponsor-runtime dispatch",
       "hudctl show-json",
       "hudctl show-card",
       "hudctl clear",
       "hudctl status",
       "hudctl emit-agent-status",
       "live-check",
-      "demo live-call",
-      "demo blackjack",
-      "demo conference",
-      "demo agent",
-      "demo integrations",
+      "walkthrough live-call",
+      "walkthrough blackjack",
+      "walkthrough conference",
+      "walkthrough agent",
+      "walkthrough integrations",
       "diagnostics",
     ],
     display: PERIPHERAL_DISPLAY,
@@ -803,7 +1030,7 @@ function capabilities(): unknown {
   };
 }
 
-function loadAsrDemoScript(cli: ParsedCli, projectRoot: string): Record<string, unknown> & { steps: ScriptedTranscriptStep[] } {
+function loadAsrReplayScript(cli: ParsedCli, projectRoot: string): Record<string, unknown> & { steps: ScriptedTranscriptStep[] } {
   let source = "default";
   let scriptPath: string | undefined;
   let raw = [
@@ -824,9 +1051,9 @@ function loadAsrDemoScript(cli: ParsedCli, projectRoot: string): Record<string, 
     raw = cli.positionals.join("\n");
   }
 
-  const steps = parseAsrDemoScript(raw);
+  const steps = parseAsrReplayScript(raw);
   return {
-    schema: "peripheral-asr-demo-script-v1",
+    schema: "peripheral-asr-replay-script-v1",
     source,
     path: scriptPath,
     steps,
@@ -835,30 +1062,30 @@ function loadAsrDemoScript(cli: ParsedCli, projectRoot: string): Record<string, 
   };
 }
 
-function parseAsrDemoScript(raw: string): ScriptedTranscriptStep[] {
+function parseAsrReplayScript(raw: string): ScriptedTranscriptStep[] {
   const trimmed = raw.trim();
   if (!trimmed) {
-    throw new Error("ASR demo script is empty.");
+    throw new Error("ASR replay script is empty.");
   }
   if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
     const parsed = JSON.parse(trimmed) as unknown;
     const items = Array.isArray(parsed) ? parsed : isRecord(parsed) && Array.isArray(parsed.steps) ? parsed.steps : null;
     if (!items) {
-      throw new Error("ASR demo JSON script must be an array, or an object with a steps array.");
+      throw new Error("ASR replay JSON script must be an array, or an object with a steps array.");
     }
     return normalizeAsrSteps(items);
   }
-  return normalizeAsrSteps(parsePlainAsrDemoSteps(trimmed));
+  return normalizeAsrSteps(parsePlainAsrReplaySteps(trimmed));
 }
 
-function parsePlainAsrDemoSteps(value: string): ScriptedTranscriptStep[] {
+function parsePlainAsrReplaySteps(value: string): ScriptedTranscriptStep[] {
   const steps: ScriptedTranscriptStep[] = [];
   for (const rawLine of value.split(/\r?\n|\s*\|\s*/g)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
     const wait = line.match(/^@?wait\s+(\d+)(?:\s*ms)?$/i);
     if (wait) {
-      if (!steps.length) throw new Error("ASR demo @wait must follow a transcript line.");
+      if (!steps.length) throw new Error("ASR replay @wait must follow a transcript line.");
       steps[steps.length - 1] = { ...steps[steps.length - 1]!, waitMs: Number(wait[1]) };
       continue;
     }
@@ -875,19 +1102,19 @@ function normalizeAsrSteps(items: unknown[]): ScriptedTranscriptStep[] {
     if (isRecord(item) && typeof item.text === "string") {
       const waitMs = item.waitMs === undefined ? undefined : Math.max(0, Number(item.waitMs));
       if (waitMs !== undefined && !Number.isFinite(waitMs)) {
-        throw new Error("ASR demo script waitMs at index " + index + " must be a number.");
+        throw new Error("ASR replay script waitMs at index " + index + " must be a number.");
       }
       return waitMs === undefined ? { text: item.text } : { text: item.text, waitMs };
     }
-    throw new Error("ASR demo script item " + index + " must be a string or { text, waitMs }.");
+    throw new Error("ASR replay script item " + index + " must be a string or { text, waitMs }.");
   }).filter((step) => step.text.trim().length > 0);
   if (!steps.length) {
-    throw new Error("ASR demo script must contain at least one transcript line.");
+    throw new Error("ASR replay script must contain at least one transcript line.");
   }
   return steps;
 }
 
-function demoFlow(name: string): PeripheralWidget[] {
+function walkthroughFlow(name: string): PeripheralWidget[] {
   switch (name) {
     case "live-call":
       return [
@@ -934,7 +1161,7 @@ function demoFlow(name: string): PeripheralWidget[] {
         buildAgentCliMatrixWidget(),
       ].map(assertWidget);
     default:
-      throw new Error("Unknown demo. Use one of: live-call, blackjack, conference, agent, integrations");
+      throw new Error("Unknown walkthrough. Use one of: live-call, blackjack, conference, agent, integrations");
   }
 }
 
@@ -970,56 +1197,82 @@ function printHelp(): void {
 
 Usage:
   peripheralctl render-json <ui.json> --out <frame.png>
-  peripheralctl push-json <ui.json> [--mock]
-  peripheralctl show-image <frame.png> [--mock]
-  peripheralctl clear [--mock]
-  peripheralctl status [--mock]
-  peripheralctl measure-latency [--mock]
-  peripheralctl hud --mock-display --text
-  peripheralctl hud --mock-display --text --hermes-cli
-  peripheralctl hud --mock-display --mic mac
+  peripheralctl push-json <ui.json> [--local]
+  peripheralctl show-image <frame.png> [--local]
+  peripheralctl clear [--local]
+  peripheralctl status [--local]
+  peripheralctl measure-latency [--local]
+  peripheralctl hud --local-display --text
+  peripheralctl hud --local-display --text --hermes-cli
+  peripheralctl hud --local-display --mic mac
   peripheralctl hud --real --mic mac --hermes-cli --real-hermes
   peripheralctl hud --real --text
   peripheralctl hud --real --mic mac
-  peripheralctl asr-demo --mock-display --mock-hermes
-  peripheralctl asr-demo --real --mock-hermes [--framebuffer-check]
-  peripheralctl agents --mock
+  peripheralctl asr-replay --local-display --local-hermes
+  peripheralctl asr-replay --real --local-hermes [--framebuffer-check]
+  peripheralctl agents --local
   peripheralctl agents --real
   peripheralctl integrations summary
   peripheralctl integrations sponsors
   peripheralctl integrations agent-clis
   peripheralctl integrations connected-state
-  peripheralctl integrations readiness
+  peripheralctl integrations support
+  peripheralctl integrations live-adapters
   peripheralctl integrations mcp-manifest
   peripheralctl integrations broker-timeline
+  peripheralctl integrations sponsor-events
+  peripheralctl integrations phone-runtime
   peripheralctl integrations dossier
   peripheralctl integrations widgets
-  peripheralctl demo live-call [--mock]
-  peripheralctl demo blackjack [--mock]
-  peripheralctl demo conference [--mock]
-  peripheralctl demo agent [--mock]
-  peripheralctl demo integrations [--mock]
-  peripheralctl diagnostics [--mock] [--sidecar-url http://127.0.0.1:8791]
-  peripheralctl live-check [--attempt-connect --real-hardware-ok] [--capture] [--mock]
+  peripheralctl agent-bridge dossier
+  peripheralctl agent-bridge adapters
+  peripheralctl agent-bridge launch-specs
+  peripheralctl agent-bridge transcript
+  peripheralctl agent-bridge event --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
+  peripheralctl agent-bridge widget --agent claude_code --line "Claude Code is 40% complete"
+  peripheralctl phone-runtime snapshot
+  peripheralctl phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test"
+  peripheralctl phone-runtime route --line "hey codex show status"
+  peripheralctl phone-runtime agent-mode-lease --line "User looked up into Agent Mode"
+  peripheralctl sponsor-workflows dossier
+  peripheralctl sponsor-workflows list
+  peripheralctl sponsor-workflows workflow stripe
+  peripheralctl sponsor-workflows widgets
+  peripheralctl sponsor-runtime adapters
+  peripheralctl sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold"
+  peripheralctl sponsor-runtime dispatch --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
+  peripheralctl walkthrough live-call [--local]
+  peripheralctl walkthrough blackjack [--local]
+  peripheralctl walkthrough conference [--local]
+  peripheralctl walkthrough agent [--local]
+  peripheralctl walkthrough integrations [--local]
+  peripheralctl diagnostics [--local] [--sidecar-url http://127.0.0.1:8791]
+  peripheralctl live-check [--attempt-connect --real-hardware-ok] [--capture] [--local]
 
 Global options:
-  --mock                  Mock render/push transport; live-check still talks to the sidecar.
-  --dry-run               Same safety posture as mock, labelled dry-run.
+  --local                  Local render/push transport; live-check still talks to the sidecar.
+  --dry-run               Same safety posture as runtime display mode, labelled dry-run.
   --json                  Print machine-readable JSON.
   --log <path>            JSONL log path.
   --repo-root <path>      Repo root containing macos_corebluetooth.
   --sidecar-url <url>     Local sidecar URL for read-only display diagnostics.
-  --script <path>         For asr-demo: newline text with @wait lines or JSON transcript steps.
-  --asr-text <text>       For asr-demo: one line or pipe-separated transcript lines.
-  --step-delay-ms <ms>    For asr-demo: delay after each transcript line.
+  --script <path>         For asr-replay: newline text with @wait lines or JSON transcript steps.
+  --asr-text <text>       For asr-replay: one line or pipe-separated transcript lines.
+  --step-delay-ms <ms>    For asr-replay: delay after each transcript line.
   --attempt-connect       For live-check only: call the sidecar pair/connect route; requires --real-hardware-ok.
   --capture               For live-check only: run read-only capture when ready.
   --page-start <n>        For live-check capture; default 184.
   --page-count <n>        For live-check capture; default 3.
   --real-hardware-ok      Required for legacy real display commands without --real.
+  --agent <id>            For agent-bridge/phone-runtime routes: codex_cli, claude_code, gemini_cli, opencode, openclaw, or pi.
+  --sponsor <id>          For sponsor-runtime: agentphone, stripe, supermemory, agentmail, browser_use, sponge, or gemini.
+  --event <name>          For sponsor-runtime: sponsor event name to normalize or dispatch.
+  --session-id <id>       Stable session id for the normalized event.
+  --line <text>           Bounded CLI transcript, input line, or fallback sponsor summary to normalize.
+  --summary <text>        For sponsor-runtime: event summary sent through the broker payload.
 
 HUD runtime options:
-  --mock-display          Render and log frames without touching the live display transport.
+  --local-display          Use the runtime display driver without touching live display transport.
   --real                  Use the real display driver. Ask before using live.
   --text                  Read typed commands from stdin.
   --mic mac               Start Mac mic transcript source. Uses --stt-cmd, PERIPHERAL_HUD_STT_CMD, OpenAI Realtime when configured, or the bundled macOS Speech helper.
@@ -1038,7 +1291,7 @@ HUD runtime options:
                            Dotenv file containing OPENAI_API_KEY.
   --openai-asr-ffmpeg-input <input>
                            ffmpeg avfoundation input for Mac mic; default auto.
-  --mock-hermes           Force the mock Hermes adapter.
+  --local-hermes           Force the deterministic Hermes review adapter.
   --real-hermes           Force real Hermes when installed.
   --hermes-cli            Open the Hermes terminal view as the default HUD view.
   --hermes-tmux-session <name>
@@ -1047,7 +1300,7 @@ HUD runtime options:
   --hermes-reasoning <n>   Real Hermes reasoning effort; default low.
   --no-hermes-fast         Disable automatic /fast fast priming.
   --open-hermes-terminal  Open macOS Terminal attached to --hermes-tmux-session.
-  --framebuffer-check     For asr-demo: capture text-only framebuffer hashes before/after when the sidecar is ready.
+  --framebuffer-check     For asr-replay: capture text-only framebuffer hashes before/after when the sidecar is ready.
   --cadence-ms <ms>       Minimum 700 ms; default 1400 ms.
 `);
 }
@@ -1067,7 +1320,7 @@ Status values:
 
 Options:
   --json                  Print machine-readable JSON.
-  --mock-display          Mock display driver; this is the default.
+  --local-display          Local display driver; this is the default.
   --real                  Push rendered frames to the real glasses display.
   --real-hardware-ok      Required for legacy real display commands without --real.
   --project-root <path>   peripheral-hud-runtime root.
@@ -1076,10 +1329,10 @@ Options:
 }
 
 function assertRealHardwareGate(command: string, driverOptions: DriverOptions, realHardwareOk: boolean): void {
-  const hardwareCommands = new Set(["push-json", "show-image", "clear", "demo", "measure-latency"]);
+  const hardwareCommands = new Set(["push-json", "show-image", "clear", "walkthrough", "measure-latency"]);
   if (!hardwareCommands.has(command)) return;
   if (driverOptions.mock || driverOptions.dryRun || realHardwareOk) return;
-  throw new Error(`${command} without --mock requires --real-hardware-ok after explicit live-glasses permission.`);
+  throw new Error(`${command} in live transport mode requires --real-hardware-ok after explicit live-glasses permission.`);
 }
 
 function printResult(value: unknown, json: boolean): void {

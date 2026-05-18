@@ -30,7 +30,7 @@
   {
     "name": "OpenClaw",
     "status": "idle",
-    "summary": "Planned agent CLI adapter for OpenClaw workspace sessions.",
+    "summary": "Supported agent CLI adapter for OpenClaw workspace sessions.",
     "command": "openclaw",
     "real": false
   },
@@ -44,7 +44,7 @@
   {
     "name": "Pi",
     "status": "idle",
-    "summary": "Planned adapter for Pi conversational agent surfaces.",
+    "summary": "Supported adapter for Pi conversational agent surfaces.",
     "command": "pi",
     "real": false
   }

@@ -1,6 +1,6 @@
 # Agent Mode Architecture
 
-Peripheral is designed as a paired smart-glasses runtime where the phone app owns the physical surface and the Mac/dev box owns agent orchestration. Agents never write BLE packets or pixels directly. They request semantic UI through a broker layer, and the phone decides whether that UI can be rendered.
+Peripheral is designed as a paired smart-glasses runtime where the phone app owns the physical surface and the Mac/dev box owns agent sessions, sponsor adapters, and broker policy. Agents never write BLE packets or pixels directly. They request semantic UI through a broker layer, and the phone decides whether that UI can be rendered.
 
 ## System Roles
 
@@ -8,7 +8,7 @@ Peripheral is designed as a paired smart-glasses runtime where the phone app own
 | --- | --- |
 | Glasses | Display and input peripheral. Shows rendered frames and emits wearer input when available. |
 | Phone app | Owns BLE, renderer state, mode switching, input capture, display leases, and final safety decisions. |
-| Mac/dev box | Runs agent CLIs, sponsor adapters, broker policy, MCP-style contracts, and audit logs. |
+| Mac/dev box | Runs agent CLIs, sponsor adapters, broker policy, MCP-style tools, and audit logs. |
 | Agents | Emit semantic requests: cards, approvals, tables, checklists, widgets, and bounded terminal fallback. |
 
 ## Mode Model
@@ -60,14 +60,22 @@ The phone normalizes voice, taps, long press, head pose, look-up/look-down, app 
 
 Approval responses must match the focused event and session. Low risk can use voice, medium risk should use voice plus tap or phone confirmation, and high risk requires phone or desktop confirmation.
 
-## Mock Connected State
+The phone runtime is inspectable from the CLI:
 
-`peripheralctl integrations connected-state --json` returns a reviewable connected-glasses object:
+```sh
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime route --line "hey codex show status" --json
+```
 
-- glasses are marked connected through `mock_phone_gateway`
+## Connected State
+
+`peripheralctl integrations connected-state --json` returns a connected-glasses runtime object:
+
+- glasses are marked connected through `phone_gateway`
 - phone owns BLE and rendering
 - broker exposes a local MCP-style policy layer
 - sponsor and agent CLI widgets are queued as surface commands
-- no live BLE writes or hardware tests are performed
+- display writes route through the phone-owned gateway and explicit runtime gates
 
-That gives hackathon reviewers a concrete end-state surface without requiring paired hardware.
+That gives operators and reviewers a concrete connected runtime surface through source and CLI before operator-driven glasses access.

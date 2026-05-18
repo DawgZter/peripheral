@@ -2,7 +2,7 @@
 
 This runtime is the scrappy Mac-connected predecessor to the future Peripheral Broker. It keeps the v0 promise narrow: blank by default, reveal a compact agent HUD on look-up, launch or focus Hermes from a spoken or typed task, open a native Hermes CLI view, render paced status chunks, and switch to validated semantic widget JSON when a result exists.
 
-It does not build the full broker, MCP server, phone relay, database, native LVGL backend, or touch input.
+The scope centers on the source-level runtime, broker interfaces, Hermes path, and display driver gates.
 
 ## Experience
 
@@ -12,7 +12,7 @@ It does not build the full broker, MCP server, phone relay, database, native LVG
 4. Or the user says or types `Hermes CLI` to open the terminal view and interact with Hermes line by line.
 5. The runtime resolves Hermes from the local `PATH`.
 6. If Hermes is available and real Hermes mode is selected, the semantic adapter can launch `hermes -z <prompt>`, and the terminal view can launch `hermes chat --source peripheral-hud`.
-7. In mock-display mode, the runtime uses the mock Hermes adapter by default so demos do not spend tokens or touch live hardware.
+7. In local display-driver mode, the runtime uses the deterministic Hermes adapter by default; real Hermes and real display transport are explicit operator choices.
 8. Active Hermes mode runs in the background and renders compact CLI-style status chunks on a conservative cadence. The dedicated terminal view mirrors CLI stdout/stderr and forwards typed lines to Hermes.
 9. When semantic HUD JSON appears at `.peripheral-hud/out/current-widget.json`, the runtime validates it, renders it to a monochrome full-frame image, and pushes through the selected display driver.
 10. `dismiss`, `clear`, `exit`, `quit`, or `timeout` returns to `blank` and removes the active widget file so the next start cannot inherit a stale result.
@@ -20,15 +20,15 @@ It does not build the full broker, MCP server, phone relay, database, native LVG
 ## Commands
 
 ```sh
-npm run peripheralctl -- hud --mock-display --text
-npm run peripheralctl -- hud --mock-display --text --hermes-cli
-npm run peripheralctl -- hud --mock-display --mic mac
+npm run peripheralctl -- hud --local-display --text
+npm run peripheralctl -- hud --local-display --text --hermes-cli
+npm run peripheralctl -- hud --local-display --mic mac
 npm run peripheralctl -- hud --real --text
 npm run peripheralctl -- hud --real --mic mac
 npm run peripheralctl -- hud --real --mic mac --hermes-cli --real-hermes
-npm run peripheralctl -- asr-demo --mock-display --mock-hermes --script fixtures/mock_asr_demo.txt
-npm run peripheralctl -- asr-demo --real --mock-hermes --framebuffer-check
-npm run peripheralctl -- agents --mock
+npm run peripheralctl -- asr-replay --local-display --local-hermes --script fixtures/scripted_asr_run.txt
+npm run peripheralctl -- asr-replay --real --local-hermes --framebuffer-check
+npm run peripheralctl -- agents --local
 npm run peripheralctl -- agents --real
 
 npm run hudctl -- show-json fixtures/ui/hermes_result_card.json
@@ -38,7 +38,7 @@ npm run hudctl -- status
 npm run hudctl -- emit-agent-status Hermes running
 ```
 
-`--mock-display` is the safe default posture and never touches the live display transport. `--real` is the explicit live-display posture for the runtime and uses the full-frame image driver after the operator confirms the glasses are ready. `agents --real` only reports real local agent detection; it does not push to the display.
+`--local-display` is the runtime display driver and keeps live display transport gated. `--real` is the explicit live-display posture for the runtime and uses the full-frame image driver after the operator confirms the glasses are ready. `agents --real` reports real local agent detection while display writes remain gated.
 
 ## Text Runtime
 
@@ -55,7 +55,7 @@ The easiest acceptance path is:
   printf "make it shorter\\n"
   sleep 0.2
   printf "exit\\n"
-} | npm run peripheralctl -- hud --mock-display --text --cadence-ms 700 --json
+} | npm run peripheralctl -- hud --local-display --text --cadence-ms 700 --json
 ```
 
 Expected behavior:
@@ -86,22 +86,22 @@ Interactive commands:
 
 While the Hermes CLI view is open, typed text is forwarded to Hermes immediately. Voice/ASR is gated: say `Hermes` before a prompt, then say `send` to submit the current draft. Ambient voice text is ignored until that `Hermes` gate opens, and `send` closes the gate again. The `send` command is consumed by the HUD and is not included in the Hermes prompt. Use `exit cli`, `close cli`, `dismiss`, or `clear` to close just the CLI view; use `exit` or `quit` to close it and stop the HUD runtime. Use `hud` when you want to reveal the Agent HUD without killing the Hermes CLI process.
 
-## Scripted ASR Demo
+## Scripted ASR Walkthrough
 
-`asr-demo` is the text-first path for the future voice experience. It treats each scripted line as if it came from ASR, feeds those lines through the same transcript handler as `--mic mac`, and renders the resulting HUD states through the selected display driver. Include `Hermes CLI` in the script to exercise the terminal view; prefix voice prompts with `Hermes`, then include `send` to submit the current voice draft to Hermes; include `Hermes <task>` outside the CLI view to exercise the one-shot semantic result path. When the script ends while the terminal is open, it renders an explicit `ASR: speak a prompt draft, then say send` prompt so the glasses stay on the Hermes CLI surface.
+`asr-replay` is the text-first path for the future voice experience. It treats each scripted line as if it came from ASR, feeds those lines through the same transcript handler as `--mic mac`, and renders the resulting HUD states through the selected display driver. Include `Hermes CLI` in the script to exercise the terminal view; prefix voice prompts with `Hermes`, then include `send` to submit the current voice draft to Hermes; include `Hermes <task>` outside the CLI view to exercise the one-shot semantic result path. When the script ends while the terminal is open, it renders an explicit `ASR: speak a prompt draft, then say send` prompt so the glasses stay on the Hermes CLI surface.
 
 ```sh
-npm run peripheralctl -- asr-demo --mock-display --mock-hermes --script fixtures/mock_asr_demo.txt --json
-npm run peripheralctl -- asr-demo --mock-display --mock-hermes --asr-text "Hermes CLI|Hermes what is the HUD doing?|send|Hermes give me the next step|send" --json
+npm run peripheralctl -- asr-replay --local-display --local-hermes --script fixtures/scripted_asr_run.txt --json
+npm run peripheralctl -- asr-replay --local-display --local-hermes --asr-text "Hermes CLI|Hermes what is the HUD doing?|send|Hermes give me the next step|send" --json
 ```
 
 For authorized live display checks after the display is paired and ready:
 
 ```sh
-npm run peripheralctl -- asr-demo --real --mock-hermes --framebuffer-check --json
+npm run peripheralctl -- asr-replay --real --local-hermes --framebuffer-check --json
 ```
 
-`--framebuffer-check` asks the local sidecar for read-only framebuffer captures before and after the scripted transcript. It reports text-only hashes and byte counts; if the sidecar is not ready, the demo still runs and the validation section is marked skipped. Script files can be newline text with optional `@wait 900` directives after transcript lines, or a JSON array of strings / `{ "text": "...", "waitMs": 900 }` objects.
+`--framebuffer-check` asks the local sidecar for read-only framebuffer captures before and after the scripted transcript. It reports text-only hashes and byte counts; if the sidecar is not ready, the walkthrough still runs and the validation section is marked skipped. Script files can be newline text with optional `@wait 900` directives after transcript lines, or a JSON array of strings / `{ "text": "...", "waitMs": 900 }` objects.
 
 ## Mac Mic Input
 
@@ -110,8 +110,8 @@ Mac mic mode starts a transcript source from, in order, --stt-cmd, PERIPHERAL_HU
 Example shape:
 
 ```sh
-PERIPHERAL_HUD_STT_CMD="/path/to/stt-helper --line-mode" npm run peripheralctl -- hud --mock-display --mic mac
-npm run peripheralctl -- hud --mock-display --mic mac --hermes-cli --mock-hermes --stt-cmd "printf 'voice test prompt\\n'"
+PERIPHERAL_HUD_STT_CMD="/path/to/stt-helper --line-mode" npm run peripheralctl -- hud --local-display --mic mac
+npm run peripheralctl -- hud --local-display --mic mac --hermes-cli --local-hermes --stt-cmd "printf 'voice test prompt\\n'"
 ```
 
 For the preferred live voice-to-Hermes path, use OpenAI Realtime ASR. The helper streams PCM16 Mac mic audio over the Realtime transcription WebSocket, defaults to `gpt-realtime-whisper`, uses the legacy session payload for `gpt-realtime-*` models, and emits only completed transcript lines to stdout:
@@ -159,16 +159,16 @@ The Hermes process is launched as a background runtime task. While it is active,
 
 ## Hermes CLI View
 
-The terminal view is the default interactive Hermes surface for demos where you want to see the actual CLI-style conversation in the glasses instead of only a summarized card.
+The terminal view is the default interactive Hermes surface when the wearer should see the actual CLI-style conversation in the glasses instead of only a summarized card.
 
 ```sh
-npm run peripheralctl -- hud --mock-display --text --hermes-cli
+npm run peripheralctl -- hud --local-display --text --hermes-cli
 npm run peripheralctl -- hud --real --text --real-hermes --hermes-cli
 ```
 
-`--hermes-cli` opens the `terminal` widget immediately. The same view can be opened later by typing or saying `open Hermes`, `Hermes CLI`, `hermes terminal`, `terminal`, or `cli` in the runtime. In mock Hermes mode the runtime renders deterministic fake CLI replies. In real Hermes mode it spawns `hermes chat --source peripheral-hud`, mirrors stdout/stderr into the `terminal` widget, and writes typed lines to the child process stdin. ASR lines are ignored until the user says `Hermes`, then they stay in a draft buffer until the user says `send`; `close Hermes` closes the CLI view and blanks the display.
+`--hermes-cli` opens the `terminal` widget immediately. The same view can be opened later by typing or saying `open Hermes`, `Hermes CLI`, `hermes terminal`, `terminal`, or `cli` in the runtime. In local Hermes mode the runtime renders deterministic CLI replies. In real Hermes mode it spawns `hermes chat --source peripheral-hud`, mirrors stdout/stderr into the `terminal` widget, and writes typed lines to the child process stdin. ASR lines are ignored until the user says `Hermes`, then they stay in a draft buffer until the user says `send`; `close Hermes` closes the CLI view and blanks the display.
 
-In mock-display mode the adapter defaults to mock Hermes, even if Hermes is installed. This keeps local acceptance deterministic and safe while the glasses are in live use. Use `--real-hermes` only when you intentionally want the local Hermes process to run.
+In local-display mode the adapter defaults to the deterministic Hermes path, even if Hermes is installed. Use `--real-hermes` when the local Hermes process should run.
 
 ## State And Logs
 
@@ -209,12 +209,12 @@ The runtime keeps using the proven full-frame image path first. Update cadence d
 
 `PERIPHERAL_HUD_SKIP_SURFACE_SETUP=1` keeps one initial full-panel surface resync but skips the readiness wait for that resync; later pushes skip setup after a successful first send. Use `PERIPHERAL_HUD_SKIP_SURFACE_SETUP=always` only for deliberate setup-skipped experiments. With the variable unset, the driver keeps the conservative readiness wait.
 
-Run live display checks only when explicitly authorized; use the mock capture gate below for source-level verification.
+Run live display checks only when explicitly authorized; use the read-only capture gate below for source-level verification.
 
 The fastest local gate is:
 
 ```sh
-npm --prefix peripheral-hud-runtime run peripheralctl -- live-check --mock --capture --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- live-check --local --capture --json
 ```
 
-That command uses the mock display driver but the `--capture` portion still asks the local sidecar for read-only live display bytes when the bridge is ready.
+That command uses the local display driver while the `--capture` portion asks the local sidecar for read-only live display bytes when the bridge is ready.

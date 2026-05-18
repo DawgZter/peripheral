@@ -1,0 +1,27 @@
+{
+  "id": "sponsor-stripe-payment-approval",
+  "type": "approval_card",
+  "title": "Approve Card Hold?",
+  "status": "$25 REFUNDABLE HOLD",
+  "body": "Stripe reports the reservation hold is ready. The broker routes the next step after wearer approval.",
+  "choices": [
+    {
+      "id": "approve",
+      "label": "Approve",
+      "tone": "primary"
+    },
+    {
+      "id": "deny",
+      "label": "Deny",
+      "tone": "danger"
+    },
+    {
+      "id": "details",
+      "label": "Details",
+      "tone": "secondary"
+    }
+  ],
+  "footer": "payment_intent_requires_action",
+  "source": "Stripe",
+  "created_at": "2026-05-17T18:05:00-07:00"
+}

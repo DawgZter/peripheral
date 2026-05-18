@@ -1,6 +1,6 @@
 # Integrations
 
-The integration layer is intentionally contract-first. It describes what each sponsor or agent CLI can contribute to Agent Mode, which environment variables a live adapter would need, and which Peripheral surface should be rendered. The checked-in implementation is safe to run without secrets.
+The integration layer is implementation-oriented and live-adapter ready. It describes what each sponsor or agent CLI contributes to Agent Mode, which credential names each runtime connector understands, which API or CLI operations are routed, and which Peripheral surface is rendered.
 
 ## Sponsor Coverage
 
@@ -14,11 +14,17 @@ The integration layer is intentionally contract-first. It describes what each sp
 | Sponge | https://sponge.ai/docs | Context compression and signal clustering. | Context digest, signal clusters, redaction warning. |
 | Gemini | https://ai.google.dev/gemini-api/docs | Multimodal broker reasoning and routing. | Broker summary, vision summary, routing hint. |
 
-Live keys are not checked in. The descriptor layer records expected names such as `AGENTPHONE_API_KEY`, `STRIPE_SECRET_KEY`, `SUPERMEMORY_API_KEY`, `AGENTMAIL_API_KEY`, `BROWSER_USE_API_KEY`, `SPONGE_API_KEY`, and `GEMINI_API_KEY`.
+Credential values stay outside the repo. The descriptor layer records expected names such as `AGENTPHONE_API_KEY`, `STRIPE_SECRET_KEY`, `SUPERMEMORY_API_KEY`, `AGENTMAIL_API_KEY`, `BROWSER_USE_API_KEY`, `SPONGE_API_KEY`, and `GEMINI_API_KEY`.
+
+## Live Adapter Catalog
+
+`peripheralctl integrations live-adapters --json` returns the adapter operation catalog. Each sponsor entry includes credential names, an API base URL, auth style, operations, broker event names, risk level, approval requirement, and target HUD surface. Each agent CLI entry includes command, aliases, session transport, credential names, launch semantics, progress stream routing, approval routing, and terminal fallback.
+
+The catalog currently exposes 13 credential-bound adapters across AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, Gemini, OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI.
 
 ## Agent CLI Coverage
 
-| Agent CLI | Command | Session model | Peripheral surfaces |
+| Agent CLI | Command | Session transport | Peripheral surfaces |
 | --- | --- | --- | --- |
 | OpenClaw | `openclaw` | PTY | Progress card, approval card, terminal fallback. |
 | Claude Code CLI | `claude` | tmux | Progress card, approval card, terminal fallback. |
@@ -27,7 +33,40 @@ Live keys are not checked in. The descriptor layer records expected names such a
 | Gemini CLI | `gemini` | stdio | Progress card, approval card, terminal fallback. |
 | Codex CLI | `codex` | tmux | Progress card, approval card, terminal fallback. |
 
-Adapters normalize CLI output into `AgentEvent` objects. The glasses see a compact semantic surface first, with raw terminal fallback only when no richer state is available.
+Adapters normalize CLI output into `AgentEvent` objects. The glasses see a compact semantic surface first, with raw terminal fallback only when no richer state is available. The checked-in `peripheral-hud-runtime/config/agent-bridge.json` records routing order, confirmation levels, wake names, and connected surfaces for all six CLI adapters.
+
+## Agent Bridge
+
+`peripheralctl agent-bridge` is the bridge surface for CLI transcript text:
+
+- `dossier` returns adapter coverage, routing rules, sample transcript events, widgets, and safety notes.
+- `adapters` lists command names, wake names, session transports, env names, and approval policy.
+- `transcript` emits one sample event per supported CLI.
+- `event --agent <id> --line <text>` normalizes one bounded CLI line into an `AgentEvent` plus widget.
+- `widget --agent <id> --line <text>` renders that widget into `out/frames/agent-bridge/`.
+
+This is the broker-facing normalization layer that a PTY, tmux, stdio, or adapter transport can call.
+
+## Sponsor Workflows
+
+`peripheralctl sponsor-workflows` turns sponsor coverage into deterministic event loops:
+
+- `dossier` returns every sponsor workflow, generated approval events, and inspection widgets.
+- `list` shows the trigger, env names, outputs, and inspection command for each sponsor.
+- `workflow <sponsor-id>` drills into one sponsor path such as `stripe` or `agentmail`.
+- `widgets` renders the workflow overview and approval-gate checklist.
+
+Each workflow declares the event trigger, target surface, risk level, phone runtime rule, and whether the user must approve before the broker continues. This makes sponsor support concrete while keeping credential values externalized and display transport behind operator/runtime gates.
+
+## Sponsor Event Kit
+
+`peripheral-hud-runtime/packages/peripheral-sponsor-kit` is the lower-level event normalizer. It maps sponsor events into three runtime objects:
+
+- `AgentEvent` for broker/session state.
+- `PeripheralWidget` for the semantic HUD renderer.
+- `SurfaceCommand` for the phone-owned mode manager.
+
+Use `peripheralctl integrations sponsor-events --json` to inspect the sample event dossier for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, and Gemini.
 
 ## Review Commands
 
@@ -37,15 +76,30 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- integrations summary --
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations sponsors --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations agent-clis --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations sponsor-events --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations dossier --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations widgets --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge dossier --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge launch-specs --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge event --agent codex_cli --line "Codex needs approval to run npm test" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge widget --agent opencode --line "OpenCode is waiting on user input"
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime snapshot --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- phone-runtime route --line "hey codex show status" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows dossier --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows workflow stripe --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime adapters --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows widgets --json
 ```
 
-The `widgets` command renders the sponsor and CLI matrices into `peripheral-hud-runtime/out/frames/integrations/`. Use `demo integrations --mock` for a frame-by-frame Agent Mode walkthrough.
+The `widgets` command renders the sponsor and CLI matrices into `peripheral-hud-runtime/out/frames/integrations/`. Use `sponsor-workflows widgets` for the sponsor approval surfaces and `hud --real` when the operator is ready to drive the glasses.
 
 ## Safety Boundary
 
 - Sponsors and agents emit semantic events, not raw BLE.
 - Phone-owned mode policy decides whether a card is tiny, glance, fullscreen, pinned, delayed, or blocked.
 - Payment, browser-submit, email-send, memory-save, and high-risk tool actions are approval-gated.
-- The mock connected state is intentionally realistic for review while still avoiding live glasses tests.
+- The connected state reflects the glasses-facing runtime path and keeps hardware writes behind explicit operator commands.

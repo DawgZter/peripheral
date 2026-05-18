@@ -1,0 +1,27 @@
+{
+  "id": "sponsor-agentmail-inbox-draft",
+  "type": "approval_card",
+  "title": "Send Draft?",
+  "status": "INBOX FOLLOW-UP",
+  "body": "AgentMail drafted a concise reply confirming the reservation window and asking for a receipt.",
+  "choices": [
+    {
+      "id": "send",
+      "label": "Send",
+      "tone": "primary"
+    },
+    {
+      "id": "hold",
+      "label": "Hold",
+      "tone": "secondary"
+    },
+    {
+      "id": "edit",
+      "label": "Edit",
+      "tone": "secondary"
+    }
+  ],
+  "footer": "draft_ready",
+  "source": "AgentMail",
+  "created_at": "2026-05-17T18:07:00-07:00"
+}

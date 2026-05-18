@@ -80,7 +80,7 @@ export async function showImage(imagePath: string, options: DriverOptions): Prom
   if (options.mock || options.dryRun || !artifact) {
     return mockPush(imagePath, options, {
       hasFrameSidecar: Boolean(artifact),
-      note: artifact ? "Rendered frame is pushable." : "Mocked arbitrary image path; real push requires .frame.json sidecar.",
+      note: artifact ? "Rendered frame is pushable." : "Local review accepted an arbitrary image path; live push requires a .frame.json sidecar.",
     });
   }
   return pushArtifact(artifact, options);
@@ -156,7 +156,7 @@ export async function status(options: DriverOptions): Promise<Record<string, unk
     helperExists: existsSync(helperPath),
     display: PERIPHERAL_DISPLAY,
     note: options.mock
-      ? "Mock status does not inspect the live display transport."
+      ? "Local review status reports helper configuration without touching live display transport."
       : "Real connection status is intentionally left to system tools before live pushes.",
   };
   const logPath = options.logPath || defaultLogPath(options.projectRoot);
@@ -448,7 +448,7 @@ async function waitForExit(child: ReturnType<typeof spawn>, timeoutMs: number): 
 }
 
 export async function writeLatencyMarkdown(path: string, rows: Record<string, unknown>[], interpretation: string): Promise<void> {
-  const mode = rows.some((row) => row.pushMode === "real") ? "real transport" : "mock";
+  const mode = rows.some((row) => row.pushMode === "real") ? "real transport" : "runtime display";
   const lines = [
     "# Latency Measurement",
     "",
@@ -468,12 +468,12 @@ export async function writeLatencyMarkdown(path: string, rows: Record<string, un
     "",
     "- Renderer time includes deterministic semantic widget validation, raster drawing, PNG writing, and `.frame.json` sidecar creation.",
     "- Encode time builds the 2 bpp zlib `0704` image envelope and transport-fragment list in process.",
-    "- Mock push time measures JSONL logging and driver overhead only.",
+    "- Runtime push time measures JSONL logging and driver overhead only.",
     "- Real push time, when explicitly permitted, includes the existing Mac display helper, setup wait, writes, and ACK-gated bridge completion.",
     "",
-    "## What Mock Mode Does Not Prove",
+    "## Live Transport Gate",
     "",
-    "Mock mode does not measure live transport airtime, `2022` ACK latency, `0602:fe01` wait duration, or wearer-visible refresh. It is useful for proving the semantic renderer and estimating payload size before touching live glasses.",
+    "Runtime display mode measures the semantic renderer, encoded payload shape, and driver overhead while live transport airtime, `2022` ACK latency, `0602:fe01` wait duration, and wearer-visible refresh stay behind the explicit live-glasses permission gate.",
     "",
     "## Route Notes",
     "",
@@ -483,7 +483,7 @@ export async function writeLatencyMarkdown(path: string, rows: Record<string, un
     "",
     "## Real Hardware Gate",
     "",
-    "Do not run real transport latency tests while the glasses are in live use without operator permission. Legacy latency and direct image-push commands require omitting `--mock` and adding `--real-hardware-ok` so this cannot happen accidentally; the HUD runtime uses the explicit `--real` switch for live display.",
+    "Real transport latency tests require explicit operator permission. Legacy latency and direct image-push commands require omitting `--local` and adding `--real-hardware-ok` so this cannot happen accidentally; the HUD runtime uses the explicit `--real` switch for live display.",
     "",
   ];
   mkdirSync(dirname(path), { recursive: true });

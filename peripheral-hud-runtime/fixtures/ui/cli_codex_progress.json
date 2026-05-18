@@ -1,0 +1,18 @@
+{
+  "id": "cli-codex-progress",
+  "type": "terminal",
+  "title": "Codex CLI",
+  "status": "RUNNING",
+  "terminal": [
+    "$ codex peripheral review",
+    "repo: public Peripheral runtime",
+    "step 1/4: render sponsor fixtures",
+    "step 2/4: run repository checks",
+    "step 3/4: wait for approval card",
+    "step 4/4: summarize artifacts",
+    "policy: phone approval owns display writes"
+  ],
+  "prompt": "APPROVAL CARD HAS FOCUS",
+  "source": "Codex CLI",
+  "created_at": "2026-05-17T18:09:00-07:00"
+}

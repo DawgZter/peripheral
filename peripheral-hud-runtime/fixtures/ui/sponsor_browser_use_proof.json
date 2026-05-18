@@ -1,0 +1,31 @@
+{
+  "id": "sponsor-browser-use-proof",
+  "type": "table",
+  "title": "Browser Proof",
+  "status": "READY",
+  "columns": [
+    "Page",
+    "Action",
+    "Proof"
+  ],
+  "rows": [
+    {
+      "Page": "Reserve",
+      "Action": "Filled",
+      "Proof": "form"
+    },
+    {
+      "Page": "Checkout",
+      "Action": "Paused",
+      "Proof": "submit"
+    },
+    {
+      "Page": "Receipt",
+      "Action": "Queued",
+      "Proof": "screenshot"
+    }
+  ],
+  "footer": "browser_submit_requested focus gate",
+  "source": "Browser Use",
+  "created_at": "2026-05-17T18:08:00-07:00"
+}

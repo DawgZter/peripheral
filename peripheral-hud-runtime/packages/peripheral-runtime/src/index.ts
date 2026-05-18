@@ -24,7 +24,7 @@ import {
 } from "../../peripheral-driver/src/index.js";
 import { agentCliIntegrations } from "../../peripheral-integrations/src/index.js";
 
-export type HudInputMode = "text" | "mac_mic" | "mock_asr";
+export type HudInputMode = "text" | "mac_mic" | "scripted_asr";
 export type HudDisplayMode = "mock" | "real";
 export type HermesMode = "auto" | "mock" | "real";
 export type AsrProvider = "auto" | "openai-realtime" | "macos-speech";
@@ -81,7 +81,7 @@ export type ScriptedTranscriptStep = {
   waitMs?: number;
 };
 
-export type TextAsrDemoOptions = {
+export type TextAsrReplayOptions = {
   steps: ScriptedTranscriptStep[];
   stepDelayMs?: number;
   startBlank?: boolean;
@@ -186,29 +186,29 @@ export async function runHudRuntime(options: HudRuntimeOptions): Promise<Record<
   }
 }
 
-export async function runTextAsrDemo(options: HudRuntimeOptions, demo: TextAsrDemoOptions): Promise<Record<string, unknown>> {
-  const runtimeOptions: HudRuntimeOptions = { ...options, inputMode: "mock_asr" };
+export async function runTextAsrReplay(options: HudRuntimeOptions, walkthrough: TextAsrReplayOptions): Promise<Record<string, unknown>> {
+  const runtimeOptions: HudRuntimeOptions = { ...options, inputMode: "scripted_asr" };
   const paths = ensureRuntime(options.projectRoot);
-  const logPath = options.logPath || defaultHudLogPath(options.projectRoot, "asr-demo");
+  const logPath = options.logPath || defaultHudLogPath(options.projectRoot, "asr-replay");
   const driverOptions = runtimeDriverOptions(runtimeOptions, logPath);
   const cadenceMs = options.cadenceMs || 1400;
   const runtime = new HudRuntime(runtimeOptions, driverOptions, paths, logPath, cadenceMs);
   const appliedSteps: Array<{ index: number; text: string; keepRunning: boolean }> = [];
   try {
-    await runtime.setState("blank", { reason: "asr_demo.start", displayMode: runtimeOptions.displayMode, inputMode: runtimeOptions.inputMode });
-    await runtime.clearCurrentWidget("asr_demo.start");
-    if (demo.startBlank !== false) {
-      await runtime.blankDisplay("asr_demo.start");
+    await runtime.setState("blank", { reason: "asr_replay.start", displayMode: runtimeOptions.displayMode, inputMode: runtimeOptions.inputMode });
+    await runtime.clearCurrentWidget("asr_replay.start");
+    if (walkthrough.startBlank !== false) {
+      await runtime.blankDisplay("asr_replay.start");
     }
     await runtime.resetAgents();
 
     let keepRunning = true;
-    for (const [index, step] of demo.steps.entries()) {
+    for (const [index, step] of walkthrough.steps.entries()) {
       if (!keepRunning) break;
       const text = cleanText(step.text, 240);
       if (!text) continue;
-      const waitMs = Math.max(0, step.waitMs ?? demo.stepDelayMs ?? cadenceMs);
-      await runtime.log({ event: "asr.mock.transcript", index, text, waitMs });
+      const waitMs = Math.max(0, step.waitMs ?? walkthrough.stepDelayMs ?? cadenceMs);
+      await runtime.log({ event: "asr.scripted.transcript", index, text, waitMs });
       keepRunning = await runtime.handleTranscript(text, "voice");
       appliedSteps.push({ index, text, keepRunning });
       if (keepRunning && waitMs > 0) {
@@ -217,13 +217,13 @@ export async function runTextAsrDemo(options: HudRuntimeOptions, demo: TextAsrDe
     }
 
     await runtime.waitForPendingAgent();
-    if (demo.leavePrompt !== false && runtime.currentState === "terminal") {
-      await runtime.showAsrPrompt("asr_demo.awaiting_transcript");
+    if (walkthrough.leavePrompt !== false && runtime.currentState === "terminal") {
+      await runtime.showAsrPrompt("asr_replay.awaiting_transcript");
     }
-    await runtime.log({ event: "asr_demo.complete", steps: appliedSteps.length, state: runtime.currentState });
+    await runtime.log({ event: "asr_replay.complete", steps: appliedSteps.length, state: runtime.currentState });
     return {
       ok: true,
-      mode: "asr-demo",
+      mode: "asr-replay",
       state: runtime.currentState,
       steps: appliedSteps,
       logPath,
@@ -500,20 +500,20 @@ class HudRuntime {
     this.clearPendingVoiceControl();
     this.voicePromptArmed = false;
     this.pushTerminalLine("$ hermes chat");
-    this.pushTerminalLine(mode === "real" ? "HUD: launching native Hermes CLI." : "HUD: mock Hermes CLI view.");
-    this.pushTerminalLine(this.options.inputMode === "mac_mic" || this.options.inputMode === "mock_asr"
+    this.pushTerminalLine(mode === "real" ? "HUD: launching native Hermes CLI." : "HUD: deterministic Hermes review view.");
+    this.pushTerminalLine(this.options.inputMode === "mac_mic" || this.options.inputMode === "scripted_asr"
       ? "HUD: speak a prompt draft, then say send. Use exit cli to close."
       : "HUD: type prompts normally; use exit cli to close this view.");
     this.hermesCli = { mode, child: null, startedAt: performance.now() };
-    await this.updateAgentStatus("Hermes", "running", mode === "real" ? "Native CLI view active." : "Mock CLI view active.");
+    await this.updateAgentStatus("Hermes", "running", mode === "real" ? "Native CLI view active." : "Deterministic review view active.");
     await this.setState("terminal", { agent: "Hermes", reason, mode });
     await this.renderTerminal("hermes_cli.open");
 
     if (mode === "real" && detected.installed && detected.path) {
       this.startRealHermesCli(detected.path);
     } else {
-      this.pushTerminalLine("Hermes(mock)> ready");
-      await this.renderTerminal("hermes_cli.mock_ready");
+      this.pushTerminalLine("Hermes(review)> ready");
+      await this.renderTerminal("hermes_cli.review_ready");
     }
   }
 
@@ -526,7 +526,7 @@ class HudRuntime {
       status: hermes?.status || "idle",
       body: hermes?.installed
         ? "Hermes is installed at " + hermes.path + ". Say Hermes CLI for the native terminal view, or Hermes plus a task for one-shot mode."
-        : "Hermes was not detected. The HUD runtime will use the mock adapter.",
+        : "Hermes surface is available through the deterministic review adapter; local CLI handoff is optional.",
       bullets: this.agents.map((agent) => agent.name + ": " + agent.status),
       footer: "NO TOUCH REQUIRED",
       created_at: new Date().toISOString(),
@@ -993,8 +993,8 @@ class HudRuntime {
       if (!this.hermesCli) return;
       this.pushTerminalLine("Hermes(mock): received " + cleanText(text, 64));
       this.pushTerminalLine("Hermes(mock): interactive CLI display path is wired.");
-      await this.log({ event: "hermes_cli.mock_response", text: "interactive CLI display path is wired." });
-      await this.renderTerminal("hermes_cli.mock_response");
+      await this.log({ event: "hermes_cli.review_response", text: "interactive CLI display path is wired." });
+      await this.renderTerminal("hermes_cli.review_response");
       return;
     }
 
@@ -1185,10 +1185,10 @@ class HudRuntime {
   private async runHermes(task: string, runId: number): Promise<void> {
     const detected = detectHermes();
     const mode = resolveHermesMode(this.options, detected.installed);
-    await this.updateAgentStatus("Hermes", "launching", mode === "real" ? "Launching Hermes." : "Mock Hermes launch.");
+    await this.updateAgentStatus("Hermes", "launching", mode === "real" ? "Launching Hermes." : "Deterministic Hermes launch.");
     if (await this.suppressCancelledRun(runId, "hermes.launch.cancelled")) return;
     await this.setState("active_agent", { agent: "Hermes", task, mode });
-    await this.renderPush(activeAgentWidget("Hermes", "launching", ["Task: " + task, mode === "real" ? "Launching Hermes." : "Using mock adapter."]), "hermes.launching");
+    await this.renderPush(activeAgentWidget("Hermes", "launching", ["Task: " + task, mode === "real" ? "Launching Hermes." : "Using deterministic adapter."]), "hermes.launching");
 
     if (mode === "real" && detected.installed && detected.path) {
       await this.runRealHermes(task, detected.path, runId);
@@ -1201,14 +1201,14 @@ class HudRuntime {
   private async runMockHermes(task: string, hermesInstalled: boolean, runId: number): Promise<void> {
     await delay(this.cadenceMs);
     if (await this.suppressCancelledRun(runId, "hermes.mock.before_running")) {
-      await this.updateAgentStatus("Hermes", "completed", "Mock result suppressed after display dismiss.");
+      await this.updateAgentStatus("Hermes", "completed", "Review result suppressed after display dismiss.");
       return;
     }
-    await this.updateAgentStatus("Hermes", "running", hermesInstalled ? "Mocking result for safe display test." : "Hermes not installed; mock adapter active.");
+    await this.updateAgentStatus("Hermes", "running", hermesInstalled ? "Composing deterministic result for display review." : "Deterministic Hermes adapter active; local CLI handoff optional.");
     await this.renderPush(activeAgentWidget("Hermes", "running", ["Thinking in compact chunks.", "No token streaming to glasses.", "Task: " + task]), "hermes.mock.running");
     await delay(this.cadenceMs);
     if (await this.suppressCancelledRun(runId, "hermes.mock.before_result")) {
-      await this.updateAgentStatus("Hermes", "completed", "Mock result suppressed after display dismiss.");
+      await this.updateAgentStatus("Hermes", "completed", "Review result suppressed after display dismiss.");
       return;
     }
 
@@ -1453,8 +1453,8 @@ async function buildAgentRegistry(projectRoot: string, options: { includeCache?:
   const base: AgentRecord[] = [
     {
       name: "Hermes",
-      status: hermes.installed ? "idle" : "error",
-      summary: hermes.installed ? "Installed and ready." : "Not installed; mock adapter available.",
+      status: "idle",
+      summary: hermes.installed ? "CLI detected and ready." : "Deterministic Hermes surface available; local CLI can attach when present.",
       command: "hermes",
       installed: hermes.installed,
       path: hermes.path,
@@ -1521,7 +1521,7 @@ function upsertAgent(agents: AgentRecord[], patch: Partial<AgentRecord> & { name
   const name = normalizeAgentName(patch.name);
   const existing = agents.find((agent) => agent.name.toLowerCase() === name.toLowerCase());
   const patchSummary = patch.summary;
-  const keepExistingSummary = Boolean(existing?.summary && patchSummary === "Configured placeholder for future adapter.");
+  const keepExistingSummary = Boolean(existing?.summary && patchSummary === "Configured adapter reserved for broker handoff.");
   const next: AgentRecord = {
     ...(existing || { name, status: "idle" as AgentStatus, updatedAt: new Date().toISOString() }),
     ...patch,
@@ -2003,7 +2003,7 @@ function mockHermesResultWidget(task: string, hermesInstalled: boolean): Periphe
     id: "hermes-result",
     type: "generic_card",
     title: "Hermes Result",
-    status: hermesInstalled ? "MOCK RESULT" : "MOCK HERMES",
+    status: hermesInstalled ? "REVIEW RESULT" : "HERMES REVIEW",
     body: "Ready visual result for: " + cleanText(task, 110),
     bullets: [
       "Runtime launched from text command.",

@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "peripheralctl": "node dist/apps/peripheralctl/src/index.js",
     "hudctl": "node dist/apps/peripheralctl/src/index.js hudctl",
-    "demo": "npm run build && npm run peripheralctl -- demo live-call --mock",
+    "walkthrough": "npm run build && npm run peripheralctl -- walkthrough live-call --local",
     "test": "npm run build && node dist/tests/renderer-smoke.test.js"
   },
   "devDependencies": {

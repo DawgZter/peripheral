@@ -1,0 +1,15 @@
+{
+  "id": "sponsor-supermemory-memory-recall",
+  "type": "generic_card",
+  "title": "Memory Recall",
+  "status": "2 MATCHES",
+  "body": "Supermemory returned compact context for the active booking agent.",
+  "bullets": [
+    "Prefers short approval prompts",
+    "Avoids bar seating after 8 PM",
+    "Context is ready for save approval"
+  ],
+  "footer": "memory_search_result",
+  "source": "Supermemory",
+  "created_at": "2026-05-17T18:06:00-07:00"
+}

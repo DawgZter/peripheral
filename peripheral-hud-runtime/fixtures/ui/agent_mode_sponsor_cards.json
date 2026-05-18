@@ -1,0 +1,16 @@
+{
+  "id": "agent-mode-sponsor-cards",
+  "type": "table",
+  "title": "Sponsor Surfaces",
+  "status": "AGENT MODE",
+  "columns": ["Sponsor", "Surface", "State"],
+  "rows": [
+    { "Sponsor": "AgentPhone", "Surface": "Call HUD", "State": "connected" },
+    { "Sponsor": "Browser Use", "Surface": "Page step", "State": "ready" },
+    { "Sponsor": "Supermemory", "Surface": "Recall", "State": "2 hits" },
+    { "Sponsor": "Stripe", "Surface": "Approval", "State": "waiting" }
+  ],
+  "footer": "SEMANTIC CARDS ONLY",
+  "source": "fixture",
+  "created_at": "2026-05-17T17:41:00-07:00"
+}

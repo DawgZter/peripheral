@@ -503,7 +503,7 @@ function openDirtyCropStream(streamWindow = currentStreamWindow(), options = {})
       updateCrop(payload);
       setStatus((options.statusPrefix || (payload.synthetic ? "Synthetic " : "Delta ")) + "p" + payload.y0 + " +" + payload.height);
     } else {
-      log("dirty " + (payload.status || "not ready"));
+      log("dirty " + (payload.status || "awaiting readiness"));
     }
   });
   source.addEventListener("unsupported", (event) => {

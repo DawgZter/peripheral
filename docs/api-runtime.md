@@ -1,10 +1,10 @@
-# Local Display Sidecar API Contract
+# Local Display Sidecar API
 
-The web pages in this repo expect the existing local sidecar server to provide the display readback API.
+The web pages in this repo expect the existing local sidecar server to provide the display observation API.
 
 ## Runtime Protocol Types
 
-The HUD runtime shares typed protocol values for app modes, surface ownership, display commands, input events, and agent events. These contracts let the renderer, runtime, and future broker code exchange normal source-level objects before anything reaches the display transport.
+The HUD runtime shares typed protocol values for app modes, surface ownership, display commands, input events, and agent events. These interfaces let the renderer, runtime, and future broker code exchange normal source-level objects before anything reaches the display transport.
 
 Core enum exports live in `peripheral-hud-runtime/packages/peripheral-protocol/src/index.ts`:
 
@@ -28,7 +28,7 @@ Used by the one-click cast page before opening the camera or display stream. It 
 
 Used by Start when no glasses are currently connected. The sidecar powers display transport on, resolves the configured or discovered glasses target, stops any stale display bridge, pairs if needed, and connects through macOS.
 
-This changes local connection state but does not send display content. CLI validation keeps it behind `peripheralctl live-check --attempt-connect --real-hardware-ok` so an operator has to opt into the connection attempt.
+This changes local connection state while display content remains behind the runtime transport gates. CLI validation keeps it behind `peripheralctl live-check --attempt-connect --real-hardware-ok` so an operator has to opt into the connection attempt.
 
 ## GET /api/framebuffer/dirty-stream
 
@@ -52,7 +52,7 @@ Important event types:
 
 ## GET /api/framebuffer/stream
 
-Older fixed-page ROI stream. Useful for baseline packed display pages, but less efficient than compressed dirty-crops for the live demo.
+Older fixed-page ROI stream. Useful for baseline packed display pages, but less efficient than compressed dirty-crops for the live walkthrough.
 
 ## Display Surface Layout
 

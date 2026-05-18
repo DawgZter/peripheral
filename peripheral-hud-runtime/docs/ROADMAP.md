@@ -4,17 +4,17 @@ The v0 runtime proves the feeling first: agents can own a visual HUD surface usi
 
 ## v0 Done Here
 
-- Semantic widget JSON for the demo widget types.
+- Semantic widget JSON for the walkthrough widget types.
 - Deterministic monochrome renderer to `540x280` PNG plus 2 bpp sidecar.
-- Mock/dry-run driver with JSONL logs.
+- Local display driver with JSONL logs.
 - Existing full-panel image path wrapped behind a conservative driver.
-- Canned live-call, blackjack, conference, and agent-approval flows.
+- Live-call, blackjack, conference, and agent-approval walkthrough flows.
 - Agent HUD Runtime with blank default, look-up reveal, typed or Mac-mic command source, Hermes semantic adapter, Hermes CLI terminal view, dynamic widget watcher, and `hudctl` direct controls.
-- Mock latency measurement and real-hardware measurement gate.
+- Local latency measurement and real-glasses measurement gate.
 
 ## Next Exact Experiments
 
-1. With user permission, run one static real push and one short paced live-call demo.
+1. With user permission, run one static real push and one short paced live-call walkthrough.
 2. Capture Mac helper timestamps for setup, readiness wait, each image write, and each ACK.
 3. Compare response-gated writes against a carefully paced no-response run for simple flat frames.
 4. Render a constrained `304x179` version of the same widgets and test the smaller image route if full-panel swaps feel slow.
@@ -31,7 +31,7 @@ semantic widget JSON
   -> fallback to bitmap renderer when native resource confidence is low
 ```
 
-Native backend validation should happen in dry-run/capture comparison first. Do not live-send unvalidated native resource commands without explicit operator approval.
+Native backend validation should happen in local-driver/capture comparison first. Native resource commands move through explicit operator approval.
 
 ## Runtime To Broker And MCP Path
 
@@ -50,18 +50,18 @@ The current runtime already enforces schema validation, deterministic rendering,
 
 The glasses have no network module, so the long-term runtime should support both Mac and phone relays:
 
-- Mac relay for development and demos.
+- Mac relay for development and operator-run glasses sessions.
 - Phone relay for everyday use.
 - Same widget protocol above both relays.
 - Capability discovery so agents know whether bitmap, native text, touch, audio, or approvals are currently available.
 
-## Deferred Until After v0
+## Expansion Tracks
 
 - Full broker state machine.
-- Production MCP server.
+- Production MCP server hardening.
 - Real AoE/Codex adapters and a richer Hermes adapter that can graduate from line-based CLI mirroring to a proper PTY/TUI bridge.
 - Robust approval safety policy.
 - Touch/head/audio discovery.
 - Persistence/database.
-- Multi-agent session orchestration.
+- Multi-agent session routing.
 - Native command backend.

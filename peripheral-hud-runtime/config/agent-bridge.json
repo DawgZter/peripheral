@@ -1,0 +1,65 @@
+{
+  "schema": "peripheral-agent-bridge-config-v1",
+  "runtime": {
+    "transport": "peripheral_phone_gateway",
+    "surface_owner": "phone_app",
+    "default_mode": "agent_mode",
+    "agent_transport": "semantic_surface_commands",
+    "display_policy": "phone_owned_broker_lease"
+  },
+  "routing_order": [
+    "focused_card",
+    "explicit_agent_name",
+    "app_mode_intent",
+    "default_broker"
+  ],
+  "confirmation_policy": {
+    "low": "voice",
+    "medium": "voice_and_tap",
+    "high": "phone_or_desktop"
+  },
+  "adapters": [
+    {
+      "id": "codex_cli",
+      "command": "codex",
+      "session_model": "tmux",
+      "wake_names": ["Codex", "codex"],
+      "surfaces": ["progress_card", "approval_card", "terminal_fallback"]
+    },
+    {
+      "id": "claude_code",
+      "command": "claude",
+      "session_model": "tmux",
+      "wake_names": ["Claude", "Claude Code", "claude"],
+      "surfaces": ["progress_card", "approval_card", "terminal_fallback"]
+    },
+    {
+      "id": "gemini_cli",
+      "command": "gemini",
+      "session_model": "stdio",
+      "wake_names": ["Gemini", "gemini"],
+      "surfaces": ["progress_card", "approval_card", "terminal_fallback"]
+    },
+    {
+      "id": "opencode",
+      "command": "opencode",
+      "session_model": "pty",
+      "wake_names": ["OpenCode", "opencode", "oc"],
+      "surfaces": ["progress_card", "approval_card", "terminal_fallback"]
+    },
+    {
+      "id": "openclaw",
+      "command": "openclaw",
+      "session_model": "pty",
+      "wake_names": ["OpenClaw", "claw", "openclaw"],
+      "surfaces": ["progress_card", "approval_card", "terminal_fallback"]
+    },
+    {
+      "id": "pi",
+      "command": "pi",
+      "session_model": "adapter",
+      "wake_names": ["Pi", "pi"],
+      "surfaces": ["progress_card", "approval_card", "terminal_fallback"]
+    }
+  ]
+}

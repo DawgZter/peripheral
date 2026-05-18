@@ -8,8 +8,8 @@ This inventory is scoped to the v0 Peripheral HUD runtime and live display files
 | --- | --- | --- |
 | Mac display helper | `macos_corebluetooth/peripheral-mac-pusher/` | macOS scan/connect/write path, notification handling, stdin control tokens, and ACK timing logs. |
 | Frame wrapper | `macos_corebluetooth/peripheral-mac-pusher/Sources/PeripheralFrame/PeripheralFrame.swift` | `bf02` frame shape, command body layout, and CRC16-CCITT. |
-| Live display view | `web/cast-mirror.*`, `web/real-mirror.*` | Live readback pages used to observe wearer-visible display updates. |
-| HUD runtime | `peripheral-hud-runtime/` | Semantic widgets, deterministic renderer, image driver, CLI, mock runtime, logs, and docs. |
+| Live display view | `web/cast-mirror.*`, `web/real-mirror.*` | Sidecar-backed observation pages used to inspect display updates. |
+| HUD runtime | `peripheral-hud-runtime/` | Semantic widgets, deterministic renderer, image driver, CLI, runtime driver, logs, and docs. |
 
 ## Current Push Path
 
@@ -25,7 +25,7 @@ ACK/status notifications through 2022
 
 The runtime builds the image envelope deterministically, then sends raw frame hex through the included `peripheral-mac-pusher` stdin bridge. Setup-on-each-push remains the safe default.
 
-## Constants Used By The Demo
+## Constants Used By The Walkthrough
 
 - Main display service: `00007033-0000-1000-8000-00805f9b34fb`.
 - Write characteristic: `00002021-0000-1000-8000-00805f9b34fb`.
@@ -38,13 +38,13 @@ The runtime builds the image envelope deterministically, then sends raw frame he
 
 | Path | Purpose |
 | --- | --- |
-| `apps/peripheralctl/` | CLI command entrypoint and canned demo flows. |
+| `apps/peripheralctl/` | CLI command entrypoint and canned walkthrough flows. |
 | `packages/peripheral-protocol/` | Widget schema/types, display constants, validation, text normalization. |
 | `packages/peripheral-renderer/` | Deterministic bitmap renderer, built-in pixel font, PNG writer, 2 bpp packer. |
-| `packages/peripheral-driver/` | Mock/dry-run logs, image envelope builder, Mac helper wrapper, status/clear/push functions. |
+| `packages/peripheral-driver/` | Local-driver logs, image envelope builder, Mac helper wrapper, status/clear/push functions. |
 | `packages/peripheral-runtime/` | Blank-by-default Agent HUD runtime, agent registry, Hermes adapter, dynamic widget watcher. |
 | `fixtures/ui/` | Structured widget JSON for every supported widget type plus an invalid fixture. |
-| `fixtures/images/` | Structured avatar/headshot placeholders for person-detail demos. |
+| `fixtures/images/` | Structured avatar/headshot placeholders for person-detail surfaces. |
 | `tests/` | Smoke tests for schema validation, rendering, frame building, and HUD runtime acceptance. |
 
 ## Smaller Route Status
@@ -54,8 +54,8 @@ The smaller `304x179` route is exposed in diagnostics as an alternate capability
 ## Unknowns
 
 - Actual wearer-visible refresh latency for repeated full-panel HUD swaps.
-- Whether the `304x179` route is visibly faster and acceptable for the demos.
+- Whether the `304x179` route is visibly faster and acceptable for glasses workflows.
 - Whether no-setup same-surface pushes are reliable enough after a freshly primed full-panel route.
 - Whether no-response writes improve visible latency without reliability regressions.
 - Native/text resource command transport for labels, images, and incremental updates.
-- Real touch/head/audio inputs for demo control.
+- Real touch/head/audio inputs for walkthrough control.

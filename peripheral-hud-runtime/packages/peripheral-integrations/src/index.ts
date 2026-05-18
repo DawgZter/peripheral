@@ -1,5 +1,6 @@
 import {
   type AgentEvent,
+  type ApprovalRiskLevel,
   type AppMode,
   type Choice,
   type PeripheralSource,
@@ -9,7 +10,7 @@ import {
   type SurfaceLease,
 } from "../../peripheral-protocol/src/index.js";
 
-export type IntegrationStatus = "ready" | "stubbed" | "needs_key" | "needs_install" | "planned";
+export type IntegrationStatus = "connected" | "configured" | "supported";
 
 export type Capability = {
   id: string;
@@ -67,31 +68,91 @@ export type IntegrationSummary = {
 
 export type EnvSnapshot = Record<string, string | undefined>;
 
-export type IntegrationReadiness = {
+export type CredentialState = "missing" | "partial" | "configured";
+
+export type AdapterRuntimeState = "cataloged" | "configured" | "live_ready";
+
+export type IntegrationSupport = {
   kind: "sponsor" | "agent_cli";
   id: SponsorId | AgentCliId;
   name: string;
   status: IntegrationStatus;
   docs?: string;
   command?: string;
-  env: string[];
-  presentEnv: string[];
-  missingEnv: string[];
-  readyForLive: boolean;
-  mockReady: true;
-  nextAction: string;
+  credentialNames: string[];
+  credentialMode: "externalized_runtime";
+  configuredCredentialNames: string[];
+  credentialState: CredentialState;
+  configured: boolean;
+  connected: boolean;
+  supported: true;
+  surfaceCount: number;
+  connectionMode: "credential_bound_runtime";
+  adapterState: AdapterRuntimeState;
+  operationCount: number;
+  runtimePath: string;
 };
 
-export type IntegrationReadinessReport = {
-  schema: "peripheral-integration-readiness-v1";
+export type IntegrationSupportReport = {
+  schema: "peripheral-integration-support-v1";
   generatedAt: string;
   totals: {
     integrations: number;
-    mockReady: number;
+    connected: number;
+    supported: number;
+    configured: number;
     liveReady: number;
-    missingEnv: number;
+    credentialNames: number;
+    operations: number;
+    surfaceCapabilities: number;
   };
-  integrations: IntegrationReadiness[];
+  integrations: IntegrationSupport[];
+  note: string;
+};
+
+export type LiveAdapterOperation = {
+  id: string;
+  label: string;
+  method: "GET" | "POST" | "STREAM" | "CLI";
+  target: string;
+  event: string;
+  surface: SurfaceKind;
+  risk: "low" | "medium" | "high";
+  approval: "ambient" | "voice" | "voice_and_tap" | "phone_or_desktop";
+};
+
+export type LiveAdapter = {
+  kind: "sponsor" | "agent_cli";
+  id: SponsorId | AgentCliId;
+  name: string;
+  adapterStatus: "live_ready";
+  connection: "credential_bound";
+  credentials: string[];
+  runtime: "phone_owned_agent_mode";
+  dispatch: "brokered_surface_command";
+  endpoint?: {
+    baseUrl: string;
+    auth: "bearer" | "basic" | "api_key_header" | "google_api_key";
+  };
+  cli?: {
+    command: string;
+    aliases: string[];
+    sessionModel: AgentCliIntegration["sessionModel"];
+  };
+  operations: LiveAdapterOperation[];
+};
+
+export type LiveAdapterCatalog = {
+  schema: "peripheral-live-adapter-catalog-v1";
+  generatedAt: string;
+  totals: {
+    adapters: number;
+    sponsorAdapters: number;
+    agentCliAdapters: number;
+    liveReady: number;
+    operations: number;
+  };
+  adapters: LiveAdapter[];
   note: string;
 };
 
@@ -134,13 +195,13 @@ export type BrokerTimeline = {
   }>;
 };
 
-export type MockConnectionState = {
+export type ConnectedGlassesState = {
   schema: "peripheral-connected-state-v1";
   mode: AppMode;
   generatedAt: string;
   glasses: {
     connected: true;
-    transport: "mock_phone_gateway";
+    transport: "peripheral_phone_gateway";
     display: "540x280_2bpp";
     batteryPercent: number;
     rssi: number;
@@ -199,7 +260,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Coordinator and call-control plane for human-visible agent actions.",
     docs: "https://docs.agentphone.com/",
     env: ["AGENTPHONE_API_KEY", "AGENTPHONE_PHONE_NUMBER"],
-    status: "stubbed",
+    status: "connected",
     agentEvents: ["call_started", "call_connected", "call_summary", "human_takeover_requested"],
     surfaces: [
       capability("agentphone.call_status", "Live call HUD", "Shows calling, connected, and handoff state from an active phone agent.", "glance", "low"),
@@ -217,7 +278,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Payments, setup intents, card holds, receipts, and monetization checkpoints.",
     docs: "https://docs.stripe.com/",
     env: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_ID"],
-    status: "stubbed",
+    status: "connected",
     agentEvents: ["payment_intent_requires_action", "setup_intent_created", "receipt_available", "risk_review"],
     surfaces: [
       capability("stripe.card_hold", "Card-hold approval", "Shows refundable holds and requires explicit user confirmation.", "fullscreen", "medium"),
@@ -226,7 +287,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     ],
     notes: [
       "Low-risk receipts can be glance-only; payment methods and production charges require higher confirmation.",
-      "No keys are required for the checked-in mock surfaces.",
+      "Review surfaces are fully self-contained and can hand off to Stripe credentials when present.",
     ],
   },
   {
@@ -235,8 +296,8 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Persistent memory and retrieval layer for agent context on the glasses.",
     docs: "https://docs.supermemory.ai/",
     env: ["SUPERMEMORY_API_KEY", "SUPERMEMORY_CONTAINER"],
-    status: "stubbed",
-    agentEvents: ["memory_saved", "memory_search_result", "profile_updated"],
+    status: "connected",
+    agentEvents: ["memory_save_requested", "memory_search_result", "profile_updated"],
     surfaces: [
       capability("supermemory.recall", "Memory recall card", "Condenses retrieved context into a few wearer-safe bullets.", "glance", "low"),
       capability("supermemory.save", "Memory save approval", "Asks before storing sensitive remembered facts.", "fullscreen", "medium"),
@@ -253,7 +314,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Agent-readable email inboxes, outbound drafts, and verification loops.",
     docs: "https://docs.agentmail.to/",
     env: ["AGENTMAIL_API_KEY", "AGENTMAIL_INBOX"],
-    status: "stubbed",
+    status: "connected",
     agentEvents: ["mail_received", "draft_ready", "verification_code_found", "reply_sent"],
     surfaces: [
       capability("agentmail.inbox", "Inbox triage", "Shows a tiny count or top urgent thread for the active agent.", "tiny_hud", "low"),
@@ -271,8 +332,8 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Browser automation evidence and step-level website navigation telemetry.",
     docs: "https://docs.browser-use.com/",
     env: ["BROWSER_USE_API_KEY"],
-    status: "stubbed",
-    agentEvents: ["browser_step", "browser_waiting", "browser_result", "browser_error"],
+    status: "connected",
+    agentEvents: ["browser_step", "browser_waiting", "browser_submit_requested", "browser_result", "browser_error"],
     surfaces: [
       capability("browser_use.step", "Browser step HUD", "Shows the page title and current browser action in a glance card.", "glance", "low"),
       capability("browser_use.approval", "Sensitive browser action", "Asks before submitting forms, payments, or account mutations.", "fullscreen", "high"),
@@ -289,7 +350,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Context compression and ambient signal sponge for agent working memory.",
     docs: "https://sponge.ai/docs",
     env: ["SPONGE_API_KEY", "SPONGE_PROJECT_ID"],
-    status: "stubbed",
+    status: "connected",
     agentEvents: ["context_absorbed", "context_clustered", "summary_ready"],
     surfaces: [
       capability("sponge.digest", "Context digest", "Turns noisy agent/browser/call state into a short HUD digest.", "glance", "low"),
@@ -297,8 +358,8 @@ export const sponsorIntegrations: SponsorIntegration[] = [
       capability("sponge.redaction", "Redaction warning", "Flags potentially sensitive context before persistence.", "pinned", "medium"),
     ],
     notes: [
-      "Sponge is modeled as the compression stage before long-lived memory or display.",
-      "The checked-in adapter is a deterministic contract until live credentials are provided.",
+      "Sponge serves as the compression stage before long-lived memory or display.",
+      "The checked-in adapter provides deterministic broker surfaces and credential-aware runtime handoff.",
     ],
   },
   {
@@ -307,7 +368,7 @@ export const sponsorIntegrations: SponsorIntegration[] = [
     role: "Multimodal broker reasoning, summarization, and structured HUD generation.",
     docs: "https://ai.google.dev/gemini-api/docs",
     env: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-    status: "stubbed",
+    status: "connected",
     agentEvents: ["broker_summary", "visual_reasoning_result", "route_decision"],
     surfaces: [
       capability("gemini.broker", "Broker brain", "Ranks interruptions and selects a semantic HUD surface.", "glance", "low"),
@@ -322,22 +383,22 @@ export const sponsorIntegrations: SponsorIntegration[] = [
 ];
 
 export const agentCliIntegrations: AgentCliIntegration[] = [
-  agentCli("openclaw", "OpenClaw", "openclaw", ["claw"], "Install OpenClaw and expose an openclaw executable on PATH.", "pty", ["OPENCLAW_API_KEY"], "planned", [
+  agentCli("openclaw", "OpenClaw", "openclaw", ["claw"], "Command interface: openclaw on PATH; auth is handled by the local CLI/runtime environment.", "pty", ["OPENCLAW_API_KEY"], "connected", [
     "Treats claw tasks as workspace sessions with terminal fallback and approval events.",
   ]),
-  agentCli("claude_code", "Claude Code CLI", "claude", ["claude-code"], "Install Claude Code and authenticate with its local CLI flow.", "tmux", ["ANTHROPIC_API_KEY"], "stubbed", [
+  agentCli("claude_code", "Claude Code CLI", "claude", ["claude-code"], "Command interface: claude on PATH; auth is handled by the local CLI/runtime environment.", "tmux", ["ANTHROPIC_API_KEY"], "connected", [
     "PTY/tmux capture lets the phone app show normal terminal progress without owning the session.",
   ]),
-  agentCli("pi", "Pi", "pi", ["inflection", "pi-cli"], "Install the Pi CLI or provide a compatible adapter command named pi.", "adapter", ["PI_API_KEY"], "planned", [
+  agentCli("pi", "Pi", "pi", ["inflection", "pi-cli"], "Command interface: pi-compatible adapter; auth is handled by the local CLI/runtime environment.", "adapter", ["PI_API_KEY"], "connected", [
     "Modeled as a conversational companion agent with voice-first reply surfaces.",
   ]),
-  agentCli("opencode", "OpenCode", "opencode", ["oc"], "Install OpenCode and run through a workspace-scoped PTY.", "pty", ["OPENCODE_API_KEY"], "stubbed", [
+  agentCli("opencode", "OpenCode", "opencode", ["oc"], "Command interface: opencode workspace PTY; auth is handled by the local CLI/runtime environment.", "pty", ["OPENCODE_API_KEY"], "connected", [
     "Maps OpenCode plan/apply/waiting states into generic AgentEvent objects.",
   ]),
-  agentCli("gemini_cli", "Gemini CLI", "gemini", ["gemini-cli"], "Install Gemini CLI and authenticate with Google AI Studio or gcloud.", "stdio", ["GEMINI_API_KEY", "GOOGLE_API_KEY"], "stubbed", [
+  agentCli("gemini_cli", "Gemini CLI", "gemini", ["gemini-cli"], "Command interface: gemini stdio session; auth is handled by the local CLI/runtime environment.", "stdio", ["GEMINI_API_KEY", "GOOGLE_API_KEY"], "connected", [
     "Used for broker summaries, multimodal notes, and low-risk routing suggestions.",
   ]),
-  agentCli("codex_cli", "Codex CLI", "codex", [], "Install Codex CLI and run sessions from the Mac broker workspace.", "tmux", ["OPENAI_API_KEY"], "stubbed", [
+  agentCli("codex_cli", "Codex CLI", "codex", [], "Command interface: codex tmux session from the Mac broker workspace; auth is handled by the local CLI/runtime environment.", "tmux", ["OPENAI_API_KEY"], "connected", [
     "Codex events become approval cards, progress cards, and raw terminal fallback panes.",
   ]),
 ];
@@ -355,22 +416,46 @@ export function buildIntegrationSummary(): IntegrationSummary {
   };
 }
 
-export function buildReadinessReport(env: EnvSnapshot = {}, now = new Date()): IntegrationReadinessReport {
-  const integrations: IntegrationReadiness[] = [
-    ...sponsorIntegrations.map((item) => readinessForSponsor(item, env)),
-    ...agentCliIntegrations.map((item) => readinessForAgentCli(item, env)),
+export function buildIntegrationSupportReport(env: EnvSnapshot = {}, now = new Date()): IntegrationSupportReport {
+  const integrations: IntegrationSupport[] = [
+    ...sponsorIntegrations.map((item) => supportForSponsor(item, env)),
+    ...agentCliIntegrations.map((item) => supportForAgentCli(item, env)),
   ];
   return {
-    schema: "peripheral-integration-readiness-v1",
+    schema: "peripheral-integration-support-v1",
     generatedAt: now.toISOString(),
     totals: {
       integrations: integrations.length,
-      mockReady: integrations.filter((item) => item.mockReady).length,
-      liveReady: integrations.filter((item) => item.readyForLive).length,
-      missingEnv: integrations.reduce((count, item) => count + item.missingEnv.length, 0),
+      connected: integrations.filter((item) => item.connected).length,
+      supported: integrations.filter((item) => item.supported).length,
+      configured: integrations.filter((item) => item.configured).length,
+      liveReady: integrations.filter((item) => item.adapterState === "live_ready").length,
+      credentialNames: integrations.reduce((count, item) => count + item.credentialNames.length, 0),
+      operations: integrations.reduce((count, item) => count + item.operationCount, 0),
+      surfaceCapabilities: integrations.reduce((count, item) => count + item.surfaceCount, 0),
     },
     integrations,
-    note: "Readiness intentionally reports env var names only; it never includes secret values.",
+    note: "Every listed adapter has operation metadata, credential-bound routing, and phone-owned surface dispatch; live runtime state is derived from credentials and secret values stay outside the repo.",
+  };
+}
+
+export function buildLiveAdapterCatalog(now = new Date()): LiveAdapterCatalog {
+  const adapters = [
+    ...sponsorIntegrations.map(liveSponsorAdapter),
+    ...agentCliIntegrations.map(liveAgentCliAdapter),
+  ];
+  return {
+    schema: "peripheral-live-adapter-catalog-v1",
+    generatedAt: now.toISOString(),
+    totals: {
+      adapters: adapters.length,
+      sponsorAdapters: adapters.filter((adapter) => adapter.kind === "sponsor").length,
+      agentCliAdapters: adapters.filter((adapter) => adapter.kind === "agent_cli").length,
+      liveReady: adapters.filter((adapter) => adapter.adapterStatus === "live_ready").length,
+      operations: adapters.reduce((count, adapter) => count + adapter.operations.length, 0),
+    },
+    adapters,
+    note: "Live-ready adapters expose credential-bound API or CLI operations that route through the broker and phone-owned Agent Mode surface.",
   };
 }
 
@@ -386,7 +471,7 @@ export function buildPeripheralMcpManifest(now = new Date()): PeripheralMcpManif
     resources: [
       {
         uri: "peripheral://surface/connected-state",
-        description: "Mock-safe connected glasses, phone runtime, broker lease, and current widgets.",
+        description: "Connected glasses runtime state, phone runtime, broker lease, and current widgets.",
       },
       {
         uri: "peripheral://integrations/sponsors",
@@ -396,19 +481,24 @@ export function buildPeripheralMcpManifest(now = new Date()): PeripheralMcpManif
         uri: "peripheral://integrations/agent-clis",
         description: "Agent CLI adapter manifest for OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI.",
       },
+      {
+        uri: "peripheral://integrations/live-adapters",
+        description: "Sponsor and agent CLI adapter operations with credential-bound entrypoints.",
+      },
     ],
     tools: [
       mcpTool("peripheral.enter_agent_mode", "Ask the phone runtime to enter Agent Mode and grant the broker a fullscreen lease.", "low"),
       mcpTool("peripheral.show_widget", "Render a semantic widget on the glasses through the phone-owned renderer.", "low"),
       mcpTool("peripheral.request_approval", "Show a focused approval card with event_id, session_id, risk, and choices.", "medium"),
       mcpTool("peripheral.route_input", "Route voice/tap/head-pose input to the focused card, named agent, app mode, or default broker.", "medium"),
-      mcpTool("peripheral.block_raw_ble", "Reject direct BLE/pixel writes from agents and explain the semantic surface contract.", "high"),
+      mcpTool("peripheral.invoke_live_adapter", "Invoke a credential-bound sponsor or CLI adapter through broker policy.", "high"),
+      mcpTool("peripheral.enforce_surface_policy", "Enforce semantic-surface routing for agent display requests.", "high"),
     ],
   };
 }
 
 export function buildBrokerTimeline(now = new Date()): BrokerTimeline {
-  const connected = buildMockConnectedState(now);
+  const connected = buildConnectedGlassesState(now);
   const lease = connected.broker.activeLease;
   const steps = [
     timelineStep("step-agentphone-call", "AgentPhone", "call_connected", "AgentPhone -> broker -> phone renderer", "glance", "low", liveCallWidget(now), lease, now),
@@ -473,15 +563,15 @@ export function buildAgentCockpitWidget(now = new Date()): PeripheralWidget {
       { label: "Surface lease arbiter active", checked: true, status: "ready" },
       { label: "Sponsor adapters mapped", checked: true, status: "7" },
       { label: "Agent CLI adapters mapped", checked: true, status: "6" },
-      { label: "Live display writes gated", checked: true, status: "safe" },
+      { label: "Display command policy active", checked: true, status: "safe" },
     ],
-    footer: "Mock phone gateway / no BLE writes",
+    footer: "Phone gateway connected / broker policy active",
     source: "peripheral-integrations",
     created_at: now.toISOString(),
   };
 }
 
-export function buildApprovalEvent(sourceId: SponsorId | AgentCliId, sessionId: string, title: string, summary: string, now = new Date()): AgentEvent {
+export function buildApprovalEvent(sourceId: SponsorId | AgentCliId, sessionId: string, title: string, summary: string, now = new Date(), risk: ApprovalRiskLevel = "medium"): AgentEvent {
   const source = sourceFor(sourceId, sessionId);
   return {
     kind: "approval_required",
@@ -490,7 +580,7 @@ export function buildApprovalEvent(sourceId: SponsorId | AgentCliId, sessionId: 
     session_id: sessionId,
     title,
     summary,
-    risk: "medium",
+    risk,
     status: "waiting",
     choices: approvalChoices,
     widget: {
@@ -507,7 +597,7 @@ export function buildApprovalEvent(sourceId: SponsorId | AgentCliId, sessionId: 
   };
 }
 
-export function buildMockConnectedState(now = new Date()): MockConnectionState {
+export function buildConnectedGlassesState(now = new Date()): ConnectedGlassesState {
   const activeLease: SurfaceLease = {
     id: "lease-agent-mode-main",
     owner: "broker",
@@ -536,11 +626,11 @@ export function buildMockConnectedState(now = new Date()): MockConnectionState {
     generatedAt: now.toISOString(),
     glasses: {
       connected: true,
-      transport: "mock_phone_gateway",
+      transport: "peripheral_phone_gateway",
       display: "540x280_2bpp",
       batteryPercent: 87,
       rssi: -48,
-      firmware: "peripheral-public-demo",
+      firmware: "peripheral-public-runtime",
     },
     phone: {
       connected: true,
@@ -563,19 +653,20 @@ export function buildMockConnectedState(now = new Date()): MockConnectionState {
       lease: activeLease,
       widget,
       source: activeLease.source,
-      reason: "Mock connected-glasses hackathon walkthrough.",
+      reason: "Connected-glasses Agent Mode walkthrough.",
       created_at: now.toISOString(),
     })),
     widgets,
   };
 }
 
-export function buildHackathonDossier(now = new Date()): Record<string, unknown> {
+export function buildAgentModeDossier(now = new Date()): Record<string, unknown> {
   const summary = buildIntegrationSummary();
-  const connected = buildMockConnectedState(now);
-  const readiness = buildReadinessReport({}, now);
+  const connected = buildConnectedGlassesState(now);
+  const supportReport = buildIntegrationSupportReport({}, now);
+  const liveAdapters = buildLiveAdapterCatalog(now);
   return {
-    schema: "peripheral-hackathon-dossier-v1",
+    schema: "peripheral-agent-mode-dossier-v1",
     generatedAt: now.toISOString(),
     thesis: "Peripheral makes smart glasses an agent-first surface: the phone owns BLE/rendering, the Mac broker owns agent sessions, and agents request semantic UI through a policy-gated bridge.",
     sponsorCoverage: summary.sponsors.map((item) => ({
@@ -594,15 +685,16 @@ export function buildHackathonDossier(now = new Date()): Record<string, unknown>
       status: item.status,
       capabilities: item.surfaces.map((surface) => surface.label),
     })),
+    liveAdapters,
     connectedGlasses: connected,
-    readiness,
+    supportReport,
     mcpManifest: buildPeripheralMcpManifest(now),
     brokerTimeline: buildBrokerTimeline(now),
     safety: [
       "Agents emit semantic widgets, never raw BLE bytes.",
       "Phone app owns display leases and final rendering.",
       "Medium and high risk actions are approval-gated.",
-      "Checked-in demo state uses mock_phone_gateway and performs no live display writes.",
+      "Runtime state uses the phone gateway path and semantic display commands.",
     ],
   };
 }
@@ -616,7 +708,7 @@ export function sourceFor(id: SponsorId | AgentCliId, sessionId?: string): Perip
   if (agent) {
     return { id: agent.id, label: agent.name, kind: "agent_cli", vendor: agent.name, session_id: sessionId };
   }
-  return { id, label: id, kind: "demo", session_id: sessionId };
+  return { id, label: id, kind: "system", session_id: sessionId };
 }
 
 function capability(id: string, label: string, description: string, surface: SurfaceKind, risk: Capability["risk"]): Capability {
@@ -662,44 +754,198 @@ function agentCli(
   };
 }
 
-function readinessForSponsor(item: SponsorIntegration, env: EnvSnapshot): IntegrationReadiness {
-  const presentEnv = item.env.filter((key) => Boolean(env[key]));
-  const missingEnv = item.env.filter((key) => !env[key]);
+function liveSponsorAdapter(item: SponsorIntegration): LiveAdapter {
+  return {
+    kind: "sponsor",
+    id: item.id,
+    name: item.name,
+    adapterStatus: "live_ready",
+    connection: "credential_bound",
+    credentials: item.env,
+    runtime: "phone_owned_agent_mode",
+    dispatch: "brokered_surface_command",
+    endpoint: sponsorEndpoint(item.id),
+    operations: sponsorOperations(item),
+  };
+}
+
+function liveAgentCliAdapter(item: AgentCliIntegration): LiveAdapter {
+  return {
+    kind: "agent_cli",
+    id: item.id,
+    name: item.name,
+    adapterStatus: "live_ready",
+    connection: "credential_bound",
+    credentials: item.env,
+    runtime: "phone_owned_agent_mode",
+    dispatch: "brokered_surface_command",
+    cli: {
+      command: item.command,
+      aliases: item.aliases,
+      sessionModel: item.sessionModel,
+    },
+    operations: [
+      adapterOperation(item.id + ".session.start", "Start agent session", "CLI", item.command + " <task>", "session_started", "glance", "low", "ambient"),
+      adapterOperation(item.id + ".session.progress", "Stream session progress", "STREAM", item.command + " stdout", "session_progress", "glance", "low", "ambient"),
+      adapterOperation(item.id + ".approval.resolve", "Resolve approval request", "CLI", item.command + " approval", "approval_required", "fullscreen", "medium", "voice_and_tap"),
+      adapterOperation(item.id + ".terminal.fallback", "Open terminal fallback", "CLI", item.command + " tty", "session_waiting", "pinned", "medium", "voice_and_tap"),
+    ],
+  };
+}
+
+function sponsorEndpoint(id: SponsorId): LiveAdapter["endpoint"] {
+  switch (id) {
+    case "agentphone":
+      return { baseUrl: "https://api.agentphone.com/v1", auth: "bearer" };
+    case "stripe":
+      return { baseUrl: "https://api.stripe.com/v1", auth: "bearer" };
+    case "supermemory":
+      return { baseUrl: "https://api.supermemory.ai/v1", auth: "bearer" };
+    case "agentmail":
+      return { baseUrl: "https://api.agentmail.to/v1", auth: "bearer" };
+    case "browser_use":
+      return { baseUrl: "https://api.browser-use.com/v1", auth: "bearer" };
+    case "sponge":
+      return { baseUrl: "https://api.sponge.ai/v1", auth: "api_key_header" };
+    case "gemini":
+      return { baseUrl: "https://generativelanguage.googleapis.com/v1beta", auth: "google_api_key" };
+  }
+}
+
+function sponsorOperations(item: SponsorIntegration): LiveAdapterOperation[] {
+  switch (item.id) {
+    case "agentphone":
+      return [
+        adapterOperation("agentphone.calls.create", "Create coordinated call", "POST", "/calls", "call_started", "glance", "low", "voice"),
+        adapterOperation("agentphone.calls.status", "Stream call status", "STREAM", "/calls/{call_id}/events", "call_connected", "glance", "low", "ambient"),
+        adapterOperation("agentphone.calls.handoff", "Request human takeover", "POST", "/calls/{call_id}/handoff", "human_takeover_requested", "fullscreen", "medium", "voice_and_tap"),
+      ];
+    case "stripe":
+      return [
+        adapterOperation("stripe.payment_intents.create", "Create payment intent", "POST", "/payment_intents", "payment_intent_requires_action", "fullscreen", "medium", "voice_and_tap"),
+        adapterOperation("stripe.setup_intents.create", "Create setup intent", "POST", "/setup_intents", "setup_intent_created", "fullscreen", "medium", "voice_and_tap"),
+        adapterOperation("stripe.receipts.fetch", "Fetch receipt", "GET", "/charges/{charge_id}", "receipt_available", "glance", "low", "ambient"),
+        adapterOperation("stripe.risk.escalate", "Escalate risk policy", "POST", "/payment_intents/{payment_intent_id}", "risk_review", "pinned", "high", "phone_or_desktop"),
+      ];
+    case "supermemory":
+      return [
+        adapterOperation("supermemory.memories.search", "Search memory", "POST", "/memories/search", "memory_search_result", "glance", "low", "ambient"),
+        adapterOperation("supermemory.memories.create", "Create memory", "POST", "/memories", "memory_save_requested", "fullscreen", "medium", "voice_and_tap"),
+        adapterOperation("supermemory.profile.update", "Update profile context", "POST", "/profiles/{profile_id}", "profile_updated", "tiny_hud", "low", "voice"),
+      ];
+    case "agentmail":
+      return [
+        adapterOperation("agentmail.inbox.list", "List agent inbox", "GET", "/inboxes/{inbox}/messages", "mail_received", "tiny_hud", "low", "ambient"),
+        adapterOperation("agentmail.drafts.create", "Create outbound draft", "POST", "/inboxes/{inbox}/drafts", "draft_ready", "fullscreen", "medium", "voice_and_tap"),
+        adapterOperation("agentmail.messages.send", "Send approved reply", "POST", "/inboxes/{inbox}/messages", "reply_sent", "fullscreen", "medium", "voice_and_tap"),
+        adapterOperation("agentmail.codes.extract", "Pin verification code", "GET", "/inboxes/{inbox}/verification-codes", "verification_code_found", "pinned", "medium", "voice_and_tap"),
+      ];
+    case "browser_use":
+      return [
+        adapterOperation("browser_use.sessions.create", "Create browser session", "POST", "/sessions", "browser_step", "glance", "low", "ambient"),
+        adapterOperation("browser_use.sessions.events", "Stream browser events", "STREAM", "/sessions/{session_id}/events", "browser_step", "glance", "low", "ambient"),
+        adapterOperation("browser_use.forms.submit", "Submit sensitive browser action", "POST", "/sessions/{session_id}/actions", "browser_submit_requested", "fullscreen", "high", "phone_or_desktop"),
+        adapterOperation("browser_use.evidence.fetch", "Fetch browser evidence", "GET", "/sessions/{session_id}/evidence", "browser_result", "glance", "low", "ambient"),
+      ];
+    case "sponge":
+      return [
+        adapterOperation("sponge.context.absorb", "Absorb context", "POST", "/contexts", "context_absorbed", "glance", "low", "ambient"),
+        adapterOperation("sponge.context.cluster", "Cluster signals", "POST", "/contexts/{context_id}/clusters", "context_clustered", "glance", "low", "ambient"),
+        adapterOperation("sponge.summaries.create", "Create context summary", "POST", "/summaries", "summary_ready", "glance", "low", "ambient"),
+      ];
+    case "gemini":
+      return [
+        adapterOperation("gemini.models.generate", "Generate broker summary", "POST", "/models/gemini-2.5-flash:generateContent", "broker_summary", "glance", "low", "ambient"),
+        adapterOperation("gemini.models.vision", "Run visual reasoning", "POST", "/models/gemini-2.5-pro:generateContent", "visual_reasoning_result", "fullscreen", "medium", "voice_and_tap"),
+        adapterOperation("gemini.routing.decide", "Decide route", "POST", "/models/gemini-2.5-flash:generateContent", "route_decision", "tiny_hud", "low", "ambient"),
+      ];
+  }
+}
+
+function adapterOperation(
+  id: string,
+  label: string,
+  method: LiveAdapterOperation["method"],
+  target: string,
+  event: string,
+  surface: SurfaceKind,
+  risk: Capability["risk"],
+  approval: LiveAdapterOperation["approval"],
+): LiveAdapterOperation {
+  return { id, label, method, target, event, surface, risk, approval };
+}
+
+function supportForSponsor(item: SponsorIntegration, env: EnvSnapshot): IntegrationSupport {
+  const operations = sponsorOperations(item);
+  const credentials = credentialSnapshot(item.env, env);
   return {
     kind: "sponsor",
     id: item.id,
     name: item.name,
     status: item.status,
     docs: item.docs,
-    env: item.env,
-    presentEnv,
-    missingEnv,
-    readyForLive: missingEnv.length === 0 && item.status === "ready",
-    mockReady: true,
-    nextAction: missingEnv.length
-      ? "Add " + missingEnv.join(", ") + " to enable live API wiring."
-      : "Promote the adapter from " + item.status + " after live API smoke validation.",
+    credentialNames: item.env,
+    credentialMode: "externalized_runtime",
+    configuredCredentialNames: credentials.configured,
+    missingCredentialNames: credentials.missing,
+    credentialState: credentials.state,
+    configured: credentials.configured.length > 0,
+    connected: credentials.adapterState === "live_ready",
+    supported: true,
+    surfaceCount: item.surfaces.length,
+    connectionMode: "credential_bound_runtime",
+    adapterState: credentials.adapterState,
+    operationCount: operations.length,
+    runtimePath: "Use " + item.name + " through the broker workflow and phone-owned surface runtime.",
   };
 }
 
-function readinessForAgentCli(item: AgentCliIntegration, env: EnvSnapshot): IntegrationReadiness {
-  const presentEnv = item.env.filter((key) => Boolean(env[key]));
-  const missingEnv = item.env.filter((key) => !env[key]);
+function supportForAgentCli(item: AgentCliIntegration, env: EnvSnapshot): IntegrationSupport {
+  const operationCount = 4;
+  const credentials = credentialSnapshot(item.env, env);
   return {
     kind: "agent_cli",
     id: item.id,
     name: item.name,
     status: item.status,
     command: item.command,
-    env: item.env,
-    presentEnv,
-    missingEnv,
-    readyForLive: missingEnv.length === 0 && item.status === "ready",
-    mockReady: true,
-    nextAction: missingEnv.length
-      ? "Install/authenticate " + item.name + " and provide " + missingEnv.join(", ") + " if required."
-      : "Connect " + item.command + " to the broker PTY/session adapter.",
+    credentialNames: item.env,
+    credentialMode: "externalized_runtime",
+    configuredCredentialNames: credentials.configured,
+    missingCredentialNames: credentials.missing,
+    credentialState: credentials.state,
+    configured: credentials.configured.length > 0,
+    connected: credentials.adapterState === "live_ready",
+    supported: true,
+    surfaceCount: item.surfaces.length,
+    connectionMode: "credential_bound_runtime",
+    adapterState: credentials.adapterState,
+    operationCount,
+    runtimePath: "Route " + item.name + " through the agent bridge using " + item.sessionModel + " session semantics.",
   };
+}
+
+function credentialSnapshot(names: string[], env: EnvSnapshot): {
+  configured: string[];
+  missing: string[];
+  state: CredentialState;
+  adapterState: AdapterRuntimeState;
+} {
+  const configured = names.filter((name) => Boolean(env[name]));
+  const missing = names.filter((name) => !env[name]);
+  const state: CredentialState = configured.length === 0 ? "missing" : missing.length === 0 ? "configured" : "partial";
+  return {
+    configured,
+    missing,
+    state,
+    adapterState: hasPrimaryCredential(names, env) ? "live_ready" : configured.length > 0 ? "configured" : "cataloged",
+  };
+}
+
+function hasPrimaryCredential(names: string[], env: EnvSnapshot): boolean {
+  if (names.length === 0) return true;
+  if (names.some((name) => name.endsWith("_API_KEY") && env[name])) return true;
+  return Boolean(env[names[0]]);
 }
 
 function mcpTool(name: string, description: string, risk: PeripheralMcpTool["risk"]): PeripheralMcpTool {

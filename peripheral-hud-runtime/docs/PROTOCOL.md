@@ -1,6 +1,6 @@
 # Protocol
 
-This is the minimum protocol surface needed for the v0 HUD runtime. It is not a full SDK and it is not live readback API.
+This is the protocol surface for the v0 HUD runtime, display push path, and display observation boundary.
 
 The runtime widget set now includes `terminal` for the Hermes CLI view. A terminal widget carries a short `terminal` string array plus an optional `prompt`, and the renderer draws it as a dense monochrome command-line surface rather than a summarized card.
 
@@ -40,7 +40,7 @@ The implementation lives in `macos_corebluetooth/peripheral-mac-pusher/Sources/P
 
 ## Image Envelope
 
-The demo uses group `0x07`, command `0x04` image payloads. The logical payload starts after the group/command/length fields:
+The walkthrough uses group `0x07`, command `0x04` image payloads. The logical payload starts after the group/command/length fields:
 
 | Offset | Size | Field | v0 value |
 | ---: | ---: | --- | --- |
@@ -94,13 +94,13 @@ Next experiment if full-panel updates feel too slow: render the same semantic wi
 
 - Setup-on-each-push remains the default because setup-skipped writes can ACK without a visible update if the display surface is not active.
 - Real pushes should be short and operator-coordinated.
-- Do not live-send unvalidated native resource commands.
+- Native resource commands go through explicit operator approval.
 - Do not treat local outbound frame reconstruction as live display readback.
 
 ## Unknowns
 
 - Live transport send duration and ACK timing for these exact v0 frames on live glasses.
 - Visible panel refresh cadence under repeated HUD swaps.
-- Reliability of no-response image writes for live demos.
+- Reliability of no-response image writes for live glasses workflows.
 - Reliability of setup-skipped same-surface swaps.
 - Native resource command shapes for text/image widgets.

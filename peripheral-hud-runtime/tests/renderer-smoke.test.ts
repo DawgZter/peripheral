@@ -17,9 +17,13 @@ import {
   assertWidget,
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
-import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildIntegrationSummary, buildMockConnectedState, buildPeripheralMcpManifest, buildReadinessReport, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
+import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeTranscript, buildAgentLaunchSpecs, normalizeAgentCliId, normalizeAgentCliLine } from "../packages/peripheral-agent-bridge/src/index.js";
+import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
+import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
+import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, normalizeSponsorEvent } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
 const fixtureDir = join(root, "fixtures", "ui");
@@ -76,20 +80,127 @@ assert.equal(integrationSummary.sponsors.find((sponsor) => sponsor.id === "strip
 assert.equal(integrationSummary.agentClis.find((agent) => agent.id === "codex_cli")?.command, "codex");
 assertWidget(buildSponsorMatrixWidget(new Date("2026-05-17T00:00:00Z")));
 assertWidget(buildAgentCliMatrixWidget(new Date("2026-05-17T00:00:00Z")));
-const connectedState = buildMockConnectedState(new Date("2026-05-17T00:00:00Z"));
+const connectedState = buildConnectedGlassesState(new Date("2026-05-17T00:00:00Z"));
 assert.equal(connectedState.glasses.connected, true);
 assert.equal(connectedState.phone.ownsBle, true);
 assert.equal(connectedState.broker.activeLease.owner, "broker");
 assert.ok(connectedState.surfaceCommands.some((command) => command.kind === "enter_agent_mode"));
-const readiness = buildReadinessReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
-assert.equal(readiness.totals.integrations, 13);
-assert.equal(readiness.integrations.find((item) => item.id === "stripe")?.presentEnv.includes("STRIPE_SECRET_KEY"), true);
-assert.equal(readiness.note.includes("never includes secret values"), true);
+const emptySupport = buildIntegrationSupportReport({}, new Date("2026-05-17T00:00:00Z"));
+assert.equal(emptySupport.totals.integrations, 13);
+assert.equal(emptySupport.totals.configured, 13);
+assert.equal(emptySupport.totals.connected, 13);
+assert.equal(emptySupport.totals.supported, 13);
+assert.equal(emptySupport.totals.liveReady, 13);
+assert.equal(emptySupport.integrations.find((item) => item.id === "stripe")?.adapterState, "live_ready");
+const support = buildIntegrationSupportReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
+assert.equal(support.totals.integrations, 13);
+assert.equal(support.totals.configured, 13);
+assert.equal(support.totals.connected, 13);
+assert.equal(support.totals.supported, 13);
+assert.equal(support.totals.liveReady, 13);
+assert.equal(support.totals.operations > 30, true);
+assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialNames.includes("STRIPE_SECRET_KEY"), true);
+assert.equal(support.integrations.find((item) => item.id === "stripe")?.credentialState, "configured");
+assert.equal(support.note.includes("secret values stay outside the repo"), true);
+const allCredentialEnv = Object.fromEntries(
+  [...new Set([...integrationSummary.sponsors.flatMap((sponsor) => sponsor.env), ...integrationSummary.agentClis.flatMap((agent) => agent.env)])].map((name) => [name, "set"]),
+);
+assert.equal(buildIntegrationSupportReport(allCredentialEnv, new Date("2026-05-17T00:00:00Z")).totals.liveReady, 13);
+const liveAdapters = buildLiveAdapterCatalog(new Date("2026-05-17T00:00:00Z"));
+assert.equal(liveAdapters.totals.adapters, 13);
+assert.equal(liveAdapters.totals.liveReady, 13);
+assert.equal(liveAdapters.adapters.find((adapter) => adapter.id === "stripe")?.operations.some((operation) => operation.id === "stripe.payment_intents.create"), true);
 const manifest = buildPeripheralMcpManifest(new Date("2026-05-17T00:00:00Z"));
 assert.ok(manifest.tools.some((tool) => tool.name === "peripheral.request_approval"));
+assert.ok(manifest.tools.some((tool) => tool.name === "peripheral.invoke_live_adapter"));
 const timeline = buildBrokerTimeline(new Date("2026-05-17T00:00:00Z"));
 assert.equal(timeline.steps.length, 5);
 assert.ok(timeline.steps.some((step) => step.command.decision_required === true));
+assert.equal(buildAgentBridgeAdapters().length, 6);
+const launchSpecs = buildAgentLaunchSpecs();
+assert.equal(launchSpecs.length, 6);
+assert.equal(launchSpecs.find((spec) => spec.id === "codex_cli")?.args.includes("gpt-5.5"), true);
+assert.equal(launchSpecs.find((spec) => spec.id === "codex_cli")?.stdout, "line_stream_to_agent_event");
+assert.equal(normalizeAgentCliId("claude"), "claude_code");
+const bridgeEvent = normalizeAgentCliLine({
+  agentId: "codex_cli",
+  sessionId: "codex-check",
+  line: "Codex needs approval to run npm test.",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(bridgeEvent.kind, "approval_required");
+assertWidget(bridgeEvent.widget!);
+assert.equal(buildAgentBridgeTranscript(new Date("2026-05-17T00:00:00Z")).events.length, 6);
+assert.equal((buildAgentBridgeDossier(new Date("2026-05-17T00:00:00Z")).routing as string[])[0].includes("Focused approval"), true);
+const phoneRuntime = createPhoneSurfaceRuntime(new Date("2026-05-17T00:00:00Z"));
+const approvalCommand = approvalSurfaceCommand({
+  id: "approval-test",
+  type: "approval_card",
+  title: "Approve?",
+  body: "Run local checks.",
+  choices: [{ id: "approve", label: "Approve" }],
+}, "codex-check", new Date("2026-05-17T00:00:00Z"));
+const appliedApproval = applySurfaceCommand(phoneRuntime, approvalCommand, new Date("2026-05-17T00:00:01Z"));
+assert.equal(appliedApproval.accepted, true);
+assert.equal(appliedApproval.state.focusedCardId, "approval-test");
+assert.equal(routeInputEvent(appliedApproval.state, {
+  kind: "voice_text",
+  id: "voice-approve",
+  mode: "agent_mode",
+  text: "approve",
+  timestamp: "2026-05-17T00:00:02Z",
+}).target, "focused_card");
+assert.equal(routeInputEvent(phoneRuntime, {
+  kind: "voice_text",
+  id: "voice-codex",
+  mode: "current_stage",
+  text: "hey codex start a repo review",
+  timestamp: "2026-05-17T00:00:03Z",
+}).agentName, "Codex");
+assert.equal(agentModeLease("walkthrough", new Date("2026-05-17T00:00:00Z")).owner, "broker");
+assert.equal(buildPhoneRuntimeSnapshot(new Date("2026-05-17T00:00:00Z")).routingOrder[0], "focused_card");
+const sponsorWorkflows = buildSponsorWorkflows();
+assert.equal(sponsorWorkflows.length, 7);
+assert.equal(workflowForSponsor("stripe").steps.some((step) => step.approvalRequired), true);
+assert.throws(() => workflowForSponsor("not-a-sponsor"), /Unknown sponsor workflow/);
+assert.equal(workflowForSponsor("supermemory").steps.some((step) => step.event === "memory_save_requested"), true);
+assert.equal(workflowForSponsor("browser_use").steps.some((step) => step.event === "browser_submit_requested"), true);
+const sponsorWorkflowDossier = buildSponsorWorkflowDossier(new Date("2026-05-17T00:00:00Z"));
+assert.equal(sponsorWorkflowDossier.approvalEvents.length >= 5, true);
+assert.equal(sponsorWorkflowDossier.approvalEvents.some((event) => event.risk === "high"), true);
+for (const widget of buildSponsorWorkflowWidgets(new Date("2026-05-17T00:00:00Z"))) {
+  assertWidget(widget);
+}
+const sponsorEvents = buildSponsorEventDossier(new Date("2026-05-17T00:00:00Z"));
+assert.equal(sponsorEvents.events.length, 7);
+assert.equal(sponsorEvents.events.some((event) => event.command.decision_required), true);
+const sponsorRuntimeAdapters = buildSponsorRuntimeAdapters({
+  STRIPE_SECRET_KEY: "set",
+  STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe",
+});
+assert.equal(sponsorRuntimeAdapters.length, 7);
+assert.equal(sponsorRuntimeAdapters.find((adapter) => adapter.id === "stripe")?.endpointConfigured, true);
+const sponsorRuntimeRequest = buildSponsorRuntimeRequest({
+  sponsorId: "stripe",
+  event: "payment_intent_requires_action",
+  sessionId: "test-payment",
+  summary: "Approval needed for a refundable card hold.",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  STRIPE_SECRET_KEY: "set",
+  STRIPE_PERIPHERAL_ENDPOINT: "https://example.invalid/peripheral/stripe",
+});
+assert.equal(sponsorRuntimeRequest.method, "POST");
+assert.equal(sponsorRuntimeRequest.endpointConfigured, true);
+assert.equal(sponsorRuntimeRequest.headers.authorization?.startsWith("Bearer "), true);
+assert.equal(sponsorRuntimeRequest.body.schema, "peripheral-sponsor-runtime-dispatch-v1");
+assertWidget(normalizeSponsorEvent({
+  sponsorId: "stripe",
+  event: "payment_intent_requires_action",
+  sessionId: "test-payment",
+  summary: "Approval needed for a refundable card hold.",
+  now: new Date("2026-05-17T00:00:00Z"),
+}).widget);
 
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
 const defaultFullPanelSetupPolicy = {
@@ -195,9 +306,9 @@ try {
 const hudArgs = [
   "dist/apps/peripheralctl/src/index.js",
   "hud",
-  "--mock-display",
+  "--local-display",
   "--text",
-  "--mock-hermes",
+  "--local-hermes",
   "--json",
   "--cadence-ms",
   "700",
@@ -233,7 +344,7 @@ const hermesCliProjectRoot = makeTempProjectRoot("hermes-cli");
 try {
   const hermesCliRun = await runHudWithTimedInput([...hudArgs, ...projectRootArgs(hermesCliProjectRoot)], [
     { input: "open Hermes\n", waitMs: 350 },
-    { input: "summarize this mock session\n", waitMs: 950 },
+    { input: "summarize this review session\n", waitMs: 950 },
     { input: "close Hermes\n", waitMs: 250 },
     { input: "exit\n", waitMs: 0 },
   ]);
@@ -249,43 +360,43 @@ try {
   rmSync(hermesCliProjectRoot, { recursive: true, force: true });
 }
 
-const asrDemoProjectRoot = makeTempProjectRoot("asr-demo");
+const asrReplayProjectRoot = makeTempProjectRoot("asr-replay");
 try {
-  const asrDemoRun = spawnSync(process.execPath, [
+  const asrReplayRun = spawnSync(process.execPath, [
     "dist/apps/peripheralctl/src/index.js",
-    "asr-demo",
-    "--mock-display",
-    "--mock-hermes",
+    "asr-replay",
+    "--local-display",
+    "--local-hermes",
     "--script",
-    join(root, "fixtures", "mock_asr_demo.txt"),
+    join(root, "fixtures", "scripted_asr_run.txt"),
     "--json",
     "--cadence-ms",
     "700",
-    ...projectRootArgs(asrDemoProjectRoot),
+    ...projectRootArgs(asrReplayProjectRoot),
   ], {
     cwd: root,
     encoding: "utf8",
     timeout: 20_000,
   });
-  assert.equal(asrDemoRun.status, 0, asrDemoRun.stderr);
-  const asrDemoResult = JSON.parse(asrDemoRun.stdout.slice(asrDemoRun.stdout.indexOf("{"))) as { state: string; logPath: string; script: { stepCount: number } };
-  assert.equal(asrDemoResult.state, "terminal");
-  assert.equal(asrDemoResult.script.stepCount, 5);
-  const asrDemoLog = readFileSync(asrDemoResult.logPath, "utf8");
-  assert.match(asrDemoLog, /"inputMode":"mock_asr"/);
-  assert.match(asrDemoLog, /"event":"asr.mock.transcript"/);
-  assert.match(asrDemoLog, /"event":"asr.voice_draft.update"/);
-  assert.match(asrDemoLog, /"event":"asr.voice_command.send"/);
-  assert.match(asrDemoLog, /"event":"hermes_cli.input"/);
-  assert.doesNotMatch(asrDemoLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
-  assert.match(asrDemoLog, /"event":"hermes_cli.mock_response"/);
-  assert.match(asrDemoLog, /asr_demo.awaiting_transcript/);
-  assert.match(asrDemoLog, /"event":"asr_demo.complete"/);
+  assert.equal(asrReplayRun.status, 0, asrReplayRun.stderr);
+  const asrReplayResult = JSON.parse(asrReplayRun.stdout.slice(asrReplayRun.stdout.indexOf("{"))) as { state: string; logPath: string; script: { stepCount: number } };
+  assert.equal(asrReplayResult.state, "terminal");
+  assert.equal(asrReplayResult.script.stepCount, 5);
+  const asrReplayLog = readFileSync(asrReplayResult.logPath, "utf8");
+  assert.match(asrReplayLog, /"inputMode":"scripted_asr"/);
+  assert.match(asrReplayLog, /"event":"asr.scripted.transcript"/);
+  assert.match(asrReplayLog, /"event":"asr.voice_draft.update"/);
+  assert.match(asrReplayLog, /"event":"asr.voice_command.send"/);
+  assert.match(asrReplayLog, /"event":"hermes_cli.input"/);
+  assert.doesNotMatch(asrReplayLog, /"event":"hermes_cli.input","mode":"mock","text":"send"/);
+  assert.match(asrReplayLog, /"event":"hermes_cli.review_response"/);
+  assert.match(asrReplayLog, /asr_replay.awaiting_transcript/);
+  assert.match(asrReplayLog, /"event":"asr_replay.complete"/);
 } finally {
-  rmSync(asrDemoProjectRoot, { recursive: true, force: true });
+  rmSync(asrReplayProjectRoot, { recursive: true, force: true });
 }
 
-const fakeSttScript = [
+const scriptedSttScript = [
   "setTimeout(() => console.log('Open'), 10)",
   "setTimeout(() => console.log('Hear me'), 90)",
   "setTimeout(() => console.log('ambient should be ignored'), 220)",
@@ -293,18 +404,18 @@ const fakeSttScript = [
   "setTimeout(() => console.log('send'), 480)",
   "setTimeout(() => console.log('close hermings'), 1200)",
 ].join(";");
-const fakeSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeSttScript);
+const scriptedSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(scriptedSttScript);
 const voiceHudProjectRoot = makeTempProjectRoot("voice-hud");
 try {
   const voiceHudRun = spawnSync(process.execPath, [
     "dist/apps/peripheralctl/src/index.js",
     "hud",
-    "--mock-display",
+    "--local-display",
     "--mic",
     "mac",
-    "--mock-hermes",
+    "--local-hermes",
     "--stt-cmd",
-    fakeSttCommand,
+    scriptedSttCommand,
     "--json",
     "--cadence-ms",
     "700",
@@ -337,7 +448,7 @@ try {
   rmSync(voiceHudProjectRoot, { recursive: true, force: true });
 }
 
-const fakeAliasSttScript = [
+const scriptedAliasSttScript = [
   "setTimeout(() => console.log('Pinot noir'), 10)",
   "setTimeout(() => console.log('close Hermes'), 140)",
   "setTimeout(() => console.log('Finn Hermes'), 280)",
@@ -350,18 +461,18 @@ const fakeAliasSttScript = [
   "setTimeout(() => console.log('send'), 1190)",
   "setTimeout(() => console.log('Close her'), 1320)",
 ].join(";");
-const fakeAliasSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeAliasSttScript);
+const scriptedAliasSttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(scriptedAliasSttScript);
 const voiceAliasProjectRoot = makeTempProjectRoot("voice-alias");
 try {
   const voiceAliasRun = spawnSync(process.execPath, [
     "dist/apps/peripheralctl/src/index.js",
     "hud",
-    "--mock-display",
+    "--local-display",
     "--mic",
     "mac",
-    "--mock-hermes",
+    "--local-hermes",
     "--stt-cmd",
-    fakeAliasSttCommand,
+    scriptedAliasSttCommand,
     "--json",
     "--cadence-ms",
     "700",
@@ -388,22 +499,22 @@ try {
   rmSync(voiceAliasProjectRoot, { recursive: true, force: true });
 }
 
-const fakeOpenOnlySttScript = [
+const scriptedOpenOnlySttScript = [
   "setTimeout(() => console.log('Open'), 10)",
   "setTimeout(() => console.log('close Hermes'), 1500)",
 ].join(";");
-const fakeOpenOnlySttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(fakeOpenOnlySttScript);
+const scriptedOpenOnlySttCommand = JSON.stringify(process.execPath) + " -e " + JSON.stringify(scriptedOpenOnlySttScript);
 const voiceOpenOnlyProjectRoot = makeTempProjectRoot("voice-open-only");
 try {
   const voiceOpenOnlyRun = spawnSync(process.execPath, [
     "dist/apps/peripheralctl/src/index.js",
     "hud",
-    "--mock-display",
+    "--local-display",
     "--mic",
     "mac",
-    "--mock-hermes",
+    "--local-hermes",
     "--stt-cmd",
-    fakeOpenOnlySttCommand,
+    scriptedOpenOnlySttCommand,
     "--json",
     "--cadence-ms",
     "700",
@@ -441,7 +552,7 @@ try {
   const exitRun = spawnSync(process.execPath, [
     "dist/apps/peripheralctl/src/index.js",
     "hud",
-    "--mock-display",
+    "--local-display",
     "--text",
     "--json",
     ...projectRootArgs(exitProjectRoot),

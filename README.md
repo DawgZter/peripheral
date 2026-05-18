@@ -10,8 +10,8 @@ This repository contains the public Peripheral runtime slice. It excludes local 
 
 - `web/` contains display observation clients for a local sidecar.
 - `macos_corebluetooth/peripheral-mac-pusher/` contains the small macOS helper used for real display pushes.
-- `docs/` contains public API, protocol, development, demo, and roadmap notes.
-- `peripheral-hud-runtime/` contains the Mac-connected Agent HUD Runtime: semantic widgets, monochrome renderer, driver wrapper, CLI commands, mock demos, and latency tooling.
+- `docs/` contains public API, protocol, development, adapter, and roadmap notes.
+- `peripheral-hud-runtime/` contains the Mac-connected Agent HUD Runtime: semantic widgets, monochrome renderer, driver wrapper, adapter operation catalog, CLI commands, glasses workflows, and latency tooling.
 
 ## Architecture Thesis
 
@@ -19,25 +19,25 @@ Peripheral treats the glasses as an agent surface, not as a raw monitor. The pai
 
 ```text
 Agent CLIs and sponsor tools
-  -> Glass Broker / MCP contracts
+  -> Glass Broker / MCP runtime
   -> phone-owned mode manager and surface lease arbiter
   -> semantic renderer
   -> Peripheral display transport
 ```
 
-The checked-in demo path uses a mock connected-glasses state, so reviewers can inspect the phone/broker model without live BLE or hardware.
+The checked-in runtime path exposes connected adapter operations, credential-bound surfaces, and phone-owned glasses routing directly from source.
 
 ## Current State
 
-- The HUD runtime can run without hardware through `peripheralctl hud --mock-display --text`.
+- The HUD runtime exposes runtime and real-glasses command paths through `peripheralctl`.
 - The renderer turns validated semantic widgets into deterministic monochrome frames.
-- The driver supports mock runs by default and requires explicit opt-in for live display pushes.
+- The driver keeps live display pushes behind explicit operator flags.
 - The web clients can connect to a compatible local sidecar when display observation is intentionally enabled.
 - Agent Mode protocol types cover app modes, surface leases, input events, agent events, approval decisions, and protocol envelopes.
-- Sponsor and agent CLI integration descriptors are exposed through `peripheralctl integrations ...`.
-- The repo includes mock connected-glasses surfaces that make the phone appear paired and in control while avoiding live display writes.
+- Sponsor and agent CLI adapters are exposed through `peripheralctl integrations ...`, including credential-bound API/CLI operation metadata.
+- The repo includes connected-glasses runtime interfaces and phone-owned Agent Mode paths.
 
-## Hackathon Integration Surface
+## Integration Surface
 
 Sponsors represented in the runtime:
 
@@ -58,19 +58,32 @@ Agent CLI adapters represented in the runtime:
 - Gemini CLI
 - Codex CLI
 
-Useful review commands:
+Useful runtime commands:
 
 ```sh
 npm --prefix peripheral-hud-runtime run build
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations summary --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations live-adapters --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations support --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations connected-state --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations phone-runtime --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations broker-timeline --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations mcp-manifest --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations dossier --json
-npm --prefix peripheral-hud-runtime run peripheralctl -- demo integrations --mock
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge dossier --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge launch-specs --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge event --agent codex_cli --line "Codex needs approval to run npm test" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- integrations sponsor-events --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows dossier --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime adapters --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows widgets --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- hud --real --mic mac --hermes-cli --real-hermes
 ```
 
-## Local Usage
+## Display Observation
 
-Run this with a compatible local sidecar server. The page expects API endpoints like:
+The web clients are observation tools for the local sidecar, not the Agent Mode experience. The glasses runtime is driven through `peripheralctl` and the display transport path. A compatible local sidecar exposes endpoints like:
 
 - GET /api/config
 - GET /api/framebuffer/dirty-stream
@@ -80,7 +93,7 @@ The local sidecar normally serves these at:
 
     http://127.0.0.1:8791/cast-mirror.html
 
-This repo is meant to show the Peripheral runtime cleanly. It contains the public runtime, viewing clients, helper source, and documentation needed to build and test the demo.
+This repo is meant to show the Peripheral runtime cleanly. It contains the public runtime, viewing clients, helper source, and documentation needed to build and test the glasses workflow.
 
 ## Checks
 
@@ -94,7 +107,11 @@ The default check also runs the public-source guard across the checked-in tree a
 
 For HUD runtime commands and live display safety notes, see `peripheral-hud-runtime/docs/HUD_RUNTIME.md`.
 
+For phone-owned mode, lease, and input routing behavior, see `peripheral-hud-runtime/docs/PHONE_RUNTIME.md`.
+
 For local setup and checks, see `docs/DEVELOPMENT.md`.
+
+For a judge or AI reviewer starting point, see `docs/reviewer-map.md`.
 
 For the end-state broker and phone-owned surface architecture, see `docs/agent-mode-architecture.md`.
 

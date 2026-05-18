@@ -1,0 +1,100 @@
+name: Sponsor Manual Tools
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Review-gated sponsor target to run"
+        required: true
+        type: choice
+        options:
+          - tx-extract
+          - ports
+          - run-waveform
+      profile:
+        description: "Sponsor profile or config label"
+        required: false
+        default: "review"
+        type: string
+      input_path:
+        description: "Input file or directory understood by the target"
+        required: false
+        default: ""
+        type: string
+      output_dir:
+        description: "Artifact directory for target output"
+        required: false
+        default: "out/sponsor"
+        type: string
+      extra_args:
+        description: "Optional key=value arguments for the target"
+        required: false
+        default: ""
+        type: string
+      upload_artifact:
+        description: "Upload the artifact directory after the run"
+        required: true
+        default: true
+        type: boolean
+      confirm:
+        description: "Type SPONSOR-RUN to acknowledge this sponsor review job"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sponsor-manual-tools-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  run-sponsor-target:
+    if: ${{ inputs.confirm == 'SPONSOR-RUN' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: sponsor-review
+    env:
+      SPONSOR_TARGET: ${{ inputs.target }}
+      SPONSOR_PROFILE: ${{ inputs.profile }}
+      SPONSOR_INPUT_PATH: ${{ inputs.input_path }}
+      SPONSOR_OUTPUT_DIR: ${{ inputs.output_dir }}
+      SPONSOR_ARGS: ${{ inputs.extra_args }}
+      SPONSOR_MANUAL_RUN: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Show selected target
+        run: |
+          set -euo pipefail
+          echo "target=${SPONSOR_TARGET}"
+          echo "profile=${SPONSOR_PROFILE}"
+          echo "input_path=${SPONSOR_INPUT_PATH}"
+          echo "output_dir=${SPONSOR_OUTPUT_DIR}"
+
+      - name: Run selected make target
+        run: |
+          set -euo pipefail
+          case "${SPONSOR_TARGET}" in
+            tx-extract|ports|run-waveform) ;;
+            *)
+              echo "::error::Unsupported sponsor target: ${SPONSOR_TARGET}"
+              exit 64
+              ;;
+          esac
+
+          mkdir -p "${SPONSOR_OUTPUT_DIR}"
+          make "${SPONSOR_TARGET}" \
+            SPONSOR_PROFILE="${SPONSOR_PROFILE}" \
+            SPONSOR_INPUT_PATH="${SPONSOR_INPUT_PATH}" \
+            SPONSOR_OUTPUT_DIR="${SPONSOR_OUTPUT_DIR}" \
+            SPONSOR_ARGS="${SPONSOR_ARGS}"
+
+      - name: Upload target artifacts
+        if: ${{ inputs.upload_artifact }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sponsor-${{ inputs.target }}-${{ github.run_id }}
+          path: ${{ inputs.output_dir }}
+          if-no-files-found: warn

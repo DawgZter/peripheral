@@ -135,7 +135,7 @@ export const PERIPHERAL_SOURCE_KINDS = [
   "agent_cli",
   "sponsor",
   "system",
-  "demo",
+  "walkthrough",
   "local_tool",
   "bridge",
 ] as const;
@@ -158,7 +158,7 @@ export const AGENT_SURFACE_CAPABILITIES = [
   "agent_handoff",
   "file_context",
   "live_status",
-  "mock_demo",
+  "scripted_replay",
 ] as const;
 
 export type AgentSurfaceCapability = (typeof AGENT_SURFACE_CAPABILITIES)[number];
