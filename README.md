@@ -24,6 +24,7 @@ Artifacts:
 - `peripheral-hud-runtime/out/frames/dinner-booking/`
 - `peripheral-hud-runtime/out/demo/dinner-booking-timeline.json`
 - `peripheral-hud-runtime/out/logs/dinner-booking.jsonl`
+- `docs/media/peripheral-demo-dinner-booking.mp4`
 
 Use manual approval mode when you want the run to stop at the card:
 
