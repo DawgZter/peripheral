@@ -17,7 +17,7 @@ import {
   assertWidget,
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
-import { buildAgentCliMatrixWidget, buildIntegrationSummary, buildMockConnectedState, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
+import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildIntegrationSummary, buildMockConnectedState, buildPeripheralMcpManifest, buildReadinessReport, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
 
@@ -81,6 +81,15 @@ assert.equal(connectedState.glasses.connected, true);
 assert.equal(connectedState.phone.ownsBle, true);
 assert.equal(connectedState.broker.activeLease.owner, "broker");
 assert.ok(connectedState.surfaceCommands.some((command) => command.kind === "enter_agent_mode"));
+const readiness = buildReadinessReport({ STRIPE_SECRET_KEY: "set" }, new Date("2026-05-17T00:00:00Z"));
+assert.equal(readiness.totals.integrations, 13);
+assert.equal(readiness.integrations.find((item) => item.id === "stripe")?.presentEnv.includes("STRIPE_SECRET_KEY"), true);
+assert.equal(readiness.note.includes("never includes secret values"), true);
+const manifest = buildPeripheralMcpManifest(new Date("2026-05-17T00:00:00Z"));
+assert.ok(manifest.tools.some((tool) => tool.name === "peripheral.request_approval"));
+const timeline = buildBrokerTimeline(new Date("2026-05-17T00:00:00Z"));
+assert.equal(timeline.steps.length, 5);
+assert.ok(timeline.steps.some((step) => step.command.decision_required === true));
 
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
 const defaultFullPanelSetupPolicy = {
