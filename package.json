@@ -16,8 +16,6 @@
     "check:hud": "npm --prefix peripheral-hud-runtime test",
     "pusher:build": "macos_corebluetooth/peripheral-mac-pusher/build.sh",
     "hud:build": "npm --prefix peripheral-hud-runtime run build",
-    "hud:walkthrough": "npm --prefix peripheral-hud-runtime run peripheralctl -- hud --local-display --text",
-    "hud:hardware-intro": "npm --prefix peripheral-hud-runtime run peripheralctl -- demo hardware-intro --local",
-    "hud:yc-demo": "npm --prefix peripheral-hud-runtime run peripheralctl -- demo yc-hackathon-match --local"
+    "hud:walkthrough": "npm --prefix peripheral-hud-runtime run peripheralctl -- hud --local-display --text"
   }
 }

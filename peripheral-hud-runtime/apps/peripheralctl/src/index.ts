@@ -1698,7 +1698,7 @@ HUD runtime options:
   --asr-duration-seconds <n>
                            Stop bundled/helper STT after n seconds; useful for tests.
   --asr-partials          Log partial recognition text from the bundled helper to stderr/JSONL.
-  --asr-http-port <port>  Also host a browser ASR page that POSTs transcripts into the HUD runtime.
+  --asr-http-port <port>  Host an HTTP transcript bridge that POSTs transcripts into the HUD runtime.
   --openai-asr-model <id> OpenAI Realtime ASR model; default gpt-realtime-whisper.
   --openai-asr-protocol <mode>
                            auto, legacy, or current. auto uses legacy for gpt-realtime-*.
