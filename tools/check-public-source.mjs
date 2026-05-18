@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -71,11 +71,16 @@ function splitZero(value) {
   return value.split("\0").filter(Boolean);
 }
 
-const trackedFiles = splitZero(git(["ls-files", "-z"]));
+const worktreeFiles = [
+  ...new Set(splitZero(git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]))),
+];
 
-for (const file of trackedFiles) {
+for (const file of worktreeFiles) {
   scanText("worktree path", file, file);
-  scanBuffer("worktree file", file, readFileSync(join(repoRoot, file)));
+  const path = join(repoRoot, file);
+  if (existsSync(path)) {
+    scanBuffer("worktree file", file, readFileSync(path));
+  }
 }
 
 const commits = git(["rev-list", "HEAD"]).trim().split("\n").filter(Boolean);
@@ -102,4 +107,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("public-source ok (" + trackedFiles.length + " files, " + commits.length + " commits)");
+console.log("public-source ok (" + worktreeFiles.length + " worktree files, " + commits.length + " commits)");
