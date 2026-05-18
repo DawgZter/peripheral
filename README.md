@@ -4,7 +4,7 @@
 
 Smart-glasses control surface for real-world AI agents.
 
-Peripheral is both the glasses and the runtime around them. The hardware was built in Shenzhen as an agent-first pair of display smart glasses: 28g, microLED, binocular waveguide displays, 12-24 hours of battery life depending on operating mode, and an optical stack designed for extremely low light leakage. At 28g, Peripheral is built to be the lightest display smart-glasses form factor in the world.
+Peripheral is both the glasses and the runtime around them. The hardware was built in Shenzhen as an agent-first pair of display smart glasses: 28g, microLED, binocular waveguide displays, 12-24 hours of battery life depending on operating mode, and an optical stack designed for extremely low light leakage. At 28g, Peripheral is designed around a lightweight display smart-glasses form factor.
 
 The point is not to make another phone screen. Peripheral is a lightweight display peripheral for agents that can call, browse, email, pay, remember, ask for approval, and keep the wearer in control while work happens in the real world. In our view, that is the best shape for smart glasses in an agent-native world: barely there until an agent needs your eyes, your context, or your consent.
 
