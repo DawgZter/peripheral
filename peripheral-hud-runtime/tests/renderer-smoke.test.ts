@@ -112,8 +112,8 @@ assert.equal(buildIntegrationSupportReport({ ...allCredentialEnv, STRIPE_PERIPHE
 const liveAdapters = buildLiveAdapterCatalog(new Date("2026-05-17T00:00:00Z"));
 assert.equal(liveAdapters.totals.adapters, 13);
 assert.equal(liveAdapters.totals.operationCataloged, liveAdapters.totals.operations);
-assert.equal(liveAdapters.totals.sourceReady, 0);
-assert.equal(liveAdapters.totals.liveReady, 13);
+assert.equal(liveAdapters.totals.sourceReady, 13);
+assert.equal(liveAdapters.totals.liveReady, 0);
 assert.equal(liveAdapters.adapters.find((adapter) => adapter.id === "stripe")?.operations.some((operation) => operation.id === "stripe.payment_intents.create"), true);
 const manifest = buildPeripheralMcpManifest(new Date("2026-05-17T00:00:00Z"));
 assert.ok(manifest.tools.some((tool) => tool.name === "peripheral.request_approval"));
