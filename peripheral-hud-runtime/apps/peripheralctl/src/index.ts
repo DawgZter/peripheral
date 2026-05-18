@@ -50,6 +50,7 @@ import {
 import {
   buildAgentBridgeAdapters,
   buildAgentBridgeDossier,
+  buildAgentRuntimePlan,
   buildAgentBridgeTranscript,
   buildAgentLaunchSpecs,
   normalizeAgentCliId,
@@ -79,9 +80,11 @@ import {
   dispatchSponsorEvent,
   normalizeBrowserUseEvent,
   normalizeSponsorEvent,
+  routeGeminiBrokerDecision,
   runBrowserUseTask,
   saveDinnerPreference,
   sendAgentMailConfirmation,
+  submitSpongeContext,
   type SponsorRuntimeRequest,
 } from "../../../packages/peripheral-sponsor-kit/src/index.js";
 import { normalizeAgentPhoneEvent, runAgentPhoneDinnerBooking, type AgentPhoneDinnerRequest } from "../../../packages/peripheral-sponsor-kit/src/agentphone.js";
@@ -143,6 +146,16 @@ const VALUE_FLAGS = new Set([
   "customer",
   "payment-method",
   "target",
+  "goal",
+  "url",
+  "max-steps",
+  "approval-policy",
+  "prompt",
+  "context",
+  "context-text",
+  "model",
+  "project-id",
+  "mode",
   "code",
   "choice",
   "restaurant-name",
@@ -385,6 +398,13 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<
       return { ok: true, adapters: buildAgentBridgeAdapters() };
     case "launch-specs":
       return { ok: true, launchSpecs: buildAgentLaunchSpecs() };
+    case "runtime-plan": {
+      const agentId = cli.options.agent || cli.positionals[1]
+        ? normalizeAgentCliId(String(cli.options.agent || cli.positionals[1]))
+        : undefined;
+      const sessionId = String(cli.options["session-id"] || cli.positionals[2] || "agent-session");
+      return { ok: true, runtimePlan: buildAgentRuntimePlan(now, agentId, sessionId) };
+    }
     case "transcript":
       return { ok: true, transcript: buildAgentBridgeTranscript(now) };
     case "event": {
@@ -418,7 +438,7 @@ async function commandAgentBridge(cli: ParsedCli, projectRoot: string): Promise<
     case "dossier":
       return { ok: true, bridge: buildAgentBridgeDossier(now) };
     default:
-      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, transcript, event, route, widget");
+      throw new Error("Unknown agent-bridge view. Use one of: dossier, adapters, launch-specs, runtime-plan, transcript, event, route, widget");
   }
 }
 
@@ -569,35 +589,102 @@ async function commandSponsorRuntime(cli: ParsedCli): Promise<unknown> {
     }
     case "browser-task": {
       const sessionId = String(cli.options["session-id"] || "browser-use-task");
-      const task = String(cli.options.task || cli.options.summary || cli.options.line || "Find the requested page evidence and stop before any sensitive submit.");
+      const task = String(cli.options.task || cli.options.goal || cli.options.summary || cli.options.line || "Find the requested page evidence and stop before any sensitive submit.");
+      const startUrl = typeof cli.options["start-url"] === "string"
+        ? cli.options["start-url"]
+        : typeof cli.options.url === "string" ? cli.options.url : undefined;
       const result = await runBrowserUseTask({
         sessionId,
         task,
-        startUrl: typeof cli.options["start-url"] === "string" ? cli.options["start-url"] : undefined,
+        startUrl,
         model: typeof cli.options["browser-model"] === "string" ? cli.options["browser-model"] : undefined,
         profileId: typeof cli.options["profile-id"] === "string" ? cli.options["profile-id"] : undefined,
         workspaceId: typeof cli.options["workspace-id"] === "string" ? cli.options["workspace-id"] : undefined,
         maxCostUsd: typeof cli.options["max-cost-usd"] === "string" ? cli.options["max-cost-usd"] : undefined,
         proxyCountryCode: typeof cli.options["proxy-country"] === "string" ? cli.options["proxy-country"] : undefined,
         keepAlive: Boolean(cli.options["keep-alive"]),
-        approvalIntent: typeof cli.options["approval-intent"] === "string" ? cli.options["approval-intent"] : undefined,
+        approvalIntent: typeof cli.options["approval-intent"] === "string"
+          ? cli.options["approval-intent"]
+          : typeof cli.options["approval-policy"] === "string" ? "Approval policy: " + cli.options["approval-policy"] : undefined,
         now,
       }, {
         forceReal: Boolean(cli.options["real-browser-use"]),
         env: process.env,
       });
-      const normalized = result.events.map(normalizeBrowserUseEvent);
+      const normalizedEvents = result.events.map(normalizeBrowserUseEvent);
+      const fallback = normalizeSponsorEvent({
+        sponsorId: "browser_use",
+        event: "browser_step",
+        sessionId,
+        title: "Browser Agent",
+        summary: task,
+        target: startUrl,
+        risk: "low",
+        now,
+      });
+      const primary = normalizedEvents.find((item) => item.command.decision_required) || normalizedEvents[0] || fallback;
       return {
         ok: result.ok,
         mode: result.mode,
         browserUse: result,
-        events: normalized.map((item) => item.event),
-        widgets: normalized.map((item) => item.widget),
-        commands: normalized.map((item) => item.command),
+        event: primary.event,
+        widget: primary.widget,
+        command: primary.command,
+        events: normalizedEvents.map((item) => item.event),
+        widgets: normalizedEvents.map((item) => item.widget),
+        commands: normalizedEvents.map((item) => item.command),
       };
     }
+    case "sponge-context": {
+      const sessionId = String(cli.options["session-id"] || "sponge-context");
+      const text = String(cli.options["context-text"] || cli.options.summary || cli.options.line || "Summarize sensitive context for a wearer-safe glasses surface.");
+      const result = await submitSpongeContext({
+        sessionId,
+        text,
+        projectId: typeof cli.options["project-id"] === "string" ? cli.options["project-id"] : undefined,
+        redactionMode: typeof cli.options.mode === "string" ? cli.options.mode as "context_digest" | "redaction_warning" | "safe_summary" : undefined,
+        now,
+      }, {
+        forceReal: Boolean(cli.options["real-sponge"]),
+        env: process.env,
+      });
+      const normalized = normalizeSponsorEvent({
+        sponsorId: "sponge",
+        event: "context_clustered",
+        sessionId,
+        title: "Context Digest",
+        summary: text,
+        risk: "low",
+        now,
+      });
+      return { ok: result.ok, mode: result.mode, sponge: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
+    }
+    case "gemini-route": {
+      const sessionId = String(cli.options["session-id"] || "gemini-route");
+      const prompt = String(cli.options.prompt || cli.options.summary || cli.options.line || "Choose the best glasses surface for this agent update.");
+      const result = await routeGeminiBrokerDecision({
+        sessionId,
+        prompt,
+        context: typeof cli.options.context === "string" ? cli.options.context : undefined,
+        model: typeof cli.options.model === "string" ? cli.options.model : undefined,
+        now,
+      }, {
+        forceReal: Boolean(cli.options["real-gemini"]),
+        env: process.env,
+      });
+      const normalized = normalizeSponsorEvent({
+        sponsorId: "gemini",
+        event: "route_decision",
+        sessionId,
+        title: "Broker Route",
+        summary: prompt,
+        risk: "low",
+        now,
+      });
+      return { ok: result.ok, mode: result.mode, gemini: result, event: normalized.event, widget: normalized.widget, command: normalized.command };
+    }
     default:
-      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, stripe-hold, browser-task");
+      throw new Error("Unknown sponsor-runtime view. Use one of: adapters, request, dispatch, stripe-hold, browser-task, sponge-context, gemini-route");
   }
 }
 
@@ -1488,6 +1575,7 @@ function capabilities(): unknown {
       "agent-bridge dossier",
       "agent-bridge adapters",
       "agent-bridge launch-specs",
+      "agent-bridge runtime-plan",
       "agent-bridge transcript",
       "agent-bridge event",
       "agent-bridge route",
@@ -1505,6 +1593,9 @@ function capabilities(): unknown {
       "sponsor-runtime dispatch",
       "sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd",
       "sponsor-runtime browser-task --task <text> --start-url <url>",
+      "sponsor-runtime browser-task --goal \"Check restaurant availability\"",
+      "sponsor-runtime sponge-context --context-text \"Summarize this customer context\"",
+      "sponsor-runtime gemini-route --prompt \"Route this agent update\"",
       "hudctl show-json",
       "hudctl show-card",
       "hudctl clear",
@@ -1669,7 +1760,7 @@ function parseCli(argv: string[]): ParsedCli {
     const arg = argv[i]!;
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
-      if (VALUE_FLAGS.has(key)) {
+      if (flagExpectsValue(key, positionals)) {
         const value = argv[i + 1];
         if (!value || value.startsWith("--")) throw new Error(`Missing value for --${key}`);
         options[key] = value;
@@ -1683,6 +1774,10 @@ function parseCli(argv: string[]): ParsedCli {
   }
   const command = positionals.shift() || "";
   return { command, positionals, options };
+}
+
+function flagExpectsValue(key: string, positionals: string[]): boolean {
+  return VALUE_FLAGS.has(key);
 }
 
 function printHelp(): void {
@@ -1722,6 +1817,7 @@ Usage:
   peripheralctl agent-bridge dossier
   peripheralctl agent-bridge adapters
   peripheralctl agent-bridge launch-specs
+  peripheralctl agent-bridge runtime-plan [--agent codex_cli] [--session-id codex-auth]
   peripheralctl agent-bridge transcript
   peripheralctl agent-bridge event --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
   peripheralctl agent-bridge route --agent codex_cli --session-id codex-auth --line "Codex needs approval to run npm test"
@@ -1739,6 +1835,9 @@ Usage:
   peripheralctl sponsor-runtime dispatch --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
   peripheralctl sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold"
   peripheralctl sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com
+  peripheralctl sponsor-runtime browser-task --goal "Check restaurant availability" --url https://example.com
+  peripheralctl sponsor-runtime sponge-context --context-text "Summarize customer context for glasses"
+  peripheralctl sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface"
   peripheralctl demo dinner-booking --local
   peripheralctl demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
   peripheralctl phone-runtime decide --event booking-approval-1 --choice approve
@@ -1783,6 +1882,12 @@ Global options:
   --max-cost-usd <value>  For sponsor-runtime browser-task: Browser Use spend ceiling.
   --proxy-country <code>  For sponsor-runtime browser-task: proxy country code, default us.
   --approval-intent <txt> For sponsor-runtime browser-task: action that must pause on glasses.
+  --goal <text>           For sponsor-runtime browser-task: browser agent task goal.
+  --url <url>             For sponsor-runtime browser-task: starting URL.
+  --context-text <text>   For sponsor-runtime sponge-context: context text.
+  --prompt <text>         For sponsor-runtime gemini-route: broker routing prompt.
+  --context <text>        For sponsor-runtime gemini-route: extra routing context.
+  --model <name>          For sponsor-runtime gemini-route: Gemini model name.
   --email-to <addr>       For dinner-booking: override AgentMail recipient.
   --email-from <addr>     For dinner-booking: override AgentMail sender.
   --memory-container <id> For dinner-booking: override Supermemory container.

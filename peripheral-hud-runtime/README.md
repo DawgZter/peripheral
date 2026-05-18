@@ -33,12 +33,16 @@ npm run peripheralctl -- integrations broker-timeline --json
 npm run peripheralctl -- integrations phone-runtime --json
 npm run peripheralctl -- integrations sponsor-events --json
 npm run peripheralctl -- agent-bridge launch-specs --json
+npm run peripheralctl -- agent-bridge runtime-plan --agent codex_cli --session-id codex-check --json
 npm run peripheralctl -- agent-bridge event --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- agent-bridge route --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- sponsor-workflows dossier --json
 npm run peripheralctl -- sponsor-runtime adapters --json
 npm run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
+npm run peripheralctl -- sponsor-runtime browser-task --goal "Check restaurant availability" --json
+npm run peripheralctl -- sponsor-runtime sponge-context --context-text "Summarize customer context for glasses" --json
+npm run peripheralctl -- sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface" --json
 npm run peripheralctl -- sponsor-workflows widgets --json
 npm run peripheralctl -- integrations widgets --json
 npm run peripheralctl -- walkthrough live-call --local
@@ -94,7 +98,7 @@ Works now in runtime mode:
 - peripheralctl asr-replay --local-display --local-hermes replays scripted transcript lines through the same HUD handler and writes text-only JSON/JSONL proof
 - peripheralctl integrations exposes the sponsor matrix, agent CLI matrix, adapter operation catalog, support report, MCP manifest, phone runtime snapshot, broker timeline, glasses runtime state, and public dossier
 - peripheralctl integrations sponsor-events normalizes sponsor events into AgentEvent objects, HUD widgets, and phone-routable SurfaceCommand records
-- peripheralctl agent-bridge normalizes OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI output into AgentEvent objects, HUD widgets, and phone-routable surface commands
+- peripheralctl agent-bridge normalizes OpenClaw, Claude Code CLI, Pi, OpenCode, Gemini CLI, and Codex CLI output into AgentEvent objects, HUD widgets, runtime launch plans, approval return paths, phone-routable surface commands, and adapter metadata for the intended glasses surface
 - peripheralctl phone-runtime exposes the phone-owned mode manager, lease arbiter, and input router as runtime commands
 - peripheralctl sponsor-workflows documents sponsor event loops, approval gates, semantic surfaces, and workflow widgets
 - hudctl can show validated JSON/cards, clear runtime display state, report status, and emit manual agent status

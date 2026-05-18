@@ -275,6 +275,7 @@ export type AgentEvent = {
   references?: SourceReference[];
   choices?: Choice[];
   widget?: PeripheralWidget;
+  metadata?: Record<string, JsonValue>;
   created_at: string;
 };
 
@@ -502,6 +503,7 @@ export function validateAgentEvent(input: unknown, path = "$"): ValidationIssue[
   if (input.widget !== undefined) {
     issues.push(...prefixIssues(path + ".widget", validateWidget(input.widget)));
   }
+  validateMetadata(input.metadata, path + ".metadata", issues);
   requireStringAt(input, "created_at", path, issues);
   return issues;
 }

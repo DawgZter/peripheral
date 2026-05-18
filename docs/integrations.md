@@ -41,12 +41,25 @@ Adapters normalize CLI output into `AgentEvent` objects. The glasses see a compa
 
 - `dossier` returns adapter coverage, routing rules, sample transcript events, widgets, and safety notes.
 - `adapters` lists command names, wake names, session transports, env names, and approval policy.
+- `runtime-plan` returns per-agent launch commands, stdout/stderr routing, transcript audit path, phone-gateway surface routing, and approval return commands.
 - `transcript` emits one sample event per supported CLI.
 - `event --agent <id> --line <text>` normalizes one bounded CLI line into an `AgentEvent` plus widget.
 - `route --agent <id> --line <text>` adds the phone-owned `SurfaceCommand` and lease decision that would place the card or status surface on the glasses.
 - `widget --agent <id> --line <text>` renders that widget into `out/frames/agent-bridge/`.
 
 This is the broker-facing normalization layer that a PTY, tmux, stdio, or adapter transport can call.
+
+Each normalized CLI event carries the same contract before it reaches the phone runtime:
+
+| Field | Purpose |
+| --- | --- |
+| `kind` / `status` | Lifecycle state such as `session_started`, `session_progress`, `session_waiting`, `session_stuck`, `session_completed`, `session_error`, or `approval_required`. |
+| `session_id` / `source` | Stable adapter and session identity for routing replies back to the right CLI. |
+| `risk` / `choices` | Approval state and wearer choices when a CLI asks to proceed. |
+| `metadata.adapter_id` / `metadata.command` / `metadata.session_model` | The CLI adapter, command, and transport model that produced the line. |
+| `metadata.surface` / `metadata.decision_required` / `metadata.confirmation_level` | Intended glasses surface and confirmation posture before the phone lease decision is applied. |
+
+Routing is intentionally small: progress, start, and completion events become glance widgets; waiting, stuck, and error events become pinned status widgets; approval requests become fullscreen approval cards with focused input.
 
 ## Sponsor Workflows
 
@@ -67,13 +80,15 @@ Each workflow declares the event trigger, target surface, risk level, phone runt
 - `PeripheralWidget` for the semantic HUD renderer.
 - `SurfaceCommand` for the phone-owned mode manager.
 
-The same package now includes concrete real-world task adapters for calls, payment holds, email, memory, and browser tasks:
+The same package now includes concrete real-world task adapters for calls, payment holds, browser tasks, context safety, broker routing, email, and memory:
 
 - `agentphone.ts` starts and polls the restaurant call through the phone-gateway broker route.
 - `stripe.ts` creates approval-gated card holds through the phone-gateway broker route.
+- `browseruse.ts` starts Browser Use Cloud sessions through the phone-gateway broker route and preserves wearer approval before submit-style actions.
+- `sponge.ts` posts context for wearer-safe digests and redaction warnings.
+- `gemini.ts` asks Gemini for broker routing decisions that choose the glasses surface.
 - `agentmail.ts` sends the confirmation email through the AgentMail adapter and phone-gateway transport.
 - `supermemory.ts` saves the dinner preference through the Supermemory adapter and phone-gateway transport.
-- `browseruse.ts` starts Browser Use Cloud v3 sessions through the phone-gateway broker route, polls task state, and pauses sensitive submits on a glasses approval card.
 
 Use `peripheralctl integrations sponsor-events --json` to inspect the sample event dossier for AgentPhone, Stripe, Supermemory, AgentMail, Browser Use, Sponge, and Gemini.
 
@@ -92,6 +107,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- integrations dossier --
 npm --prefix peripheral-hud-runtime run peripheralctl -- integrations widgets --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge dossier --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge launch-specs --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge runtime-plan --agent codex_cli --session-id codex-check --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge event --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge route --agent codex_cli --line "Codex needs approval to run npm test" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- agent-bridge widget --agent opencode --line "OpenCode is waiting on user input"
@@ -104,6 +120,9 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime adapter
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime request --sponsor stripe --event payment_intent_requires_action --session-id stripe-check --summary "Approve card hold" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime stripe-hold --hold-amount 25.00 --currency usd --summary "Refundable dinner hold" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser-task --task "Check reservation availability and stop before submit" --start-url https://example.com --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime browser-task --goal "Check restaurant availability" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime sponge-context --context-text "Summarize customer context for glasses" --json
+npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-runtime gemini-route --prompt "Route this agent update to a glasses surface" --json
 npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --real-agentphone --real-agentmail --real-supermemory --local-display
 npm --prefix peripheral-hud-runtime run peripheralctl -- sponsor-workflows widgets --json
 ```

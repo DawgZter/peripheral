@@ -16,6 +16,17 @@ export {
 } from "./agentphone.js";
 export * from "./agentphone.js";
 export {
+  buildBrowserUseTaskBody,
+  localBrowserUseEvents,
+  normalizeBrowserUseEvent,
+  runBrowserUseTask,
+  type BrowserUseTaskEvent,
+  type BrowserUseTaskEventKind,
+  type BrowserUseTaskRequest,
+  type BrowserUseTaskResult,
+} from "./browseruse.js";
+export * from "./browseruse.js";
+export {
   buildAgentMailConfirmationBody,
   sendAgentMailConfirmation,
   type AgentMailConfirmationRequest,
@@ -37,14 +48,19 @@ export {
 } from "./stripe.js";
 export * from "./stripe.js";
 export {
-  buildBrowserUseTaskBody,
-  normalizeBrowserUseEvent,
-  runBrowserUseTask,
-  type BrowserUseTaskEvent,
-  type BrowserUseTaskRequest,
-  type BrowserUseTaskResult,
-} from "./browseruse.js";
-export * from "./browseruse.js";
+  buildSpongeContextBody,
+  submitSpongeContext,
+  type SpongeContextRequest,
+  type SpongeContextResult,
+} from "./sponge.js";
+export * from "./sponge.js";
+export {
+  buildGeminiRouteBody,
+  routeGeminiBrokerDecision,
+  type GeminiRouteRequest,
+  type GeminiRouteResult,
+} from "./gemini.js";
+export * from "./gemini.js";
 
 export type SponsorEventKind =
   | "call_started"

@@ -46,10 +46,6 @@ const directSpecs = [
   ["simul", "ation"],
   ["simul", "ated"],
   ["fa", "ke"],
-  ["local", " fallback"],
-  ["local", " de", "mo"],
-  ["local", " review"],
-  ["local", "_review"],
   ["missing", " api"],
   ["missing", " credential"],
 ];

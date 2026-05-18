@@ -6,6 +6,8 @@ import {
   type AgentStatus,
   type ApprovalRiskLevel,
   type Choice,
+  type ConfirmationLevel,
+  type JsonValue,
   type PeripheralWidget,
   type SurfaceCommand,
   type SurfaceKind,
@@ -35,6 +37,7 @@ export type AgentBridgeLine = {
   sessionId: string;
   line: string;
   sequence?: number;
+  transcriptUri?: string;
   now?: Date;
 };
 
@@ -64,6 +67,59 @@ export type AgentLaunchSpec = {
   stdout: "line_stream_to_agent_event";
   stdin: "approval_router_to_process";
   surfacePolicy: "phone_owned_surface_policy";
+};
+
+export type AgentRuntimePlan = {
+  schema: "peripheral-agent-runtime-plan-v1";
+  generatedAt: string;
+  phoneGateway: {
+    route: "agent_stdout_to_surface_command";
+    surfaceOwner: "phone_runtime";
+    displayPolicy: "lease_arbiter_required";
+    transport: "semantic_surface_commands";
+  };
+  agents: AgentRuntimeAdapterPlan[];
+  guarantees: string[];
+};
+
+export type AgentRuntimeAdapterPlan = {
+  id: AgentCliId;
+  name: string;
+  command: string;
+  argv: string[];
+  session: {
+    id: string;
+    model: AgentLaunchSpec["sessionModel"];
+    cwdPolicy: AgentLaunchSpec["cwdPolicy"];
+    terminal: AgentLaunchSpec["sessionModel"];
+  };
+  credentials: {
+    envNames: string[];
+    binding: "external_runtime_env";
+  };
+  io: {
+    stdout: "line_stream_to_agent_event";
+    stderr: "line_stream_to_agent_event";
+    stdin: "approval_router_to_process";
+    transcript: "jsonl_audit";
+  };
+  glasses: {
+    route: "AgentEvent_to_PeripheralWidget_to_SurfaceCommand";
+    surfaces: SurfaceKind[];
+    focusedApprovalWinsInput: true;
+  };
+  approvals: {
+    transport: "stdin_line" | "tmux_send_keys" | "pty_stdin_line" | "adapter_callback";
+    approve: string;
+    deny: string;
+    details: string;
+  };
+  operatorCommands: {
+    start: string[];
+    route: string[];
+    approve: string[];
+    deny: string[];
+  };
 };
 
 export function isAgentCliId(value: string): value is AgentCliId {
@@ -118,44 +174,83 @@ export function buildAgentLaunchSpecs(): AgentLaunchSpec[] {
   }));
 }
 
+export function buildAgentRuntimePlan(now = new Date(), agentId?: AgentCliId, sessionId = "agent-session"): AgentRuntimePlan {
+  const agents = agentCliIntegrations
+    .filter((agent) => !agentId || agent.id === agentId)
+    .map((agent) => runtimePlanForAgent(agent, sessionId));
+  return {
+    schema: "peripheral-agent-runtime-plan-v1",
+    generatedAt: now.toISOString(),
+    phoneGateway: {
+      route: "agent_stdout_to_surface_command",
+      surfaceOwner: "phone_runtime",
+      displayPolicy: "lease_arbiter_required",
+      transport: "semantic_surface_commands",
+    },
+    agents,
+    guarantees: [
+      "Agent CLIs never write raw display transport.",
+      "Every stdout line can be normalized into an AgentEvent.",
+      "Focused approval cards win approve, deny, details, and dismiss input.",
+      "Terminal fallback is bounded; semantic widgets remain the default glasses surface.",
+    ],
+  };
+}
+
 export function normalizeAgentCliLine(input: AgentBridgeLine): AgentEvent {
   const now = input.now || new Date();
   const adapter = agentCliIntegrations.find((item) => item.id === input.agentId);
   if (!adapter) throw new Error("Unknown agent CLI adapter: " + input.agentId);
+  const sequence = input.sequence ?? 1;
   const line = cleanText(input.line, 220);
   const classified = classifyLine(line);
   const id = [
     input.agentId,
     input.sessionId,
-    String(input.sequence ?? 1).padStart(3, "0"),
+    String(sequence).padStart(3, "0"),
     classified.kind,
   ].join("-");
-  return {
+  const source = sourceFor(input.agentId, input.sessionId);
+  const surface = surfaceForClassifiedLine(classified);
+  const decisionRequired = classified.kind === "approval_required";
+  const confirmationLevel = confirmationLevelForRisk(classified.risk);
+  const event: AgentEvent = {
     kind: classified.kind,
     id,
-    source: sourceFor(input.agentId, input.sessionId),
+    source,
     session_id: input.sessionId,
     title: classified.title || adapter.name,
     summary: classified.summary || line,
     status: classified.status,
     risk: classified.risk,
     progress: classified.progress,
-    capabilities: ["hud_render", "approval_gate", "live_status"],
+    capabilities: capabilitiesForClassifiedLine(classified),
+    references: [
+      {
+        label: adapter.name + " transcript line " + String(sequence).padStart(3, "0"),
+        uri: input.transcriptUri,
+        kind: input.transcriptUri ? "log" : "note",
+      },
+    ],
     choices: classified.choices,
-    widget: widgetForAgentEvent({
-      kind: classified.kind,
-      id,
-      source: sourceFor(input.agentId, input.sessionId),
-      session_id: input.sessionId,
-      title: classified.title || adapter.name,
-      summary: classified.summary || line,
-      status: classified.status,
-      risk: classified.risk,
-      progress: classified.progress,
-      choices: classified.choices,
-      created_at: now.toISOString(),
+    metadata: agentEventMetadata({
+      adapterId: input.agentId,
+      command: adapter.command,
+      sessionModel: adapter.sessionModel,
+      sequence,
+      line,
+      surface,
+      decisionRequired,
+      confirmationLevel,
     }),
     created_at: now.toISOString(),
+  };
+  return {
+    ...event,
+    widget: widgetForAgentEvent({
+      ...event,
+      widget: undefined,
+    }),
   };
 }
 
@@ -201,6 +296,20 @@ export function widgetForAgentEvent(event: AgentEvent, now = new Date()): Periph
       created_at: now.toISOString(),
     });
   }
+  if (event.kind === "session_stuck") {
+    return assertWidget({
+      id: event.id + "-widget",
+      type: "generic_card",
+      title: label + " Needs Attention",
+      status: "NEEDS ATTENTION",
+      body: event.summary || "Agent appears stuck and needs a decision or fallback.",
+      icon: "warning",
+      bullets: ["Pinned until dismissed", "Open terminal fallback for context"],
+      footer: event.session_id,
+      source: label,
+      created_at: now.toISOString(),
+    });
+  }
   if (event.kind === "session_waiting" || event.status === "waiting") {
     return assertWidget({
       id: event.id + "-widget",
@@ -236,7 +345,7 @@ export function surfaceCommandForAgentEvent(event: AgentEvent, now = new Date())
   const decisionRequired = event.kind === "approval_required";
   const surface = surfaceForAgentEvent(event);
   const mode = decisionRequired || surface === "pinned" ? "agent_mode" : "ambient_agent_hud";
-  const priority = decisionRequired || event.kind === "session_error" || event.kind === "session_waiting" ? "high" : "normal";
+  const priority = decisionRequired || event.kind === "session_error" || event.kind === "session_stuck" || event.kind === "session_waiting" ? "high" : "normal";
   const command: SurfaceCommand = {
     kind: decisionRequired ? "show_card" : "show_widget",
     id: "command-agent-" + sanitizeId(event.id),
@@ -310,6 +419,7 @@ export function buildAgentBridgeDossier(now = new Date()): Record<string, unknow
     generatedAt: now.toISOString(),
     adapters: buildAgentBridgeAdapters(),
     launchSpecs: buildAgentLaunchSpecs(),
+    runtimePlan: buildAgentRuntimePlan(now),
     transcript,
     routing: [
       "Focused approval card receives approve/deny/details first.",
@@ -322,6 +432,46 @@ export function buildAgentBridgeDossier(now = new Date()): Record<string, unknow
       "No adapter can push raw BLE, raw pixels, or hardware writes.",
       "Terminal fallback is bounded and semantic widgets are preferred.",
     ],
+  };
+}
+
+function runtimePlanForAgent(agent: (typeof agentCliIntegrations)[number], sessionId: string): AgentRuntimeAdapterPlan {
+  const argv = launchArgsForAgent(agent.id);
+  const start = [agent.command, ...argv];
+  const route = ["peripheralctl", "agent-bridge", "route", "--agent", agent.id, "--session-id", sessionId, "--line", "<stdout line>"];
+  return {
+    id: agent.id,
+    name: agent.name,
+    command: agent.command,
+    argv,
+    session: {
+      id: sessionNameForAgent(agent.id, sessionId),
+      model: agent.sessionModel,
+      cwdPolicy: "repo_root",
+      terminal: agent.sessionModel,
+    },
+    credentials: {
+      envNames: agent.env,
+      binding: "external_runtime_env",
+    },
+    io: {
+      stdout: "line_stream_to_agent_event",
+      stderr: "line_stream_to_agent_event",
+      stdin: "approval_router_to_process",
+      transcript: "jsonl_audit",
+    },
+    glasses: {
+      route: "AgentEvent_to_PeripheralWidget_to_SurfaceCommand",
+      surfaces: ["glance", "fullscreen", "pinned"],
+      focusedApprovalWinsInput: true,
+    },
+    approvals: approvalReturnPath(agent.sessionModel),
+    operatorCommands: {
+      start,
+      route,
+      approve: approvalCommand(agent.id, sessionId, "approve"),
+      deny: approvalCommand(agent.id, sessionId, "deny"),
+    },
   };
 }
 
@@ -342,6 +492,31 @@ function launchArgsForAgent(id: AgentCliId): string[] {
   }
 }
 
+function approvalReturnPath(sessionModel: AgentLaunchSpec["sessionModel"]): AgentRuntimeAdapterPlan["approvals"] {
+  const transport =
+    sessionModel === "tmux"
+      ? "tmux_send_keys"
+      : sessionModel === "pty"
+        ? "pty_stdin_line"
+        : sessionModel === "adapter"
+          ? "adapter_callback"
+          : "stdin_line";
+  return {
+    transport,
+    approve: "approve",
+    deny: "deny",
+    details: "details",
+  };
+}
+
+function approvalCommand(agentId: AgentCliId, sessionId: string, choice: "approve" | "deny"): string[] {
+  return ["peripheralctl", "phone-runtime", "decide", "--event", [agentId, sessionId, "001", "approval_required"].join("-"), "--choice", choice];
+}
+
+function sessionNameForAgent(agentId: AgentCliId, sessionId: string): string {
+  return "peripheral-" + sanitizeId(agentId + "-" + sessionId);
+}
+
 type ClassifiedLine = {
   kind: AgentEventKind;
   status: AgentStatus;
@@ -358,17 +533,23 @@ function classifyLine(line: string): ClassifiedLine {
     return {
       kind: "approval_required",
       status: "waiting",
-      risk: /push|deploy|payment|delete|rm -rf/.test(lower) ? "high" : "medium",
+      risk: /push|deploy|payment|charge|delete|rm -rf|send email|submit form/.test(lower) ? "high" : "medium",
       title: "Approval Required",
       summary: line,
       choices: approvalChoices(),
     };
+  }
+  if (/session (started|created)|started|starting|launching|spawned/.test(lower)) {
+    return { kind: "session_started", status: "launching", title: "Agent Started", summary: line };
   }
   if (/failed|error|exception|blocked by error|cannot/.test(lower)) {
     return { kind: "session_error", status: "error", risk: "medium", title: "Agent Error", summary: line };
   }
   if (/complete|completed|done|success|merged|finished/.test(lower)) {
     return { kind: "session_completed", status: "completed", progress: 1, title: "Agent Complete", summary: line };
+  }
+  if (/stuck|hung|timed out|timeout|no progress/.test(lower)) {
+    return { kind: "session_stuck", status: "needs_attention", risk: "medium", title: "Agent Needs Attention", summary: line };
   }
   if (/waiting|blocked|needs user|needs input|stuck/.test(lower)) {
     return { kind: "session_waiting", status: "waiting", risk: "medium", title: "Agent Waiting", summary: line };
@@ -385,8 +566,48 @@ function classifyLine(line: string): ClassifiedLine {
 
 function surfaceForAgentEvent(event: AgentEvent): SurfaceKind {
   if (event.kind === "approval_required") return "fullscreen";
-  if (event.kind === "session_error" || event.kind === "session_waiting" || event.status === "waiting") return "pinned";
+  if (event.kind === "session_error" || event.kind === "session_stuck" || event.kind === "session_waiting" || event.status === "waiting") return "pinned";
   return "glance";
+}
+
+function surfaceForClassifiedLine(classified: ClassifiedLine): SurfaceKind {
+  if (classified.kind === "approval_required") return "fullscreen";
+  if (classified.kind === "session_error" || classified.kind === "session_stuck" || classified.kind === "session_waiting" || classified.status === "waiting") return "pinned";
+  return "glance";
+}
+
+function capabilitiesForClassifiedLine(classified: ClassifiedLine): AgentEvent["capabilities"] {
+  const capabilities: NonNullable<AgentEvent["capabilities"]> = ["hud_render", "live_status"];
+  if (classified.kind === "approval_required") capabilities.push("approval_gate");
+  return capabilities;
+}
+
+function confirmationLevelForRisk(risk: ApprovalRiskLevel | undefined): ConfirmationLevel {
+  if (risk === "high") return "phone";
+  if (risk === "medium") return "voice_and_tap";
+  return "voice";
+}
+
+function agentEventMetadata(input: {
+  adapterId: AgentCliId;
+  command: string;
+  sessionModel: string;
+  sequence: number;
+  line: string;
+  surface: SurfaceKind;
+  decisionRequired: boolean;
+  confirmationLevel: ConfirmationLevel;
+}): Record<string, JsonValue> {
+  return {
+    adapter_id: input.adapterId,
+    command: input.command,
+    session_model: input.sessionModel,
+    sequence: input.sequence,
+    terminal_line: input.line,
+    surface: input.surface,
+    decision_required: input.decisionRequired,
+    confirmation_level: input.confirmationLevel,
+  };
 }
 
 function approvalChoices(): Choice[] {

@@ -13,16 +13,17 @@ import {
   SURFACE_KINDS,
   SURFACE_OWNERS,
   SURFACE_PRIORITIES,
+  assertAgentEvent,
   assertProtocolEnvelope,
   assertWidget,
 } from "../packages/peripheral-protocol/src/index.js";
 import { buildDisplayImageFrames, fullPanelSetupPolicy, invertPacked2Bpp } from "../packages/peripheral-driver/src/index.js";
-import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeTranscript, buildAgentLaunchSpecs, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
+import { buildAgentBridgeAdapters, buildAgentBridgeDossier, buildAgentBridgeTranscript, buildAgentLaunchSpecs, buildAgentRuntimePlan, normalizeAgentCliId, normalizeAgentCliLine, routeAgentBridgeLine, surfaceCommandForAgentEvent } from "../packages/peripheral-agent-bridge/src/index.js";
 import { buildAgentCliMatrixWidget, buildBrokerTimeline, buildConnectedGlassesState, buildIntegrationSummary, buildIntegrationSupportReport, buildLiveAdapterCatalog, buildPeripheralHardwareProfile, buildPeripheralMcpManifest, buildSponsorMatrixWidget } from "../packages/peripheral-integrations/src/index.js";
 import { agentModeLease, approvalSurfaceCommand, applySurfaceCommand, buildPhoneRuntimeSnapshot, createPhoneSurfaceRuntime, routeInputEvent } from "../packages/peripheral-phone-runtime/src/index.js";
 import { renderWidgetFile } from "../packages/peripheral-renderer/src/index.js";
 import { clearHud, compactHermesTerminalLines, mergeVoiceDraft, normalizeTmuxSessionName, runtimePaths, sanitizeTerminalLine, showHudCard } from "../packages/peripheral-runtime/src/index.js";
-import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeBrowserUseEvent, normalizeSponsorEvent, runAgentPhoneDinnerBooking, runBrowserUseTask, saveDinnerPreference, sendAgentMailConfirmation } from "../packages/peripheral-sponsor-kit/src/index.js";
+import { buildSponsorEventDossier, buildSponsorRuntimeAdapters, buildSponsorRuntimeRequest, createStripePaymentIntent, normalizeAgentPhoneEvent, normalizeBrowserUseEvent, normalizeSponsorEvent, routeGeminiBrokerDecision, runAgentPhoneDinnerBooking, runBrowserUseTask, saveDinnerPreference, sendAgentMailConfirmation, submitSpongeContext } from "../packages/peripheral-sponsor-kit/src/index.js";
 import { buildSponsorWorkflowDossier, buildSponsorWorkflows, buildSponsorWorkflowWidgets, workflowForSponsor } from "../packages/peripheral-sponsor-workflows/src/index.js";
 
 const root = resolve(process.cwd());
@@ -149,14 +150,28 @@ const launchSpecs = buildAgentLaunchSpecs();
 assert.equal(launchSpecs.length, 6);
 assert.equal(launchSpecs.find((spec) => spec.id === "codex_cli")?.args.includes("gpt-5.5"), true);
 assert.equal(launchSpecs.find((spec) => spec.id === "codex_cli")?.stdout, "line_stream_to_agent_event");
+const runtimePlan = buildAgentRuntimePlan(new Date("2026-05-17T00:00:00Z"), "codex_cli", "codex-check");
+assert.equal(runtimePlan.schema, "peripheral-agent-runtime-plan-v1");
+assert.equal(runtimePlan.agents.length, 1);
+assert.equal(runtimePlan.agents[0]?.id, "codex_cli");
+assert.equal(runtimePlan.agents[0]?.operatorCommands.start.includes("codex"), true);
+assert.equal(runtimePlan.agents[0]?.operatorCommands.route.includes("agent-bridge"), true);
+assert.equal(runtimePlan.agents[0]?.glasses.focusedApprovalWinsInput, true);
+assert.equal(runtimePlan.agents[0]?.approvals.approve, "approve");
 assert.equal(normalizeAgentCliId("claude"), "claude_code");
+assert.equal(normalizeAgentCliId("open code"), "opencode");
 const bridgeEvent = normalizeAgentCliLine({
   agentId: "codex_cli",
   sessionId: "codex-check",
   line: "Codex needs approval to run npm test.",
   now: new Date("2026-05-17T00:00:00Z"),
 });
+assertAgentEvent(bridgeEvent);
 assert.equal(bridgeEvent.kind, "approval_required");
+assert.equal(bridgeEvent.metadata?.adapter_id, "codex_cli");
+assert.equal(bridgeEvent.metadata?.surface, "fullscreen");
+assert.equal(bridgeEvent.metadata?.decision_required, true);
+assert.equal(bridgeEvent.metadata?.confirmation_level, "voice_and_tap");
 assertWidget(bridgeEvent.widget!);
 const bridgeCommand = surfaceCommandForAgentEvent(bridgeEvent, new Date("2026-05-17T00:00:00Z"));
 assert.equal(bridgeCommand.kind, "show_card");
@@ -176,6 +191,27 @@ assert.equal(bridgeRoute.command.surface, "glance");
 assert.equal(bridgeRoute.command.widget?.id, bridgeRoute.widget.id);
 assert.equal(buildAgentBridgeTranscript(new Date("2026-05-17T00:00:00Z")).events.length, 6);
 assert.equal((buildAgentBridgeDossier(new Date("2026-05-17T00:00:00Z")).routing as string[])[0].includes("Focused approval"), true);
+for (const item of [
+  { agentId: "openclaw", line: "OpenClaw started the workspace task.", kind: "session_started", surface: "glance", commandKind: "show_widget" },
+  { agentId: "claude_code", line: "Claude Code requests permission to edit files.", kind: "approval_required", surface: "fullscreen", commandKind: "show_card" },
+  { agentId: "pi", line: "Pi is stuck waiting for a response.", kind: "session_stuck", surface: "pinned", commandKind: "show_widget" },
+  { agentId: "opencode", line: "OpenCode is waiting on user input before apply.", kind: "session_waiting", surface: "pinned", commandKind: "show_widget" },
+  { agentId: "gemini_cli", line: "Gemini completed the broker summary.", kind: "session_completed", surface: "glance", commandKind: "show_widget" },
+  { agentId: "codex_cli", line: "Codex is 40% through the checks and still running.", kind: "session_progress", surface: "glance", commandKind: "show_widget" },
+] as const) {
+  const route = routeAgentBridgeLine({
+    agentId: item.agentId,
+    sessionId: item.agentId + "-session",
+    line: item.line,
+    now: new Date("2026-05-17T00:00:00Z"),
+  });
+  assert.equal(route.event.kind, item.kind);
+  assert.equal(route.event.metadata?.adapter_id, item.agentId);
+  assert.equal(route.event.metadata?.surface, item.surface);
+  assert.equal(route.command.surface, item.surface);
+  assert.equal(route.command.kind, item.commandKind);
+  assertWidget(route.widget);
+}
 const phoneRuntime = createPhoneSurfaceRuntime(new Date("2026-05-17T00:00:00Z"));
 const approvalCommand = approvalSurfaceCommand({
   id: "approval-test",
@@ -379,6 +415,63 @@ const browserUseResult = JSON.parse(browserUseRun.stdout.slice(browserUseRun.std
 assert.equal(browserUseResult.mode, "phone_gateway");
 assert.match(browserUseResult.browserUse.requestBody.task, /reservations/);
 assert.equal(browserUseResult.commands.some((command) => command.decision_required === true), true);
+const spongeContext = await submitSpongeContext({
+  sessionId: "sponge-context",
+  text: "Customer mentioned budget, allergies, and preferred dinner time.",
+  projectId: "peripheral-score",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(spongeContext.mode, "phone_gateway");
+assert.equal(spongeContext.requestBody.schema, "peripheral-sponge-context-v1");
+assert.equal(spongeContext.requestBody.project_id, "peripheral-score");
+const spongeReal = await submitSpongeContext({
+  sessionId: "sponge-context",
+  text: "Summarize the safe context.",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  forceReal: true,
+  env: { SPONGE_API_KEY: "set", SPONGE_API_URL: "https://example.invalid/sponge" },
+  fetchImpl: sponsorOkFetch,
+});
+assert.equal(spongeReal.mode, "real");
+assert.equal(spongeReal.endpoint, "https://example.invalid/sponge/context");
+const geminiRoute = await routeGeminiBrokerDecision({
+  sessionId: "gemini-route",
+  prompt: "Route this progress update to the best glasses surface.",
+  context: "The wearer is walking and only wants approvals interrupted.",
+  model: "gemini-test",
+  now: new Date("2026-05-17T00:00:00Z"),
+});
+assert.equal(geminiRoute.mode, "phone_gateway");
+assert.equal(geminiRoute.requestBody.schema, "peripheral-gemini-route-v1");
+const geminiReal = await routeGeminiBrokerDecision({
+  sessionId: "gemini-route",
+  prompt: "Pick the surface.",
+  model: "gemini-test",
+  now: new Date("2026-05-17T00:00:00Z"),
+}, {
+  forceReal: true,
+  env: { GEMINI_API_KEY: "set", GEMINI_API_URL: "https://example.invalid/gemini" },
+  fetchImpl: sponsorOkFetch,
+});
+assert.equal(geminiReal.mode, "real");
+assert.equal(geminiReal.endpoint, "https://example.invalid/gemini/models/gemini-test:generateContent");
+const browserSubmit = normalizeBrowserUseEvent({
+  id: "browser-submit-check",
+  kind: "browser_submit_requested",
+  task: "Check reservation availability and stop before submit.",
+  title: "Approve Browser Submit?",
+  sessionId: "browser-use-check",
+  text: "Browser Use reached the final reservation submit button.",
+  status: "WAITING",
+  real: false,
+  createdAt: "2026-05-17T00:00:00Z",
+});
+assertAgentEvent(browserSubmit.event);
+assertWidget(browserSubmit.widget);
+assert.equal(browserSubmit.event.kind, "approval_required");
+assert.equal(browserSubmit.command.surface, "fullscreen");
+assert.equal(browserSubmit.command.decision_required, true);
 const agentMailLocal = await sendAgentMailConfirmation({
   sessionId: "dinner-confirmation-email",
   restaurantName: "Sato Table",

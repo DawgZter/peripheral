@@ -92,6 +92,7 @@ npm run peripheralctl -- integrations dossier --json
 npm run peripheralctl -- integrations widgets --json
 npm run peripheralctl -- walkthrough integrations --local
 npm run peripheralctl -- agent-bridge event --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
+npm run peripheralctl -- agent-bridge runtime-plan --agent codex_cli --session-id codex-check --json
 npm run peripheralctl -- agent-bridge route --agent codex_cli --session-id codex-check --line "Codex needs approval to run npm test" --json
 npm run peripheralctl -- agent-bridge widget --agent claude_code --line "Claude Code is 40% complete" --json
 npm run peripheralctl -- phone-runtime snapshot --json

@@ -34,6 +34,8 @@ Expected artifacts:
 | --- | --- |
 | AgentPhone | `AGENTPHONE_API_KEY`, `AGENTPHONE_API_URL` |
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_API_URL`, `STRIPE_CUSTOMER_ID` |
+| Sponge | `SPONGE_API_KEY`, `SPONGE_API_URL`, `SPONGE_PROJECT_ID` |
+| Gemini | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_URL`, `GEMINI_MODEL` |
 | AgentMail | `AGENTMAIL_API_KEY`, `AGENTMAIL_API_URL`, `AGENTMAIL_TO`, `AGENTMAIL_FROM` |
 | Supermemory | `SUPERMEMORY_API_KEY`, `SUPERMEMORY_API_URL`, `SUPERMEMORY_CONTAINER` |
 | Browser Use | `BROWSER_USE_API_KEY`, `BROWSER_USE_API_URL`, `BROWSER_USE_PROFILE_ID`, `BROWSER_USE_WORKSPACE_ID` |
@@ -48,8 +50,9 @@ Expected artifacts:
 | Agent Mode protocol | `peripheral-hud-runtime/packages/peripheral-protocol/src/index.ts` |
 | Sponsor registry | `peripheral-hud-runtime/packages/peripheral-integrations/src/index.ts` |
 | Sponsor event kit | `peripheral-hud-runtime/packages/peripheral-sponsor-kit/src/index.ts` |
-| Browser task adapter | `peripheral-hud-runtime/packages/peripheral-sponsor-kit/src/browseruse.ts` |
+| Browser/Sponge/Gemini adapters | `peripheral-hud-runtime/packages/peripheral-sponsor-kit/src/browseruse.ts`, `sponge.ts`, `gemini.ts` |
 | CLI transcript normalization | `peripheral-hud-runtime/packages/peripheral-agent-bridge/src/index.ts` |
+| Agent CLI runtime plan | `peripheralctl agent-bridge runtime-plan --agent codex_cli --session-id codex-check --json` |
 | Smoke coverage | `peripheral-hud-runtime/tests/renderer-smoke.test.ts` |
 
 ## Safety Boundary
