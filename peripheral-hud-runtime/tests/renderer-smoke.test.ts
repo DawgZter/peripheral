@@ -33,6 +33,15 @@ assert.throws(() => {
 }, /Unknown widget type/);
 
 assert.deepEqual([...invertPacked2Bpp(Buffer.from([0x00, 0x55, 0xaa, 0xff]))], [0xff, 0xaa, 0x55, 0x00]);
+const defaultFullPanelSetupPolicy = {
+  setupEnabled: true,
+  waitForSurfaceReady: true,
+  setupStrategy: "factory_hidden_wait_fe01",
+  fullPanelPrimedBeforePush: false,
+  markPrimedAfterSuccess: false,
+};
+assert.deepEqual(fullPanelSetupPolicy("", false), defaultFullPanelSetupPolicy);
+assert.deepEqual(fullPanelSetupPolicy("0", false), defaultFullPanelSetupPolicy);
 assert.deepEqual(fullPanelSetupPolicy("1", false), {
   setupEnabled: true,
   waitForSurfaceReady: false,

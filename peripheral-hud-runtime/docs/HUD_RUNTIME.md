@@ -207,6 +207,8 @@ Agents never generate transport packets or arbitrary screenshots. They may produ
 
 The runtime keeps using the proven full-frame image path first. Update cadence defaults to 1400 ms, matching `docs/LATENCY.md` conservative guidance until live transport measurements prove a lower cadence. Real runtime display commands are implemented behind the explicit `--real` switch; legacy image-push commands still require `--real-hardware-ok`.
 
+`PERIPHERAL_HUD_SKIP_SURFACE_SETUP=1` keeps one initial full-panel surface resync but skips the readiness wait for that resync; later pushes skip setup after a successful first send. Use `PERIPHERAL_HUD_SKIP_SURFACE_SETUP=always` only for deliberate setup-skipped experiments. With the variable unset, the driver keeps the conservative readiness wait.
+
 Run live display checks only when explicitly authorized; use the mock capture gate below for source-level verification.
 
 The fastest local gate is:
