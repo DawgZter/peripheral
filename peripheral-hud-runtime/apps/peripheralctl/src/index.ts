@@ -136,6 +136,8 @@ const VALUE_FLAGS = new Set([
   "session-id",
   "line",
   "transcript-uri",
+  "payload-json",
+  "payload-file",
   "summary",
   "task",
   "start-url",
@@ -663,6 +665,29 @@ async function commandPhoneRuntime(cli: ParsedCli, projectRoot: string): Promise
     }
     case "agent-mode-lease":
       return { ok: true, lease: agentModeLease(String(cli.options.line || "User entered Agent Mode."), now) };
+    case "ingest": {
+      const route = phoneRuntimeIngestRoute(cli, now);
+      const initialState = createPhoneSurfaceRuntime(now);
+      const decision = applySurfaceCommand(initialState, route.command, now);
+      const frameDir = join(projectRoot, "out", "frames", "phone-runtime-ingest");
+      const artifact = renderWidgetToFile(route.widget, join(frameDir, slug(route.event.id) + ".png"), {
+        assetRoot: join(projectRoot, "fixtures", "images"),
+      });
+      const ingestLogPath = resolve(String(cli.options.log || defaultLogPath(projectRoot, "phone-runtime-ingest")));
+      const payload = {
+        ok: decision.accepted,
+        schema: "peripheral-phone-runtime-ingest-v1",
+        source: route.event.source,
+        event: route.event,
+        widget: route.widget,
+        command: route.command,
+        decision,
+        artifact,
+        logPath: ingestLogPath,
+      };
+      await appendJsonl(ingestLogPath, { event: "phone-runtime.ingest", payload });
+      return payload;
+    }
     case "decide": {
       const decision = buildApprovalDecision(cli, now);
       const decisionPath = writeApprovalDecision(projectRoot, decision);
@@ -677,8 +702,67 @@ async function commandPhoneRuntime(cli: ParsedCli, projectRoot: string): Promise
       };
     }
     default:
-      throw new Error("Unknown phone-runtime view. Use one of: snapshot, lease, route, agent-mode-lease, decide");
+      throw new Error("Unknown phone-runtime view. Use one of: snapshot, lease, route, agent-mode-lease, ingest, decide");
   }
+}
+
+function phoneRuntimeIngestRoute(cli: ParsedCli, now: Date) {
+  const payload = runtimeIngestPayload(cli);
+  const source = String(payload.source || payload.kind || "");
+  const agentIdValue = payload.agentId || payload.agent_id || cli.options.agent;
+  const isAgent = Boolean(agentIdValue) || source === "agent" || source === "agent_cli";
+  const sessionId = String(payload.sessionId || payload.session_id || cli.options["session-id"] || cli.positionals[2] || "runtime-ingest");
+  if (isAgent) {
+    return routeAgentBridgeLine({
+      agentId: normalizeAgentCliId(String(agentIdValue || "codex_cli")),
+      sessionId,
+      line: String(payload.line || payload.summary || cli.options.line || cli.options.summary || "Agent needs approval to continue."),
+      transcriptUri: typeof payload.transcriptUri === "string" ? payload.transcriptUri : typeof cli.options["transcript-uri"] === "string" ? cli.options["transcript-uri"] : undefined,
+      now,
+    });
+  }
+  const sponsorId = String(payload.sponsorId || payload.sponsor_id || payload.sponsor || cli.options.sponsor || cli.positionals[1] || "agentphone") as SponsorEventInput["sponsorId"];
+  const event = String(payload.event || payload.eventName || payload.event_name || cli.options.event || cli.positionals[2] || defaultEventForRuntimeIngest(sponsorId)) as SponsorEventInput["event"];
+  return normalizeSponsorEvent({
+    sponsorId,
+    event,
+    sessionId,
+    title: stringFromUnknown(payload.title) || (typeof cli.options.title === "string" ? cli.options.title : undefined),
+    summary: String(payload.summary || payload.text || cli.options.summary || cli.options.line || "Runtime event routed to the glasses."),
+    risk: (stringFromUnknown(payload.risk) || (typeof cli.options.risk === "string" ? cli.options.risk : undefined)) as SponsorEventInput["risk"],
+    amount: stringFromUnknown(payload.amount) || (typeof cli.options.amount === "string" ? cli.options.amount : undefined),
+    target: stringFromUnknown(payload.target) || (typeof cli.options.target === "string" ? cli.options.target : undefined),
+    code: stringFromUnknown(payload.code) || (typeof cli.options.code === "string" ? cli.options.code : undefined),
+    now,
+  });
+}
+
+function runtimeIngestPayload(cli: ParsedCli): Record<string, unknown> {
+  if (typeof cli.options["payload-file"] === "string") {
+    const parsed = JSON.parse(readFileSync(resolve(cli.options["payload-file"]), "utf8")) as unknown;
+    if (!isRecord(parsed)) throw new Error("--payload-file must contain a JSON object.");
+    return parsed;
+  }
+  if (typeof cli.options["payload-json"] === "string") {
+    const parsed = JSON.parse(cli.options["payload-json"]) as unknown;
+    if (!isRecord(parsed)) throw new Error("--payload-json must be a JSON object.");
+    return parsed;
+  }
+  return {};
+}
+
+function defaultEventForRuntimeIngest(sponsorId: SponsorEventInput["sponsorId"]): SponsorEventInput["event"] {
+  if (sponsorId === "stripe") return "payment_intent_requires_action";
+  if (sponsorId === "agentmail") return "draft_ready";
+  if (sponsorId === "supermemory") return "memory_saved";
+  if (sponsorId === "browser_use") return "browser_step";
+  if (sponsorId === "sponge") return "context_clustered";
+  if (sponsorId === "gemini") return "route_decision";
+  return "call_connected";
+}
+
+function stringFromUnknown(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function buildApprovalDecision(cli: ParsedCli, now: Date): UserDecision {
@@ -1788,6 +1872,7 @@ function capabilities(): unknown {
       "phone-runtime lease",
       "phone-runtime route",
       "phone-runtime agent-mode-lease",
+      "phone-runtime ingest --sponsor agentphone --event call_connected",
       "sponsor-workflows dossier",
       "sponsor-workflows list",
       "sponsor-workflows workflow",
@@ -2034,6 +2119,7 @@ Usage:
   peripheralctl phone-runtime lease --agent codex_cli --line "Codex needs approval to run npm test"
   peripheralctl phone-runtime route --line "hey codex show status"
   peripheralctl phone-runtime agent-mode-lease --line "User looked up into Agent Mode"
+  peripheralctl phone-runtime ingest --sponsor agentphone --event call_connected --session-id call-check --summary "Call connected"
   peripheralctl sponsor-workflows dossier
   peripheralctl sponsor-workflows list
   peripheralctl sponsor-workflows workflow stripe
@@ -2078,6 +2164,8 @@ Global options:
   --event <name>          For sponsor-runtime: sponsor event name to normalize or dispatch.
   --session-id <id>       Stable session id for the normalized event.
   --line <text>           Bounded CLI transcript, input line, or fallback sponsor summary to normalize.
+  --payload-json <json>   For phone-runtime ingest: inbound sponsor or agent event payload.
+  --payload-file <path>   For phone-runtime ingest: JSON file containing an inbound payload.
   --execute               For agent-bridge launch: start the local CLI process instead of returning the phone-gateway route.
   --process-command <bin> For agent-bridge launch: run a specific executable while preserving agent routing.
   --process-args-json <a> For agent-bridge launch: JSON string array of process args.

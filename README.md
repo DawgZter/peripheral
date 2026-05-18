@@ -2,11 +2,11 @@
 
 [![Check](https://github.com/DawgZter/peripheral/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/DawgZter/peripheral/actions/workflows/check.yml?query=branch%3Amain)
 
-Smart-glasses control surface for real-world AI agents.
+Agent-first smart glasses for real-world AI agents.
 
 Peripheral started as hardware I built in Shenzhen because agents needed a better output device than a laptop window or another phone notification. The glasses are a 28g, microLED, binocular-waveguide display system with 12-24 hours of battery life depending on operating mode and an optical stack tuned for extremely low light leakage. At 28g, Peripheral is built to be the lightest display smart-glasses form factor in the world.
 
-The hardware matters because Peripheral is not trying to become another phone screen. It is a wearable peripheral for agents: light enough to keep on, private enough for public spaces, bright enough for glanceable work, and simple enough that the phone/runtime can own safety, rendering, and approvals. In my view, that is the strongest shape for smart glasses in an agent-native world: barely there until an agent needs your eyes, your context, or your consent.
+The hardware matters because Peripheral is not trying to become another phone screen. It is a wearable peripheral for your agents: light enough to keep on all day, private enough for public spaces, bright enough for glanceable work, and simple enough that the phone/runtime can own safety, rendering, and approvals. In my view, this is the strongest shape for smart glasses in an agent-native world: barely there until an agent needs your eyes, your context, or your consent.
 
 Peripheral makes an agent's work visible, interruptible, and approval-gated on glasses. The core proof is a dinner-booking workflow: an agent starts a restaurant call through AgentPhone, the glasses show call status and transcript, a reservation time pauses behind a wearer approval card, then AgentMail and Supermemory follow-up surfaces appear after approval.
 
@@ -20,7 +20,7 @@ npm --prefix peripheral-hud-runtime run peripheralctl -- demo dinner-booking --l
 npm --prefix peripheral-hud-runtime run peripheralctl -- review-bundle --json
 ```
 
-`review-bundle` is the quickest judge-facing JSON: it checks the rendered frames, timeline, log, and MP4, then embeds the connected-state, phone-runtime, and agent-bridge route summaries that can be inspected without glasses attached.
+`review-bundle` is the quickest judge-facing JSON: it checks the rendered frames, timeline, log, and MP4, then embeds the connected-state, phone-runtime, and agent-bridge route summaries for operator-driven glasses access.
 
 Artifacts:
 
