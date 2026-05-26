@@ -2,6 +2,14 @@
 
 [![Check](https://github.com/DawgZter/peripheral/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/DawgZter/peripheral/actions/workflows/check.yml?query=branch%3Amain)
 
+## Video Demo
+
+[![Peripheral Agent Mode demo](docs/media/peripheral-agent-mode-demo-poster.jpg)](docs/media/peripheral-agent-mode-demo.mp4)
+
+<video src="docs/media/peripheral-agent-mode-demo.mp4" controls playsinline width="100%"></video>
+
+[Open the Peripheral Agent Mode demo video](docs/media/peripheral-agent-mode-demo.mp4)
+
 Agent-first smart glasses for real-world AI agents.
 
 Peripheral started as hardware I built in Shenzhen because agents needed a better output device than a laptop window or another phone notification. The glasses are a 28g, microLED, binocular-waveguide display system with 12-24 hours of battery life depending on operating mode and a lowest-light-leakage optical stack tuned for public, glanceable work. At 28g, Peripheral is built to be the lightest display smart-glasses form factor in the world.

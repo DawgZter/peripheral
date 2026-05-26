@@ -12,6 +12,8 @@ build/
 *.bin
 *.raw
 *.mp4
+!docs/media/peripheral-demo-dinner-booking.mp4
+!docs/media/peripheral-agent-mode-demo.mp4
 *.mov
 *.webm
 *.btsnooz
