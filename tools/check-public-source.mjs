@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const scanCommits = process.argv.includes("--commits") || process.env.PERIPHERAL_PUBLIC_SOURCE_SCAN_COMMITS === "1";
+const commitScanRequested =
+  process.argv.includes("--commits") || process.env.PERIPHERAL_PUBLIC_SOURCE_SCAN_COMMITS === "1";
+const skipCommitScanOnCi =
+  process.env.GITHUB_ACTIONS === "true" && process.env.PERIPHERAL_PUBLIC_SOURCE_SCAN_COMMITS !== "1";
+const scanCommits = commitScanRequested && !skipCommitScanOnCi;
 
 function git(args, options = {}) {
   return execFileSync("git", args, {
@@ -119,4 +123,14 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("public-source ok (" + worktreeFiles.length + " worktree files" + (scanCommits ? ", " + commitCount + " commits" : ", commit scan opt-in") + ")");
+console.log(
+  "public-source ok (" +
+    worktreeFiles.length +
+    " worktree files" +
+    (scanCommits
+      ? ", " + commitCount + " commits"
+      : skipCommitScanOnCi
+        ? ", CI current tree"
+        : ", commit scan opt-in") +
+    ")",
+);
