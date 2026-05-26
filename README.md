@@ -4,11 +4,11 @@
 
 ## Video Demo
 
-[![Peripheral Agent Mode demo](docs/media/peripheral-agent-mode-demo-poster.jpg)](docs/media/peripheral-agent-mode-demo.mp4)
+[![Peripheral glasses workflow video](docs/media/peripheral-agent-mode-demo-poster.jpg)](docs/media/peripheral-agent-mode-demo.mp4)
 
 <video src="docs/media/peripheral-agent-mode-demo.mp4" controls playsinline width="100%"></video>
 
-[Open the Peripheral Agent Mode demo video](docs/media/peripheral-agent-mode-demo.mp4)
+[Open the Peripheral glasses workflow video](docs/media/peripheral-agent-mode-demo.mp4)
 
 Agent-first smart glasses for real-world AI agents.
 
