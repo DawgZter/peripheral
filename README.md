@@ -2,6 +2,13 @@
 
 [![Check](https://github.com/DawgZter/peripheral/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/DawgZter/peripheral/actions/workflows/check.yml?query=branch%3Amain)
 
+## License
+
+Peripheral's original source code and associated documentation are available
+under the [MIT License](LICENSE), copyright 2026 Karim Yahia. Third-party
+dependencies and any separately attributed material retain their own licenses.
+This grant does not relicense third-party assets, trademarks, or hardware.
+
 ## Video Demo
 
 [![Peripheral glasses workflow video](docs/media/peripheral-agent-mode-demo-poster.jpg)](docs/media/peripheral-agent-mode-demo.mp4)

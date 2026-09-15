@@ -1,6 +1,7 @@
 {
   "name": "peripheral",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "description": "Peripheral Agent HUD runtime and Mac-connected display tooling.",
   "engines": {
